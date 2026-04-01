@@ -1010,6 +1010,8 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
               Common.instance.notify();
             }
           }
+          // 選択直後に「釣場詳細」タブへ遷移
+          Common.instance.requestNavigateToTidePage();
         },
         child: Container(
           key: (portId != null) ? _rowKeys.putIfAbsent(portId, () => GlobalKey()) : null,

@@ -527,6 +527,8 @@ class Common extends ChangeNotifier {
   double selectedTeibouLng = 0.0;
   int selectedTeibouPrefId = 0;
   int listCenterTick = 0; // 釣場一覧で再センタリングの要求カウンタ
+  // 釣場一覧から釣場詳細タブへのナビゲーション要求カウンタ
+  int navigateToTideTick = 0;
   SioInfo oneDaySioInfoAlt = SioInfo();
 
   Future<void> saveSelectedTeibou(String name, String nearestPoint, {int? id, double? lat, double? lng, int? prefId}) async {
@@ -555,6 +557,12 @@ class Common extends ChangeNotifier {
 
   void requestListCentering() {
     listCenterTick++;
+    notifyListeners();
+  }
+
+  // 釣場詳細タブへ遷移要求（BottomNavigation のインデックス切替用）
+  void requestNavigateToTidePage() {
+    navigateToTideTick++;
     notifyListeners();
   }
 

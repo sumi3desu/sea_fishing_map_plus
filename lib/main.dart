@@ -517,6 +517,7 @@ class _MainPageState extends State<MainPage> {
   final GlobalKey<TidePageState> tidePageKey = GlobalKey<TidePageState>();
   final GlobalKey<SetDatePageState> setDatePageKey =
       GlobalKey<SetDatePageState>();
+  int _lastNavigateToTideTick = 0;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -541,6 +542,10 @@ class _MainPageState extends State<MainPage> {
     _selectedIndex = widget.initialIndex;
     _loadBanner();
     setDatePageKey.currentState?.refreshDate();
+    // 共通状態からの「釣場詳細へ遷移」要求に反応
+    try {
+      Common.instance.addListener(_onCommonNavigateRequest);
+    } catch (_) {}
     // 初回起動時に同意ダイアログを検討して表示
     _maybeShowConsentDialog();
     // すでに同意済みで初回データが未準備なら、確認なしで自動実行
@@ -557,8 +562,22 @@ class _MainPageState extends State<MainPage> {
 
   @override
   void dispose() {
+    try { Common.instance.removeListener(_onCommonNavigateRequest); } catch (_) {}
     _bannerAd?.dispose();
     super.dispose();
+  }
+
+  void _onCommonNavigateRequest() {
+    final common = Common.instance;
+    if (common.navigateToTideTick != _lastNavigateToTideTick) {
+      _lastNavigateToTideTick = common.navigateToTideTick;
+      if (!mounted) return;
+      setState(() {
+        _selectedIndex = 2; // 釣場詳細タブ
+      });
+      // 遷移直後に潮汐の再読込も実施
+      try { tidePageKey.currentState?.refreshTide(Common.instance.tideDate); } catch (_) {}
+    }
   }
     // 初回準備が完了しているか（堤防テーブルが揃っているか）
   Future<bool> _isInitialDataMissing() async {
