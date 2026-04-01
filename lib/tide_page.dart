@@ -110,6 +110,11 @@ class TidePageState extends State<TidePage> {
     setState(() {});
   }
 
+  // 外部から釣果リストのみの再読み込みを要求するためのAPI
+  void forceReloadCatchList() {
+    setState(() { _catchRefreshTick++; });
+  }
+
   @override
   void dispose() {
     _timer.cancel();
@@ -322,16 +327,18 @@ class _CatchTab extends StatelessWidget {
     return Column(
       children: [
         // 固定の注意テキスト（スクロール対象外）
-        const SizedBox(
+        SizedBox(
           height: rowHeight,
-          child: ColoredBox(
+          child: const ColoredBox(
             color: Colors.white,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: const Align(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('この釣り場近辺の釣果です。',
-                    style: TextStyle(fontSize: 13, color: Colors.black87)),
+                child: Text(
+                  ambiguous_point ? 'この釣り場近辺の釣果です。' : 'この釣り場の釣果です。',
+                  style: TextStyle(fontSize: 13, color: Colors.black87),
+                ),
               ),
             ),
           ),
@@ -414,7 +421,8 @@ class _CatchPostListState extends State<_CatchPostList> {
   Future<void> _loadFirst() async {
     if (!mounted || _loading) return;
     setState(() { _loading = true; _page = 1; _hasMore = true; });
-    final rows = await _fetch(kind: 1, page: 1);
+    var rows = await _fetch(kind: 1, page: 1);
+    rows = await _applyAmbiguityFilter(rows);
     if (!mounted) return;
     setState(() {
       _items
@@ -430,7 +438,8 @@ class _CatchPostListState extends State<_CatchPostList> {
     if (_loading || !_hasMore) return;
     if (!mounted) return;
     setState(() => _loading = true);
-    final rows = await _fetch(kind: 1, page: _page);
+    var rows = await _fetch(kind: 1, page: _page);
+    rows = await _applyAmbiguityFilter(rows);
     if (!mounted) return;
     setState(() {
       _items.addAll(rows);
@@ -438,6 +447,19 @@ class _CatchPostListState extends State<_CatchPostList> {
       _page += 1;
       _loading = false;
     });
+  }
+
+  // ambiguous_point=false のときは、選択中の釣り場IDに一致する投稿のみを表示
+  Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
+    if (ambiguous_point) return rows;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selId = prefs.getInt('selected_teibou_id');
+      if (selId == null || selId <= 0) return rows;
+      return rows.where((e) => e.spotId == selId).toList();
+    } catch (_) {
+      return rows;
+    }
   }
 
   static const _kTsStorageKey = 'post_img_ts_map_v1';

@@ -577,6 +577,8 @@ class _MainPageState extends State<MainPage> {
       });
       // 遷移直後に潮汐の再読込も実施
       try { tidePageKey.currentState?.refreshTide(Common.instance.tideDate); } catch (_) {}
+      // 釣果リストも強制再読み込み（選択釣り場の変更を確実に反映）
+      try { tidePageKey.currentState?.forceReloadCatchList(); } catch (_) {}
     }
   }
     // 初回準備が完了しているか（堤防テーブルが揃っているか）

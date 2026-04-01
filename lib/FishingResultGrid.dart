@@ -7,6 +7,7 @@ import 'post_detail_page.dart';
 import 'sio_database.dart';
 import 'sync_service.dart';
 import 'main.dart';
+import 'common.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -440,54 +441,64 @@ extension _MosaicBuilders on _FishingResultGridState {
       height: h,
       child: InkWell(
         onTap: () async {
-                      final String? detailUrlRaw = it.imageUrl ?? it.thumbUrl;
-                      final String? detailUrl = (detailUrlRaw != null) ? _withTs(detailUrlRaw, it.postId) : null;
-                      final updated = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PostDetailPage(
-                            item: PostDetailItem(
-                              userId: it.userId,
-                              postId: it.postId,
-                              postKind: it.postKind,
-                              exist: it.exist,
-                              title: it.title,
-                              detail: it.detail,
-                              imageUrl: detailUrl,
-                              nickName: it.nickName,
-                              createAt: it.createAt,
-                              spotId: it.spotId,
-                              showNearbyButton: true,
-                            ),
-                          ),
-                        ),
-                      );
-                      if (!mounted) return;
-                      if (updated == true && it.postId != null) {
-                        final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                        setState(() {
-                          _imgTsByPost[it.postId!] = ts;
-                        });
-                        _saveImageTs(it.postId!, ts);
-                      } else if (updated is Map) {
-                        final u = (updated['updated'] == true);
-                        final cleared = (updated['clearedImage'] == true);
-                        final pid = updated['postId'] is int ? updated['postId'] as int : (updated['postId'] is String ? int.tryParse(updated['postId']) : null);
-                        if (u && cleared && pid != null) {
-                          // 画像が消された場合はグリッドからも項目を外す
-                          setState(() {
-                            _items.removeWhere((e) => e.postId == pid);
-                            _imgTsByPost.remove(pid);
-                          });
-                          // 永続側からも削除
-                          _removeImageTs(pid);
-                        } else if (u && pid != null) {
-                          final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                          setState(() { _imgTsByPost[pid] = ts; });
-                          _saveImageTs(pid, ts);
-                        }
-                      }
-                    },
+          if (!ambiguous_point && it.spotId != null) {
+            // 釣り場が曖昧でない場合、該当スポットを選択して釣場詳細へ
+            final ok = await Common.instance.selectTeibouById(it.spotId!);
+            if (ok) {
+              if (!mounted) return;
+              Common.instance.requestNavigateToTidePage();
+              return;
+            }
+            // もし失敗した場合は従来の詳細表示にフォールバック
+          }
+          final String? detailUrlRaw = it.imageUrl ?? it.thumbUrl;
+          final String? detailUrl = (detailUrlRaw != null) ? _withTs(detailUrlRaw, it.postId) : null;
+          final updated = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PostDetailPage(
+                item: PostDetailItem(
+                  userId: it.userId,
+                  postId: it.postId,
+                  postKind: it.postKind,
+                  exist: it.exist,
+                  title: it.title,
+                  detail: it.detail,
+                  imageUrl: detailUrl,
+                  nickName: it.nickName,
+                  createAt: it.createAt,
+                  spotId: it.spotId,
+                  showNearbyButton: true,
+                ),
+              ),
+            ),
+          );
+          if (!mounted) return;
+          if (updated == true && it.postId != null) {
+            final ts = DateTime.now().millisecondsSinceEpoch.toString();
+            setState(() {
+              _imgTsByPost[it.postId!] = ts;
+            });
+            _saveImageTs(it.postId!, ts);
+          } else if (updated is Map) {
+            final u = (updated['updated'] == true);
+            final cleared = (updated['clearedImage'] == true);
+            final pid = updated['postId'] is int ? updated['postId'] as int : (updated['postId'] is String ? int.tryParse(updated['postId']) : null);
+            if (u && cleared && pid != null) {
+              // 画像が消された場合はグリッドからも項目を外す
+              setState(() {
+                _items.removeWhere((e) => e.postId == pid);
+                _imgTsByPost.remove(pid);
+              });
+              // 永続側からも削除
+              _removeImageTs(pid);
+            } else if (u && pid != null) {
+              final ts = DateTime.now().millisecondsSinceEpoch.toString();
+              setState(() { _imgTsByPost[pid] = ts; });
+              _saveImageTs(pid, ts);
+            }
+          }
+        },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Stack(

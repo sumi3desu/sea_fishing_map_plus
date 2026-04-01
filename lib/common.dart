@@ -566,6 +566,29 @@ class Common extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 投稿などから特定の釣り場IDを選択状態にし、最寄り潮汐ポイントも設定
+  Future<bool> selectTeibouById(int portId) async {
+    try {
+      final db = await sioDb.database;
+      final rows = await db.query('teibou', where: 'port_id = ?', whereArgs: [portId], limit: 1);
+      if (rows.isEmpty) return false;
+      final r = rows.first;
+      final name = (r['port_name'] ?? '').toString();
+      final lat = (r['latitude'] is num) ? (r['latitude'] as num).toDouble() : double.tryParse(r['latitude']?.toString() ?? '');
+      final lng = (r['longitude'] is num) ? (r['longitude'] as num).toDouble() : double.tryParse(r['longitude']?.toString() ?? '');
+      if (lat == null || lng == null) return false;
+      final nearestPoint = await _findNearestTidePoint(lat, lng);
+      if (nearestPoint == null) return false;
+      tidePoint = nearestPoint;
+      await savePoint(nearestPoint);
+      await saveSelectedTeibou(name, nearestPoint, id: portId, lat: lat, lng: lng);
+      notify();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // まだ漁港が未設定の場合、現在地から最寄りの堤防＋最寄り潮汐ポイントを自動設定
   Future<void> setupNearestByLocationIfUnset() async {
     if (selectedTeibouName.isNotEmpty || selectedTeibouNearestPoint.isNotEmpty) {
