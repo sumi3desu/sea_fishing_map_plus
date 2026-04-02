@@ -309,6 +309,7 @@ class _SettingPageState extends State<SettingPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          
           // ── アカウント（settings_screen と同等）
           _sectionTitle(context, 'アカウント'),
           const SizedBox(height: 12),
@@ -638,6 +639,41 @@ class _SettingPageState extends State<SettingPage> {
                   showChevron: true,
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          // 情報（セクション） - お問い合わせの下 / ご利用にあたって の上
+          _sectionTitle(context, '情報'),
+          const SizedBox(height: 12),
+          _sectionCard(
+            child: _actionRow(
+              icon: Icons.info_outline,
+              label: '情報',
+              showChevron: true,
+              onTap: () async {
+                try {
+                  final info = await PackageInfo.fromPlatform();
+                  final ver = '${info.version}+${info.buildNumber}';
+                  final platform = Platform.isIOS ? 'ios' : (Platform.isAndroid ? 'android' : 'other');
+                  final base = Uri.parse('${AppConfig.instance.baseUrl}siowadou_pro_info.php');
+                  final uri = base.replace(queryParameters: {
+                    'format': 'html',
+                    'app': ver,
+                    'platform': platform,
+                    'ts': DateTime.now().millisecondsSinceEpoch.toString(),
+                  });
+                  if (!mounted) return;
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => HtmlViewPage(title: '情報', url: uri.toString()),
+                    ),
+                  );
+                } catch (_) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報ページを開けませんでした')));
+                }
+              },
             ),
           ),
 

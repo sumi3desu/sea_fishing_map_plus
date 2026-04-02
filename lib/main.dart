@@ -859,7 +859,6 @@ class _MainPageState extends State<MainPage> {
       TidePage(key: tidePageKey),
       SetDatePage(key: setDatePageKey),
       SettingPage(),
-      InfoScreen(),
     ];
     return Scaffold(
       // AppBar は使用しないのでコメントアウトまたは削除します
@@ -956,7 +955,6 @@ class _MainPageState extends State<MainPage> {
           BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣場詳細'),
           BottomNavigationBarItem(icon: Icon(Icons.date_range), label: '日付'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
-          BottomNavigationBarItem(icon: Icon(Icons.info), label: '情報'),
         ],
       ),
     );
