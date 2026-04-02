@@ -12,6 +12,7 @@ import 'common.dart';
 import 'sio_info.dart';
 import 'sio.dart';
 import 'sio_database.dart';
+import 'set_date_page.dart';
 import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
@@ -478,6 +479,7 @@ class _CatchPostListState extends State<_CatchPostList> {
       });
       if (mounted) setState(() {});
     } catch (_) {}
+    
   }
 
   Future<void> _saveImageTs(int postId, String ts) async {
@@ -1691,16 +1693,32 @@ class _SlidingContent extends StatelessWidget {
     );
   }
 
-  Widget _rightDate() {
+  Widget _rightDate(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Text('日付', style: TextStyle(fontSize: 14, color: Colors.white), textAlign: TextAlign.left),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white54),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.date_range, size: 16),
+              label: const Text('日付変更', style: TextStyle(fontSize: 13)),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => SetDatePage()),
+                );
+              },
+            ),
           ),
+          const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
             child: SizedBox(width: double.infinity, child: _valueBox(Sio.instance.dispTideDate)),
@@ -1931,7 +1949,7 @@ class _SlidingContent extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Column(
                             children: [
-                              _rightDate(),
+                              _rightDate(context),
                               _rightHigh(),
                               _rightLow(),
                               _rightSun(),
@@ -1939,10 +1957,13 @@ class _SlidingContent extends StatelessWidget {
                           ),
                         );
                       }
-                      final slotH = constraints.maxHeight / 4;
+                      // 各(満潮/干潮/日出)は高さの 1/4.5、残りを日付に割り当て
+                      final totalH = constraints.maxHeight;
+                      final slotH = totalH / 4.5; // 各1枠（バランス調整）
+                      final dateH = totalH - slotH * 3; // 余りを日付へ
                       return Column(
                         children: [
-                          SizedBox(height: slotH, child: _rightDate()),
+                          SizedBox(height: dateH, child: _rightDate(context)),
                           SizedBox(height: slotH, child: _rightHigh()),
                           SizedBox(height: slotH, child: _rightLow()),
                           SizedBox(height: slotH, child: _rightSun()),
@@ -2580,6 +2601,32 @@ class DrawTide extends CustomPainter {
         Offset(sunsetX, rectTide.bottom),
         tickPaint,
       );
+    } catch (_) {}
+
+    // グラフ上部に当日付(曜日)を表示（12時の位置＝グラフ中央にセンタリング）
+    try {
+      final d = Common.instance.tideDate;
+      String two(int v) => v.toString().padLeft(2, '0');
+      const wdays = ['月','火','水','木','金','土','日'];
+      final w = wdays[(d.weekday + 6) % 7]; // DateTime: Mon=1..Sun=7
+      final dateStr = '${two(d.month)}/${two(d.day)} ($w)';
+      final TextPainter dtp = TextPainter(
+        text: TextSpan(
+          text: dateStr,
+          style: TextStyle(fontSize: 20, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout(minWidth: 0, maxWidth: rectTide.width);
+      // 少し上側に余白を設けつつ、12:00（中央）にセンタリング
+      final double x12 = rectTide.left + rectTide.width / 2;
+      final double yTop = rectTide.top + 5; // 上部余白を半分に
+      final Offset dateOffset = Offset(x12 - dtp.width / 2, yTop);
+      // 半透明の白背景で視認性を確保
+      final Rect bg = Rect.fromLTWH(dateOffset.dx - 8, yTop - 4, dtp.width + 16, dtp.height + 8);
+      final Paint bgPaint = Paint()..color = const Color(0x99FFFFFF);
+      canvas.drawRRect(RRect.fromRectAndRadius(bg, const Radius.circular(8)), bgPaint);
+      dtp.paint(canvas, dateOffset);
     } catch (_) {}
   }
 

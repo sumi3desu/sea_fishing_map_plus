@@ -14,7 +14,7 @@ import 'setting_page.dart';
 import 'FishingResultGrid.dart';
 //import 'info_page.dart';
 import 'info_screen.dart';
-import 'set_date_page.dart';
+// import 'set_date_page.dart'; // 日付タブは廃止（Tide ページ内のボタンから遷移）
 import 'tide_page.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'common.dart';
@@ -515,8 +515,7 @@ class _MainPageState extends State<MainPage> {
 
   // TidePage の GlobalKey を作成
   final GlobalKey<TidePageState> tidePageKey = GlobalKey<TidePageState>();
-  final GlobalKey<SetDatePageState> setDatePageKey =
-      GlobalKey<SetDatePageState>();
+  // 日付タブは廃止（Tide ページ内のボタンから遷移）
   int _lastNavigateToTideTick = 0;
 
   void _onItemTapped(int index) {
@@ -530,8 +529,6 @@ class _MainPageState extends State<MainPage> {
     } else if (index == 1) {
       try { SioDatabase().notifyListeners(); } catch (_) {}
       try { Common.instance.requestListCentering(); } catch (_) {}
-    } else if (index == 3) {
-      setDatePageKey.currentState?.refreshDate();
     }
   }
 
@@ -541,7 +538,7 @@ class _MainPageState extends State<MainPage> {
     // 初期タブを外部指定で切り替え可能にする
     _selectedIndex = widget.initialIndex;
     _loadBanner();
-    setDatePageKey.currentState?.refreshDate();
+    // 日付タブは廃止（Tide ページ内の「日付変更」ボタンから遷移）
     // 共通状態からの「釣場詳細へ遷移」要求に反応
     try {
       Common.instance.addListener(_onCommonNavigateRequest);
@@ -857,7 +854,6 @@ class _MainPageState extends State<MainPage> {
       const FishingResultGrid(),
       const ListTeibouPage(),
       TidePage(key: tidePageKey),
-      SetDatePage(key: setDatePageKey),
       SettingPage(),
     ];
     return Scaffold(
@@ -952,10 +948,9 @@ class _MainPageState extends State<MainPage> {
         items: <BottomNavigationBarItem>[
           const BottomNavigationBarItem(icon: Text('🐟', style: TextStyle(fontSize: 20)), label: '釣果'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣場一覧'),
-          BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣場詳細'),
-          BottomNavigationBarItem(icon: Icon(Icons.date_range), label: '日付'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
-        ],
+      BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣場詳細'),
+      BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
+      ],
       ),
     );
   }

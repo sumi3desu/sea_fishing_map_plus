@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'common.dart';
 
 class SetDatePage extends StatefulWidget {
@@ -9,6 +10,7 @@ class SetDatePage extends StatefulWidget {
 }
 
 class SetDatePageState extends State<SetDatePage> {
+  BannerAd? _bannerAd;
   // 基準日（初期状態の選択日）
   DateTime _baseDate = Common.instance.tideDate;
   // 表示中の月（基準日からのオフセットにより算出）
@@ -23,8 +25,29 @@ class SetDatePageState extends State<SetDatePage> {
     super.initState();
     _displayedMonth = _baseDate;
     _pageController = PageController(initialPage: _initialPage);
-    // 初回の潮汐データ取得
-    Common.instance.getTide(false, _displayedMonth);
+    _initMonthData();
+    _loadBanner();
+  }
+
+  Future<void> _initMonthData() async {
+    await Common.instance.getTide(false, _displayedMonth);
+    if (mounted) setState(() {});
+  }
+
+  void _loadBanner() {
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST 用
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (mounted) setState(() {});
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+        },
+      ),
+      request: const AdRequest(),
+    )..load();
   }
 
   /// 指定した日付に対して、offset ヶ月後の日付を返す（Dart の DateTime は month が範囲外の場合に補正してくれる）
@@ -177,21 +200,39 @@ Future<void> _onPageChanged(int index) async {
     // available な高さに合わせて childAspectRatio を計算する
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 総セル数から必要な行数を計算
+        // 総セル数から必要な行数を計算（曜日ヘッダ＋日付セルを含む）
         final int totalCells = dayWidgets.length;
-        final int rows = (totalCells  / 7).ceil();
+        final int rows = (totalCells / 7).ceil();
 
         // 1セルあたりの幅／高さを計算
-        final double tileWidth  = constraints.maxWidth  / 7;
-        final double tileHeight = constraints.maxHeight / rows;
+        final double tileWidth = constraints.maxWidth / 7;
+        double tileHeight = constraints.maxHeight / rows;
+
+        // 高さが大きすぎる場合は固定値（100px）にクランプ
+        const double kMaxTileHeight = 80.0;
+        final bool clamped = tileHeight > kMaxTileHeight;
+        if (clamped) tileHeight = kMaxTileHeight;
+
         final double aspectRatio = tileWidth / tileHeight;
 
-        return GridView.count(
+        final grid = GridView.count(
           physics: const NeverScrollableScrollPhysics(),
           padding: const EdgeInsets.all(8.0),
           crossAxisCount: 7,
           childAspectRatio: aspectRatio,
           children: dayWidgets,
+        );
+
+        if (!clamped) {
+          // そのままレイアウトいっぱいに広げる
+          return grid;
+        }
+        // 固定高さで描画し、余白は下に残す
+        final double verticalPadding = 16.0; // EdgeInsets.all(8.0) 相当
+        final double gridHeight = tileHeight * rows + verticalPadding;
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(height: gridHeight, child: grid),
         );
       },
     );
@@ -231,55 +272,76 @@ Future<void> refreshDate() async {
         "${_displayedMonth.year} / ${_displayedMonth.month.toString().padLeft(2, '0')}";
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.date_range, color: Colors.white),
-            SizedBox(width: 8),
-            Text('日付'),
-          ],
-        ),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: ElevatedButton(
-              onPressed: () {
-                // 必要に応じて、本日の日付にジャンプするなどの処理を追加してください
-                Common.instance.tideDate = DateTime.now();
-
-                setState(() {
-                  _baseDate = Common.instance.tideDate;
-                  _displayedMonth = _baseDate;
-                  //print('月潮汐取得 at refresh: $_displayedMonth');
-                  Common.instance.getTide(false, _displayedMonth);
-                  _pageController.jumpToPage(_initialPage);
-                  _currentPage = _initialPage;
-                  Common.instance.shouldJumpPage = true;
-                  Common.instance.notify();
-                });
-              },
-              child: const Text('本日'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey.shade200, // 背景色を指定（例）
-                foregroundColor: Colors.black, // テキスト色
-                elevation: 2.0, // 影の強さ
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8), // 角丸にする
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          // ステータスバーを避けて上部にバナー + タイトルを表示
+          SafeArea(
+            top: true,
+            bottom: false,
+            child: Column(
+              children: [
+                if (_bannerAd != null)
+                  Container(
+                    alignment: Alignment.center,
+                    width: _bannerAd!.size.width.toDouble(),
+                    height: _bannerAd!.size.height.toDouble(),
+                    child: AdWidget(ad: _bannerAd!),
+                  ),
+                Container(
+                  height: kToolbarHeight,
+                  color: Colors.black,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.date_range, color: Colors.white),
+                              SizedBox(width: 8),
+                              Text('日付', style: TextStyle(color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            Common.instance.tideDate = DateTime.now();
+                            _baseDate = Common.instance.tideDate;
+                            _displayedMonth = _baseDate;
+                            await Common.instance.getTide(false, _displayedMonth);
+                            if (!mounted) return;
+                            setState(() {
+                              _pageController.jumpToPage(_initialPage);
+                              _currentPage = _initialPage;
+                              Common.instance.shouldJumpPage = true;
+                              Common.instance.notify();
+                            });
+                          },
+                          child: const Text('本日'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade200,
+                            foregroundColor: Colors.black,
+                            elevation: 2.0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           // 上部ナビゲーション（矢印ボタンと年月表示）
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -316,5 +378,12 @@ Future<void> refreshDate() async {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    _pageController.dispose();
+    super.dispose();
   }
 }
