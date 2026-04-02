@@ -209,7 +209,7 @@ Future<void> _onPageChanged(int index) async {
         double tileHeight = constraints.maxHeight / rows;
 
         // 高さが大きすぎる場合は固定値（100px）にクランプ
-        const double kMaxTileHeight = 80.0;
+        const double kMaxTileHeight = 90.0;
         final bool clamped = tileHeight > kMaxTileHeight;
         if (clamped) tileHeight = kMaxTileHeight;
 
