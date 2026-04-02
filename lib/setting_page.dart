@@ -290,9 +290,10 @@ class _SettingPageState extends State<SettingPage> {
   return '$masked@$domain';
   }
 
-  Widget build(BuildContext context) {
-    final common = Provider.of<Common>(context);
+  int _selectedTabIndex = 0;
+  final List<String> _tabs = const ['アカウント', '設定', 'その他', 'メンテナンス'];
 
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -306,425 +307,444 @@ class _SettingPageState extends State<SettingPage> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          
-          // ── アカウント（settings_screen と同等）
-          _sectionTitle(context, 'アカウント'),
-          const SizedBox(height: 12),
-          r.Consumer(builder: (context, ref, _) {
-            return _sectionCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(width: _leadingGap),
-                      Expanded(
-                        child: ref.watch(userInfoProvider).when(
-                              loading: () => const Text('アカウント登録状態 : 読み込み中'),
-                              error: (_, __) => const Text('アカウント登録状態 : 未'),
-                              data: (userInfo) {
-                                final email = userInfo?.email ?? '';
-                                final statusText = email.isNotEmpty ? 'メール登録済み［${maskEmail(email)}］' : '未';
-                                return Text('アカウント登録状態 : $statusText');
-                              },
-                            ),
-                      ),
-                    ],
-                  ),
-                  // ユーザIDの表示
-                  Padding(
-                    padding: const EdgeInsets.only(left: _leadingGap, top: 2),
-                    child: ref.watch(userInfoProvider).when(
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
-                          data: (userInfo) {
-                            final uid = userInfo?.userId;
-                            if (uid == null || uid <= 0) return const SizedBox.shrink();
-                            return Text('ユーザID: $uid', style: Theme.of(context).textTheme.bodySmall);
-                          },
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Divider(height: 1),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 0),
-                    child: Builder(
-                      builder: (context) {
-                        final asyncUser = ref.watch(userInfoProvider);
-                        final isRegistered = ref.watch(isEmailRegisteredProvider);
-                        final user = asyncUser.valueOrNull;
-                        final currentEmail = user?.email ?? '';
-                        final accountLabel = isRegistered ? 'アカウントの編集' : 'アカウントの登録';
-                        final accountIcon = isRegistered ? Icons.manage_accounts : Icons.person_add_alt_1;
-                        return _actionRow(
-                          icon: accountIcon,
-                          label: accountLabel,
-                          onTap: () {
-                            if (isRegistered) {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => EditAccountPage(currentEmail: currentEmail)),
-                              );
-                            } else {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const NewAccountPage()),
-                              );
-                            }
-                          },
-                          enabled: true,
-                          showChevron: true,
-                        );
-                      },
-                    ),
-                  ),
-                ],
+          _buildScrollableTabs(),
+          const Divider(height: 1),
+          Expanded(child: _buildTabContent()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScrollableTabs() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 48,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(_tabs.length, (i) {
+            final selected = i == _selectedTabIndex;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: ChoiceChip(
+                label: Text(_tabs[i]),
+                selected: selected,
+                onSelected: (v) {
+                  if (!v) return;
+                  setState(() => _selectedTabIndex = i);
+                },
+                selectedColor: Colors.grey.shade200,
+                backgroundColor: Colors.white,
+                labelStyle: TextStyle(color: Colors.grey.shade800),
+                shape: StadiumBorder(side: BorderSide(color: Colors.grey.shade400)),
               ),
             );
           }),
+        ),
+      ),
+    );
+  }
 
-          const SizedBox(height: 24),
+  Widget _buildTabContent() {
+    switch (_selectedTabIndex) {
+      case 0:
+        return _buildAccountTab(context);
+      case 1:
+        return _buildSettingsTab(context);
+      case 2:
+        return _buildOthersTab(context);
+      case 3:
+      default:
+        return _buildMaintenanceTab(context);
+    }
+  }
 
-          // プロフィール（セクション）
-          _sectionTitle(context, 'プロフィール'),
-          const SizedBox(height: 12),
-          _sectionCard(
+  // ---- Tabs ----
+  Widget _buildAccountTab(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _sectionTitle(context, 'アカウント'),
+        const SizedBox(height: 12),
+        r.Consumer(builder: (context, ref, _) {
+          return _sectionCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(width: _leadingGap),
-                    const Text('ニックネーム:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        (_nickname.isEmpty) ? '未設定' : _nickname,
-                        textAlign: TextAlign.left,
-                      ),
+                      child: ref.watch(userInfoProvider).when(
+                            loading: () => const Text('アカウント登録状態 : 読み込み中'),
+                            error: (_, __) => const Text('アカウント登録状態 : 未'),
+                            data: (userInfo) {
+                              final email = userInfo?.email ?? '';
+                              final statusText = email.isNotEmpty ? 'メール登録済み［${maskEmail(email)}］' : '未';
+                              return Text('アカウント登録状態 : $statusText');
+                            },
+                          ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: _leadingGap, top: 2),
+                  child: ref.watch(userInfoProvider).when(
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (userInfo) {
+                          final uid = userInfo?.userId;
+                          if (uid == null || uid <= 0) return const SizedBox.shrink();
+                          return Text('ユーザID: $uid', style: Theme.of(context).textTheme.bodySmall);
+                        },
+                      ),
+                ),
+                const SizedBox(height: 6),
                 const Divider(height: 1),
                 Padding(
                   padding: const EdgeInsets.only(left: 0),
-                  child: _actionRow(
-                    icon: Icons.account_circle_outlined,
-                    label: 'プロフィール',
-                    showChevron: true,
-                    onTap: () async {
-                      final result = await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ProfileEditPage()),
+                  child: Builder(
+                    builder: (context) {
+                      final asyncUser = r.ProviderScope.containerOf(context).read(userInfoProvider);
+                      final isRegistered = r.ProviderScope.containerOf(context).read(isEmailRegisteredProvider);
+                      // read() は同期値。ボタン押下時の画面遷移のみに使用
+                      final currentEmail = asyncUser.valueOrNull?.email ?? '';
+                      final accountLabel = isRegistered ? 'アカウントの編集' : 'アカウントの登録';
+                      final accountIcon = isRegistered ? Icons.manage_accounts : Icons.person_add_alt_1;
+                      return _actionRow(
+                        icon: accountIcon,
+                        label: accountLabel,
+                        onTap: () {
+                          if (isRegistered) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => EditAccountPage(currentEmail: currentEmail)),
+                            );
+                          } else {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const NewAccountPage()),
+                            );
+                          }
+                        },
+                        enabled: true,
+                        showChevron: true,
                       );
-                      if (result is String) {
-                        setState(() => _nickname = result);
-                      } else {
-                        // 直接再読込
-                        await _loadNickname();
-                      }
                     },
                   ),
                 ),
               ],
             ),
+          );
+        }),
+
+        const SizedBox(height: 24),
+        _sectionTitle(context, 'プロフィール'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: _leadingGap),
+                  const Text('ニックネーム:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (_nickname.isEmpty) ? '未設定' : _nickname,
+                      textAlign: TextAlign.left,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.only(left: 0),
+                child: _actionRow(
+                  icon: Icons.account_circle_outlined,
+                  label: 'プロフィール',
+                  showChevron: true,
+                  onTap: () async {
+                    final result = await Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ProfileEditPage()),
+                    );
+                    if (result is String) {
+                      setState(() => _nickname = result);
+                    } else {
+                      await _loadNickname();
+                    }
+                  },
+                ),
+              ),
+            ],
           ),
+        ),
+      ],
+    );
+  }
 
-          const SizedBox(height: 24),
-
-          // 地図エンジン選択（セクション）
-          _sectionTitle(context, '地図'),
-          const SizedBox(height: 8),
-          _sectionCard(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-            child: Column(
-              children: [
-                // Apple Maps の RadioListTile を条件付きで表示（iPhone のみ表示する）
-                if (!(smartPhoneType == SmartPhoneType.android ||
-                    smartPhoneType == SmartPhoneType.unknown))
-                  RadioListTile<int>(
-                    title: const Text("Apple Maps"),
-                    value: MapType.appleMaps.index,
-                    groupValue: common.mapKind,
-                    dense: true,
-                    visualDensity: VisualDensity.compact,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    onChanged: (int? value) {
-                      setState(() {
-                        Common.instance.mapKind = value!;
-                      });
-                    },
-                  ),
-                if (smartPhoneType != SmartPhoneType.unknown)
-                  RadioListTile<int>(
-                    title: const Text("Google Maps"),
-                    value: MapType.googleMaps.index,
-                    groupValue: common.mapKind,
-                    dense: true,
-                    visualDensity: VisualDensity.compact,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    onChanged: (int? value) {
-                      setState(() {
-                        Common.instance.mapKind = value!;
-                      });
-                    },
-                  ),
+  Widget _buildSettingsTab(BuildContext context) {
+    final common = Provider.of<Common>(context);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _sectionTitle(context, '地図'),
+        const SizedBox(height: 8),
+        _sectionCard(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+          child: Column(
+            children: [
+              if (!(smartPhoneType == SmartPhoneType.android || smartPhoneType == SmartPhoneType.unknown))
                 RadioListTile<int>(
-                  title: const Text("地図表示しない"),
-                  value: MapType.unknown.index,
+                  title: const Text("Apple Maps"),
+                  value: MapType.appleMaps.index,
                   groupValue: common.mapKind,
                   dense: true,
                   visualDensity: VisualDensity.compact,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                   onChanged: (int? value) {
-                    setState(() {
-                      Common.instance.mapKind = value!;
-                    });
+                    setState(() { Common.instance.mapKind = value!; });
                   },
                 ),
-              ],
-            ),
-          ),
-
-           const SizedBox(height: 8),
-          // ── 問題（メンテナンス） ──
-          const SizedBox(height: 24),
-          _sectionTitle(context, 'データの更新'),
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _actionRow(
-                  icon: Icons.storage,
-                  label: '最新データの更新',
-                  showChevron: true,
-                  onTap: () async {
-                    await Navigator.of(context)
-                        .push(MaterialPageRoute(builder: (_) => const DbRebuildScreen()));
-                    // 戻ってきたら問題・ピンのプロバイダを最新化
-                    //try { await fetchAndStoreQuestionsAndPinning(ref); } catch (_) {}
+              if (smartPhoneType != SmartPhoneType.unknown)
+                RadioListTile<int>(
+                  title: const Text("Google Maps"),
+                  value: MapType.googleMaps.index,
+                  groupValue: common.mapKind,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  onChanged: (int? value) {
+                    setState(() { Common.instance.mapKind = value!; });
                   },
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: _statusIndent, top: 6),
-                  child: Text(
-                    '用語集や法令データを最新に更新します。\n'
-                    'Wi-Fi 環境での実行を推奨します（モバイル回線ではデータ通信料が発生する場合があります）。',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                // const Divider(height: 16),
-                // 参照関連法令の取得元は現状ローカル固定（UIスイッチは非表示）
-              ],
-            ),
-          ),
-         const SizedBox(height: 24),
-
-          // 初期化（セクション）
-          _sectionTitle(context, '初期化'),
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: ListTile(
-              title: const Text("お気に入り削除", style: TextStyle(color: Colors.black)),
-              leading: const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.delete, color: Colors.black),
+              RadioListTile<int>(
+                title: const Text("地図表示しない"),
+                value: MapType.unknown.index,
+                groupValue: common.mapKind,
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                onChanged: (int? value) {
+                  setState(() { Common.instance.mapKind = value!; });
+                },
               ),
-              onTap: () async {
-                final result = await showDialog<bool>(
-                  context: context,
-                  builder: (BuildContext context) {
-                    return AlertDialog(
-                      title: const Text("確認"),
-                      content: const Text("お気に入り削除してもよろしいですか？"),
-                      actions: [
-                        TextButton(
-                          child: const Text("キャンセル"),
-                          onPressed: () {
-                            Navigator.of(context).pop(false);
-                          },
-                        ),
-                        TextButton(
-                          child: const Text("OK"),
-                          onPressed: () {
-                            Navigator.of(context).pop(true);
-                          },
-                        ),
-                      ],
-                    );
-                  },
-                );
-
-                if (result == true) {
-                  await Common.instance.sioDb.removeAll();
-                  Location.instance.resetFlag();
-                  Location.instance.removeFavoriteSpot();
-                }
-              },
-            ),
+            ],
           ),
+        ),
 
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: ListTile(
-              title: const Text("ユーザをリセット（UUID再発行）", style: TextStyle(color: Colors.black)),
-              leading: const Padding(
-                padding: EdgeInsets.only(left: 8),
-                child: Icon(Icons.restart_alt, color: Colors.black),
+        const SizedBox(height: 24),
+        _sectionTitle(context, 'データの更新'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _actionRow(
+                icon: Icons.storage,
+                label: '最新データの更新',
+                showChevron: true,
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const DbRebuildScreen()),
+                  );
+                },
               ),
-              subtitle: const Padding(
-                padding: EdgeInsets.only(top: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: _statusIndent, top: 6),
                 child: Text(
-                  '現在のユーザ情報（UUID）を初期化し、新しいユーザとして再登録します。\n必要なら事前にユーザデータの保存をご利用ください。',
-                  style: TextStyle(color: Colors.black54, fontSize: 12),
+                  '用語集や法令データを最新に更新します。\nWi-Fi 環境での実行を推奨します（モバイル回線ではデータ通信料が発生する場合があります）。',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              onTap: () async {
-                final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('確認'),
-                        content: const Text('ユーザ情報（UUID）を初期化して新しいユーザを作成します。よろしいですか？'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
-                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
-                        ],
-                      ),
-                    ) ??
-                    false;
-                if (!ok) return;
-                try {
-                  // 1) SecureStorage / 旧Prefs の UserInfo を削除
-                  const storage = FlutterSecureStorage();
-                  await storage.delete(key: userInfoKey);
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.remove(userInfoKey);
-                  // 任意のローカル保存項目もクリア
-                  await prefs.remove('profile_nick_name');
-                  await prefs.remove('profile_bg_path');
-
-                  // 2) 新しいユーザを初期化
-                  final newInfo = await getOrInitUserInfo();
-
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('新しいユーザを作成しました（ID: ${newInfo.userId}）')),
-                  );
-                  setState(() {}); // 画面再描画（ユーザID表示など）
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('ユーザリセットに失敗しました: $e')),
-                  );
-                }
-              },
-            ),
+            ],
           ),
+        ),
+      ],
+    );
+  }
 
-          // ── メンテナンス（ユーザデータ関連セクションは削除） ──
-          const SizedBox(height: 24),
-          _sectionTitle(context, 'お問い合わせ'),
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _actionRow(
-                  icon: Icons.report_gmailerrorred_outlined,
-                  label: '要望・記載ミスなどの報告',
-                  onTap: () { _openReportForm(); },
-                  showChevron: true,
-                ),
-              ],
-            ),
+  Widget _buildOthersTab(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _sectionTitle(context, 'お問い合わせ'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _actionRow(
+                icon: Icons.report_gmailerrorred_outlined,
+                label: '要望・記載ミスなどの報告',
+                onTap: () { _openReportForm(); },
+                showChevron: true,
+              ),
+            ],
           ),
+        ),
 
-          const SizedBox(height: 24),
-          // 情報（セクション） - お問い合わせの下 / ご利用にあたって の上
-          _sectionTitle(context, '情報'),
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: _actionRow(
-              icon: Icons.info_outline,
-              label: '情報',
-              showChevron: true,
-              onTap: () async {
-                try {
-                  final info = await PackageInfo.fromPlatform();
-                  final ver = '${info.version}+${info.buildNumber}';
-                  final platform = Platform.isIOS ? 'ios' : (Platform.isAndroid ? 'android' : 'other');
-                  final base = Uri.parse('${AppConfig.instance.baseUrl}siowadou_pro_info.php');
-                  final uri = base.replace(queryParameters: {
-                    'format': 'html',
-                    'app': ver,
-                    'platform': platform,
-                    'ts': DateTime.now().millisecondsSinceEpoch.toString(),
-                  });
-                  if (!mounted) return;
+        const SizedBox(height: 24),
+        _sectionTitle(context, '情報'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: _actionRow(
+            icon: Icons.info_outline,
+            label: '情報',
+            showChevron: true,
+            onTap: () async {
+              try {
+                final info = await PackageInfo.fromPlatform();
+                final ver = '${info.version}+${info.buildNumber}';
+                final platform = Platform.isIOS ? 'ios' : (Platform.isAndroid ? 'android' : 'other');
+                final base = Uri.parse('${AppConfig.instance.baseUrl}siowadou_pro_info.php');
+                final uri = base.replace(queryParameters: {
+                  'format': 'html',
+                  'app': ver,
+                  'platform': platform,
+                  'ts': DateTime.now().millisecondsSinceEpoch.toString(),
+                });
+                if (!mounted) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => HtmlViewPage(title: '情報', url: uri.toString())),
+                );
+              } catch (_) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報ページを開けませんでした')));
+              }
+            },
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        _sectionTitle(context, 'ご利用にあたって'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _actionRow(
+                icon: Icons.description_outlined,
+                label: '利用規約',
+                onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => HtmlViewPage(title: '情報', url: uri.toString()),
+                      builder: (_) => const HtmlViewPage(title: '利用規約', url: 'asset://assets/policies/terms_of_use.html'),
                     ),
                   );
-                } catch (_) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('情報ページを開けませんでした')));
-                }
-              },
-            ),
+                },
+                showChevron: true,
+              ),
+              const Divider(height: 1),
+              _actionRow(
+                icon: Icons.privacy_tip_outlined,
+                label: 'プライバシーポリシー',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const HtmlViewPage(title: 'プライバシーポリシー', url: 'asset://assets/policies/privacy_policy.html'),
+                    ),
+                  );
+                },
+                showChevron: true,
+              ),
+            ],
           ),
+        ),
+      ],
+    );
+  }
 
-          const SizedBox(height: 24),
-          _sectionTitle(context, 'ご利用にあたって'),
-          const SizedBox(height: 12),
-          _sectionCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _actionRow(
-                  icon: Icons.description_outlined,
-                  label: '利用規約',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const HtmlViewPage(
-                          title: '利用規約',
-                          url: 'asset://assets/policies/terms_of_use.html',
-                        ),
-                      ),
-                    );
-                  },
-                  showChevron: true,
-                ),
-                const Divider(height: 1),
-                _actionRow(
-                  icon: Icons.privacy_tip_outlined,
-                  label: 'プライバシーポリシー',
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const HtmlViewPage(
-                          title: 'プライバシーポリシー',
-                          url: 'asset://assets/policies/privacy_policy.html',
-                        ),
-                      ),
-                    );
-                  },
-                  showChevron: true,
-                ),
-              ],
+  Widget _buildMaintenanceTab(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _sectionTitle(context, '初期化'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: ListTile(
+            title: const Text("お気に入り削除", style: TextStyle(color: Colors.black)),
+            leading: const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Icon(Icons.delete, color: Colors.black),
             ),
+            onTap: () async {
+              final result = await showDialog<bool>(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: const Text("確認"),
+                    content: const Text("お気に入り削除してもよろしいですか？"),
+                    actions: [
+                      TextButton(child: const Text("キャンセル"), onPressed: () { Navigator.of(context).pop(false); }),
+                      TextButton(child: const Text("OK"), onPressed: () { Navigator.of(context).pop(true); }),
+                    ],
+                  );
+                },
+              );
+              if (result == true) {
+                await Common.instance.sioDb.removeAll();
+                Location.instance.resetFlag();
+                Location.instance.removeFavoriteSpot();
+              }
+            },
           ),
-
-
-
-
-
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: ListTile(
+            title: const Text("ユーザをリセット（UUID再発行）", style: TextStyle(color: Colors.black)),
+            leading: const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Icon(Icons.restart_alt, color: Colors.black),
+            ),
+            subtitle: const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                '現在のユーザ情報（UUID）を初期化し、新しいユーザとして再登録します。\n必要なら事前にユーザデータの保存をご利用ください。',
+                style: TextStyle(color: Colors.black54, fontSize: 12),
+              ),
+            ),
+            onTap: () async {
+              final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('確認'),
+                      content: const Text('ユーザ情報（UUID）を初期化して新しいユーザを作成します。よろしいですか？'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+                        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('OK')),
+                      ],
+                    ),
+                  ) ?? false;
+              if (!ok) return;
+              try {
+                const storage = FlutterSecureStorage();
+                await storage.delete(key: userInfoKey);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove(userInfoKey);
+                await prefs.remove('profile_nick_name');
+                await prefs.remove('profile_bg_path');
+                final newInfo = await getOrInitUserInfo();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('新しいユーザを作成しました（ID: ${newInfo.userId}）')),
+                );
+                setState(() {});
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('ユーザリセットに失敗しました: $e')),
+                );
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 }
