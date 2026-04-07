@@ -6,4 +6,16 @@ const int kPostPageSize = 20; // 投稿一覧の1ページ件数
 final String _tosUrl = 'asset://assets/policies/terms_of_use.html';
 final String _privacyUrl = 'asset://assets/policies/privacy_policy.html';
  
-const bool ambiguous_point = false;
+// ambiguous_plevel=0 釣場指定
+// 
+const int ambiguous_plevel = 0;       // 釣場指定
+// const int ambiguous_plevel = 1;    // 近辺釣場(10個 + 揺らぎ)
+// const int ambiguous_plevel = 2;    // Block区切り
+
+const int baseMap = 0;                 // open street map
+// const int baseMap = 1;              // apple map
+// const int baseMap = 2;              // google map
+
+
+// メッシュサイズ（km）: 例) 30 を指定すると 30km 間隔のグリッド
+const int meshSize = 30;

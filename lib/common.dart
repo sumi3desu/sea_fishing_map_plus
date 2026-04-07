@@ -14,6 +14,7 @@ import 'sio.dart';
 import 'moon_info.dart';
 import 'sio_database.dart';
 import 'appconfig.dart';
+import 'constants.dart';
 
 enum SmartPhoneType { iPhone, android, unknown }
 
@@ -555,6 +556,21 @@ class Common extends ChangeNotifier {
     selectedTeibouPrefId = prefs.getInt('selected_teibou_pref_id') ?? 0;
   }
 
+  // =============
+  // 固定グリッド識別子（Web Mercator基準）
+  // =============
+  /// 緯度経度に対して、Web Mercatorの (meshSize km) グリッド上の (X, Y) を返します。
+  /// 地図のパン/ズームに依存しない固定識別子として利用できます。
+  static GridXY grid10kmXY(double lat, double lon) {
+    const double R = 6378137.0; // Web Mercator radius (m)
+    final double x = R * (lon * pi / 180.0);
+    final double y = R * log(tan(pi / 4.0 + (lat * pi / 180.0) / 2.0));
+    final double gridMeters = meshSize.toDouble() * 1000.0;
+    final int gx = (x / gridMeters).floor();
+    final int gy = (y / gridMeters).floor();
+    return GridXY(gx, gy);
+  }
+
   void requestListCentering() {
     listCenterTick++;
     notifyListeners();
@@ -574,14 +590,38 @@ class Common extends ChangeNotifier {
       if (rows.isEmpty) return false;
       final r = rows.first;
       final name = (r['port_name'] ?? '').toString();
-      final lat = (r['latitude'] is num) ? (r['latitude'] as num).toDouble() : double.tryParse(r['latitude']?.toString() ?? '');
-      final lng = (r['longitude'] is num) ? (r['longitude'] as num).toDouble() : double.tryParse(r['longitude']?.toString() ?? '');
+      final lat = (r['latitude'] is num)
+          ? (r['latitude'] as num).toDouble()
+          : double.tryParse(r['latitude']?.toString() ?? '');
+      final lng = (r['longitude'] is num)
+          ? (r['longitude'] as num).toDouble()
+          : double.tryParse(r['longitude']?.toString() ?? '');
       if (lat == null || lng == null) return false;
+
+      // 都道府県IDの特定（拡張テーブルから逆引き）
+      int? prefId;
+      try {
+        final extRows = await SioDatabase().getAllTeibouWithPrefecture();
+        for (final er in extRows) {
+          final rid = er['port_id'] is int
+              ? er['port_id'] as int
+              : int.tryParse(er['port_id']?.toString() ?? '');
+          if (rid == portId) {
+            prefId = er['todoufuken_id'] is int
+                ? er['todoufuken_id'] as int
+                : int.tryParse(er['todoufuken_id']?.toString() ?? '')
+                    ?? int.tryParse(er['pref_id_from_port']?.toString() ?? '');
+            break;
+          }
+        }
+      } catch (_) {}
+
+      // 最寄り潮汐ポイント
       final nearestPoint = await _findNearestTidePoint(lat, lng);
       if (nearestPoint == null) return false;
       tidePoint = nearestPoint;
       await savePoint(nearestPoint);
-      await saveSelectedTeibou(name, nearestPoint, id: portId, lat: lat, lng: lng);
+      await saveSelectedTeibou(name, nearestPoint, id: portId, lat: lat, lng: lng, prefId: prefId);
       notify();
       return true;
     } catch (_) {
@@ -2584,4 +2624,11 @@ class Common extends ChangeNotifier {
     return authenticationNumber;   
   }
 
+}
+
+/// 10kmメッシュの整数グリッド座標
+class GridXY {
+  final int x;
+  final int y;
+  const GridXY(this.x, this.y);
 }

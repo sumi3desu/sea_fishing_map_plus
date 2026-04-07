@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 //import 'package:shared_preferences/shared_preferences.dart';
 //import 'package:sqflite/sqflite.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'main.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'sio_database.dart';
 import 'sync_service.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +23,7 @@ class DbRebuildScreen extends ConsumerStatefulWidget {
 }
 
 class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
+  BannerAd? _bannerAd;
   bool _loading = false; // 全体ロード中
   bool _fetching = false; // 最新データの確認中
   Map<String, int> _local = {};
@@ -40,6 +43,12 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   void initState() {
     super.initState();
     _refreshVersions();
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716',
+      listener: BannerAdListener(onAdLoaded: (_) => setState(() {}), onAdFailedToLoad: (ad, err) { ad.dispose(); }),
+      request: const AdRequest(),
+    )..load();
   }
 
   @override
@@ -58,7 +67,11 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
         // 一覧側へ更新を通知
         try { SioDatabase().notifyListeners(); } catch (_) {}
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('釣り場データの更新に失敗しました')));
+        final err = SioSyncService().lastError;
+        final msg = (!kReleaseMode && (err != null && err.isNotEmpty))
+            ? '釣り場データの更新に失敗しました（$err）'
+            : '釣り場データの更新に失敗しました';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (_) {
       if (!mounted) return;
@@ -119,8 +132,29 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('最新データの更新')),
-      body: Padding(
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (_bannerAd != null)
+              Container(
+                alignment: Alignment.center,
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            Container(
+              height: kToolbarHeight,
+              color: Colors.black,
+              child: Row(
+                children: [
+                  IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
+                  const Expanded(child: Center(child: Text('最新データの更新', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)))),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,6 +205,10 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
                 ],
               ),
             )
+          ],
+        ),
+              ),
+            ),
           ],
         ),
       ),

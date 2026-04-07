@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 //import 'package:http/http.dart' as http;
 //import 'dart:math';
 import 'certification_mail.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'common.dart';
 import 'error_message.dart';
 import 'appconfig.dart';
@@ -16,6 +17,7 @@ class NewAccountPage extends StatefulWidget {
 }
 
 class _NewAccountPageState extends State<NewAccountPage> {
+  BannerAd? _bannerAd;
   // メール入力のコントローラー（パスワード入力は廃止）
   final TextEditingController _mailaddressController = TextEditingController();
   final TextEditingController _nicknameController = TextEditingController();
@@ -185,13 +187,37 @@ class _NewAccountPageState extends State<NewAccountPage> {
 
   @override
   Widget build(BuildContext context) {
+    _bannerAd ??= BannerAd(
+      size: AdSize.banner,
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716',
+      listener: BannerAdListener(onAdLoaded: (_) => setState(() {}), onAdFailedToLoad: (ad, err) { ad.dispose(); }),
+      request: const AdRequest(),
+    )..load();
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('アカウントの登録'),
-        backgroundColor: AppConfig.instance.appBarBackgroundColor,
-        foregroundColor: AppConfig.instance.appBarForegroundColor,
-      ),
-      body: Padding(
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (_bannerAd != null)
+              Container(
+                alignment: Alignment.center,
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            Container(
+              height: kToolbarHeight,
+              color: Colors.black,
+              child: Row(
+                children: [
+                  IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
+                  const Expanded(child: Center(child: Text('アカウントの登録', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)))),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
           // キーボード表示時にもスクロールできるように
@@ -308,6 +334,10 @@ class _NewAccountPageState extends State<NewAccountPage> {
                 ),
             ],
           ),
+        ),
+              ),
+            ),
+          ],
         ),
       ),
     );

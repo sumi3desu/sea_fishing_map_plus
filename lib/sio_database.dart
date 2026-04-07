@@ -71,6 +71,24 @@ class SioDatabase extends ChangeNotifier {
       )
     ''');
 
+    // 互換のため不足カラムを追加（存在すれば無視）
+    try {
+      await db.execute('ALTER TABLE teibou ADD COLUMN flag INTEGER NOT NULL DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE teibou ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE teibou ADD COLUMN registrant_name TEXT');
+    } catch (_) {}
+    try {
+      // SQLite では DATETIME を TEXT として扱う（サーバは CURRENT_TIMESTAMP）
+      await db.execute("ALTER TABLE teibou ADD COLUMN create_at TEXT NOT NULL DEFAULT (datetime('now'))");
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE teibou ADD COLUMN private INTEGER NOT NULL DEFAULT 0');
+    } catch (_) {}
+
     await db.execute('''
       CREATE TABLE IF NOT EXISTS todoufuken (
         todoufuken_id INTEGER NOT NULL PRIMARY KEY,
@@ -104,6 +122,9 @@ class SioDatabase extends ChangeNotifier {
         created_at INTEGER
       )
     ''');
+
+    // 公開表示用のユーザニックネームキャッシュ
+    // user_public_cache は廃止
   }
 
   // アプリ起動時にテーブルを事前作成したい場合に呼ぶ初期化
@@ -383,7 +404,12 @@ class SioDatabase extends ChangeNotifier {
         t.address,
         t.latitude,
         t.longitude,
+        t.flag,
+        t.private,
+        t.registrant_name,
+        t.user_id,
         t.note,
+        t.create_at,
         CAST(substr(CAST(t.port_id AS TEXT), 1, 2) AS INTEGER) AS pref_id_from_port,
         p.todoufuken_id,
         p.todoufuken_name,
@@ -403,4 +429,5 @@ class SioDatabase extends ChangeNotifier {
       SELECT todoufuken_id, todoufuken_name, chihou_name FROM todoufuken
     ''');
   }
+
 }

@@ -492,7 +492,7 @@ class _SettingPageState extends State<SettingPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _sectionTitle(context, '地図'),
+        _sectionTitle(context, '地図(経路)'),
         const SizedBox(height: 8),
         _sectionCard(
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
@@ -522,17 +522,7 @@ class _SettingPageState extends State<SettingPage> {
                     setState(() { Common.instance.mapKind = value!; });
                   },
                 ),
-              RadioListTile<int>(
-                title: const Text("地図表示しない"),
-                value: MapType.unknown.index,
-                groupValue: common.mapKind,
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                onChanged: (int? value) {
-                  setState(() { Common.instance.mapKind = value!; });
-                },
-              ),
+              // 「地図表示しない」は選択肢から削除
             ],
           ),
         ),

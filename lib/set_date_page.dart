@@ -3,7 +3,9 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'common.dart';
 
 class SetDatePage extends StatefulWidget {
-  SetDatePage({Key? key}) : super(key: key);
+  final bool showBanner;
+  final bool showHeader;
+  SetDatePage({Key? key, this.showBanner = true, this.showHeader = true}) : super(key: key);
 
   @override
   SetDatePageState createState() => SetDatePageState();
@@ -26,7 +28,9 @@ class SetDatePageState extends State<SetDatePage> {
     _displayedMonth = _baseDate;
     _pageController = PageController(initialPage: _initialPage);
     _initMonthData();
-    _loadBanner();
+    if (widget.showBanner) {
+      _loadBanner();
+    }
   }
 
   Future<void> _initMonthData() async {
@@ -274,74 +278,76 @@ Future<void> refreshDate() async {
     return Scaffold(
       body: Column(
         children: [
-          // ステータスバーを避けて上部にバナー + タイトルを表示
-          SafeArea(
-            top: true,
-            bottom: false,
-            child: Column(
-              children: [
-                if (_bannerAd != null)
+          if (widget.showHeader)
+            SafeArea(
+              top: true,
+              bottom: false,
+              child: Column(
+                children: [
+                  if (widget.showBanner && _bannerAd != null)
+                    Container(
+                      alignment: Alignment.center,
+                      width: _bannerAd!.size.width.toDouble(),
+                      height: _bannerAd!.size.height.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
                   Container(
-                    alignment: Alignment.center,
-                    width: _bannerAd!.size.width.toDouble(),
-                    height: _bannerAd!.size.height.toDouble(),
-                    child: AdWidget(ad: _bannerAd!),
-                  ),
-                Container(
-                  height: kToolbarHeight,
-                  color: Colors.black,
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.date_range, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text('日付', style: TextStyle(color: Colors.white)),
-                            ],
-                          ),
+                    height: kToolbarHeight,
+                    color: Colors.black,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          onPressed: () => Navigator.of(context).maybePop(),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            Common.instance.tideDate = DateTime.now();
-                            _baseDate = Common.instance.tideDate;
-                            _displayedMonth = _baseDate;
-                            await Common.instance.getTide(false, _displayedMonth);
-                            if (!mounted) return;
-                            setState(() {
-                              _pageController.jumpToPage(_initialPage);
-                              _currentPage = _initialPage;
-                              Common.instance.shouldJumpPage = true;
-                              Common.instance.notify();
-                            });
-                          },
-                          child: const Text('本日'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey.shade200,
-                            foregroundColor: Colors.black,
-                            elevation: 2.0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                        Expanded(
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.date_range, color: Colors.white),
+                                SizedBox(width: 8),
+                                Text('日付', style: TextStyle(color: Colors.white)),
+                              ],
                             ),
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           ),
                         ),
-                      ),
-                    ],
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              Common.instance.tideDate = DateTime.now();
+                              _baseDate = Common.instance.tideDate;
+                              _displayedMonth = _baseDate;
+                              await Common.instance.getTide(false, _displayedMonth);
+                              if (!mounted) return;
+                              setState(() {
+                                _pageController.jumpToPage(_initialPage);
+                                _currentPage = _initialPage;
+                                Common.instance.shouldJumpPage = true;
+                                Common.instance.notify();
+                              });
+                            },
+                            child: const Text('本日'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                              foregroundColor: Colors.black,
+                              elevation: 2.0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            )
+          else
+            const SizedBox.shrink(),
           // 上部ナビゲーション（矢印ボタンと年月表示）
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

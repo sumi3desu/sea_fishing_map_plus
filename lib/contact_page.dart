@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class ContactPage extends StatefulWidget {
   const ContactPage({Key? key}) : super(key: key);
@@ -9,6 +10,7 @@ class ContactPage extends StatefulWidget {
 }
 
 class _ContactPageState extends State<ContactPage> {
+  BannerAd? _bannerAd;
   final _formKey = GlobalKey<FormState>();
 
   String _name = '';
@@ -72,9 +74,39 @@ class _ContactPageState extends State<ContactPage> {
 
   @override
   Widget build(BuildContext context) {
+    _bannerAd ??= BannerAd(
+      size: AdSize.banner,
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST
+      listener: BannerAdListener(onAdLoaded: (_) => setState(() {}), onAdFailedToLoad: (ad, err) { ad.dispose(); }),
+      request: const AdRequest(),
+    )..load();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('お問い合わせ')),
-      body: Padding(
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (_bannerAd != null)
+              Container(
+                alignment: Alignment.center,
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            Container(
+              height: kToolbarHeight,
+              color: Colors.black,
+              child: Row(
+                children: [
+                  IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
+                  const Expanded(
+                    child: Center(child: Text('お問い合わせ', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
@@ -139,6 +171,10 @@ class _ContactPageState extends State<ContactPage> {
               ),
             ],
           ),
+        ),
+              ),
+            ),
+          ],
         ),
       ),
     );

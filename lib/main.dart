@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ADDED: セキュアストレージ用
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -157,7 +158,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MainPage(title: '海釣りJAPAN'),
+      home: const MainPage(title: '海釣りMAP+'),
     );
   }
 }
@@ -177,7 +178,7 @@ class _SplashScreenState extends State<SplashScreen> {
     Future.delayed(const Duration(milliseconds: 1000), () {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const MainPage(title: '海釣りJAPAN')),
+        MaterialPageRoute(builder: (_) => const MainPage(title: '海釣りMAP+')),
       );
     });
   }
@@ -760,9 +761,13 @@ class _MainPageState extends State<MainPage> {
     final ok = await _runInitialDataDownload();
     try {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ok ? '初回データの準備が完了しました' : '初回データの準備に失敗しました')),
-      );
+      final err = SioSyncService().lastError;
+      final msg = ok
+          ? '初回データの準備が完了しました'
+          : (!kReleaseMode && (err != null && err.isNotEmpty)
+              ? '初回データの準備に失敗しました（$err）'
+              : '初回データの準備に失敗しました');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (_) {}
   }
 
@@ -797,13 +802,31 @@ class _MainPageState extends State<MainPage> {
           tdfk = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM todoufuken')) ?? 0;
           kb = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM kubun')) ?? 0;
           success = (tb > 0 && tdfk > 0 && kb > 0);
+          if (!success) {
+            final details = 'teibou=$tb todoufuken=$tdfk kubun=$kb';
+            if ((SioSyncService().lastError ?? '').isEmpty) {
+              SioSyncService().lastError = 'データ不足（$details）';
+            } else {
+              // 既にAPI由来のエラーがある場合は補足として追記
+              SioSyncService().lastError = '${SioSyncService().lastError} / データ不足（$details）';
+            }
+          }
         } catch (_) {
+          if ((SioSyncService().lastError ?? '').isEmpty) {
+            SioSyncService().lastError = '件数確認に失敗';
+          }
           success = false;
         }
       } else {
+        if ((SioSyncService().lastError ?? '').isEmpty) {
+          SioSyncService().lastError = '同期処理に失敗';
+        }
         success = false;
       }
     } catch (_) {
+      if ((SioSyncService().lastError ?? '').isEmpty) {
+        SioSyncService().lastError = '初期化中に例外発生';
+      }
       success = false;
     }
     // プログレスを閉じる（以降で画面遷移の可能性があるため先に閉じる）
@@ -819,9 +842,11 @@ class _MainPageState extends State<MainPage> {
     // 失敗時は画面遷移せず、エラーを通知してそのまま戻る
     if (!success && mounted) {
       try {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('初回データの準備に失敗しました。通信環境をご確認のうえ、後ほどお試しください。')),
-        );
+        final err = SioSyncService().lastError;
+        final msg = (!kReleaseMode && (err != null && err.isNotEmpty))
+            ? '初回データの準備に失敗しました（$err）'
+            : '初回データの準備に失敗しました。通信環境をご確認のうえ、後ほどお試しください。';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       } catch (_) {}
     }
     return success;
@@ -910,7 +935,6 @@ class _MainPageState extends State<MainPage> {
                     return '釣場詳細[' + (prefName.isNotEmpty ? '$prefName ' : '') + spotName + ']';
                   }(),
                   builder: (context, snap) {
-                    final title = snap.data ?? '釣場詳細';
                     return AppBar(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
@@ -919,13 +943,13 @@ class _MainPageState extends State<MainPage> {
                       automaticallyImplyLeading: false,
                       title: Row(
                         mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.place, color: Colors.white),
-                          const SizedBox(width: 8),
+                        children: const [
+                          Icon(Icons.place, color: Colors.white),
+                          SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              title,
-                              style: const TextStyle(color: Colors.white),
+                              '釣場詳細',
+                              style: TextStyle(color: Colors.white),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -935,6 +959,7 @@ class _MainPageState extends State<MainPage> {
                   },
                 ),
               ),
+            // 釣場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
             Expanded(
               child: IndexedStack(index: _selectedIndex, children: pages),
             ),
@@ -952,6 +977,24 @@ class _MainPageState extends State<MainPage> {
       BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
       ],
       ),
+    );
+  }
+}
+
+class _DetailTopAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _DetailTopAction({Key? key, required this.icon, required this.label}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.black87),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }

@@ -9,15 +9,22 @@ import 'input_post_page.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'common.dart';
+import 'main.dart';
 import 'sio_info.dart';
 import 'sio.dart';
 import 'sio_database.dart';
 import 'set_date_page.dart';
 import 'package:flutter_map/flutter_map.dart' as fm;
+import 'package:apple_maps_flutter/apple_maps_flutter.dart' as am;
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
+import 'dart:io' show Platform;
+import 'constants.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:geolocator/geolocator.dart';
+import 'spot_apply_form_page.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
 
 // 紺（潮汐画面の背景色）
 const Color _navyBg = Color(0xFF001F3F);
@@ -135,7 +142,7 @@ class TidePageState extends State<TidePage> {
           final double contentHeight = (totalHeight - tabBarHeight).clamp(0, totalHeight);
 
           return DefaultTabController(
-            length: 3,
+            length: 2,
             child: Column(
               children: [
                 // タブバー（白背景、左にアイコン+テキスト）
@@ -151,9 +158,8 @@ class TidePageState extends State<TidePage> {
                       labelColor: Colors.black,
                       unselectedLabelColor: Colors.black54,
                       tabs: [
-                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.waves), SizedBox(width: 6), Text('潮汐')])),
                         Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.map), SizedBox(width: 6), Text('地図')])),
-                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.post_add), SizedBox(width: 6), Text('投稿')])),
+                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.waves), SizedBox(width: 6), Text('潮汐')])),
                       ],
                     ),
                   ),
@@ -162,143 +168,10 @@ class TidePageState extends State<TidePage> {
                   child: TabBarView(
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      // 潮汐タブ配下のみ左右スワイプ可能
-                      PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: (int index) {
-                          DateTime newDate = _baseDate.add(Duration(days: index - 1000));
-                          setState(() {
-                            common.tideDate = newDate;
-                            _initData2(newDate);
-                          });
-                        },
-                        itemBuilder: (context, index) {
-                          DateTime pageDate = _baseDate.add(Duration(days: index - 1000));
-                          return _SlidingContent(
-                            key: ValueKey(pageDate),
-                            tidePoint: common.tidePoint,
-                            teibouName: Common.instance.selectedTeibouName,
-                            nearestPoint: Common.instance.selectedTeibouNearestPoint,
-                            tideDate: pageDate,
-                            availableHeight: contentHeight,
-                          );
-                        },
-                      ),
                       // 地図（全面表示）
                       _FishingInfoPane(height: contentHeight),
-                      // 投稿：内側タブ（釣果 / 釣場環境） + 共通FAB
-                      DefaultTabController(
-                        length: 2,
-                        child: Stack(
-                          children: [
-                            Column(
-                              children: [
-                                Container(
-                                  color: Colors.white,
-                                  child: TabBar(
-                                    indicatorColor: Colors.black,
-                                    labelColor: Colors.black,
-                                    unselectedLabelColor: Colors.black54,
-                                    tabs: [
-                                      const Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Text('🐟', style: TextStyle(fontSize: 20)), SizedBox(width: 6), Text('釣果')])),
-                                      Tab(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // 青い看板に白いPの簡易アイコン
-                                            Container(
-                                              width: 18,
-                                              height: 18,
-                                              decoration: BoxDecoration(
-                                                color: Colors.blue,
-                                                borderRadius: BorderRadius.circular(3),
-                                              ),
-                                              alignment: Alignment.center,
-                                              child: const Text('P', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            const Icon(Icons.wc),
-                                            const SizedBox(width: 4),
-                                            // 釣り禁止（規制）を示す簡易アイコンに戻す
-                                            const Text('🚫', style: TextStyle(fontSize: 16)),
-                                            const SizedBox(width: 6),
-                                            const Text('環境'),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                              child: TabBarView(
-                                children: [
-                                  _CatchTab(
-                                    key: ValueKey('${Common.instance.selectedTeibouName}-${_catchRefreshTick}'),
-                                    refreshTick: _catchRefreshTick,
-                                  ),
-                                  _EnvTabbedList(
-                                    key: ValueKey('${Common.instance.selectedTeibouName}-${_envRefreshTick}'),
-                                    refreshTick: _envRefreshTick,
-                                  ),
-                                ],
-                              ),
-                                ),
-                              ],
-                            ),
-                            Positioned(
-                              right: 16,
-                              bottom: 16,
-                              child: Builder(
-                                builder: (context) {
-                                  final controller = DefaultTabController.of(context);
-                                  if (controller == null) {
-                                    return FloatingActionButton.extended(
-                                      onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (_) => const InputPost(initialType: 'catch')),
-                                      ).then((posted) {
-                                        if (posted == true) {
-                                          setState(() => _catchRefreshTick++);
-                                        }
-                                      });
-                                      },
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('釣果投稿'),
-                                    );
-                                  }
-                                  return AnimatedBuilder(
-                                    animation: controller.animation!,
-                                    builder: (context, _) {
-                                      final isCatch = controller.index == 0;
-                                      return FloatingActionButton.extended(
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(builder: (_) => InputPost(initialType: isCatch ? 'catch' : 'env')),
-                                          ).then((posted) {
-                                            if (posted == true) {
-                                              setState(() {
-                                                if (isCatch) {
-                                                  _catchRefreshTick++;
-                                                } else {
-                                                  _envRefreshTick++;
-                                                }
-                                              });
-                                            }
-                                          });
-                                        },
-                                        icon: const Icon(Icons.add),
-                                        label: Text(isCatch ? '釣果投稿' : '環境投稿'),
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // 潮汐（スワイプ可能）
+                      _TideTab(height: contentHeight),
                     ],
                   ),
                 ),
@@ -308,6 +181,28 @@ class TidePageState extends State<TidePage> {
         },
       ),
     );
+  }
+}
+
+class _TideTab extends StatefulWidget {
+  const _TideTab({required this.height});
+  final double height;
+  @override
+  State<_TideTab> createState() => _TideTabState();
+}
+
+class _TideTabState extends State<_TideTab> {
+  late final PageController _controller;
+  late DateTime _baseDate;
+  @override
+  void initState() {
+    super.initState();
+    _baseDate = Common.instance.tideDate;
+    _controller = PageController(initialPage: 1000);
+  }
+  @override
+  Widget build(BuildContext context) {
+    return _TideHomePage(controller: _controller, baseDate: _baseDate);
   }
 }
 
@@ -337,7 +232,7 @@ class _CatchTab extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  ambiguous_point ? 'この釣り場近辺の釣果です。' : 'この釣り場の釣果です。',
+                  ambiguous_plevel != 0 ? 'この釣り場近辺の釣果です。' : 'この釣り場の釣果です。',
                   style: TextStyle(fontSize: 13, color: Colors.black87),
                 ),
               ),
@@ -450,9 +345,9 @@ class _CatchPostListState extends State<_CatchPostList> {
     });
   }
 
-  // ambiguous_point=false のときは、選択中の釣り場IDに一致する投稿のみを表示
+  // ambiguous_plevel=0 のときは、選択中の釣り場IDに一致する投稿のみを表示
   Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
-    if (ambiguous_point) return rows;
+    if (ambiguous_plevel != 0) return rows;
     try {
       final prefs = await SharedPreferences.getInstance();
       final selId = prefs.getInt('selected_teibou_id');
@@ -1263,11 +1158,16 @@ class _FishingInfoPane extends StatefulWidget {
 
 class _FishingInfoPaneState extends State<_FishingInfoPane> {
   final List<fm.Marker> _markers = [];
+  final Set<am.Annotation> _appleAnnotations = <am.Annotation>{};
+  final Set<gm.Marker> _gmMarkers = <gm.Marker>{};
+  final Set<gm.Polyline> _gmPolylines = <gm.Polyline>{};
+  final Set<gm.Circle> _gmCircles = <gm.Circle>{};
   LatLng? _center;
   double? _lastLat;
   double? _lastLng;
   String _lastName = '';
   final fm.MapController _mapController = fm.MapController();
+  double _currentZoom = 12.0;
   // 近隣潮汐ポイント座標（ポイント名 -> (lat,lng)）
   final Map<String, Offset> _pointCoords = {};
   bool _pointsLoading = true;
@@ -1277,21 +1177,57 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   bool _blinkOn = true;
   Timer? _blinkTimer;
   StreamSubscription<Position>? _posSub;
+  // ドラッガブルシートのサイズ制御
+  late DraggableScrollableController _sheetController;
+  final GlobalKey _sheetActuatorKey = GlobalKey();
+  int _sheetEpoch = 0; // シート完全再生成用
+  double _lastSheetSize = 0.15; // 直近のシートサイズ（可視時）
+  int _sheetReloadTick = 0; // 投稿一覧シートの再構築用トリガ
+  Set<int> _favoriteIds = <int>{};
+  // 潮汐オーバーレイ表示とスワイプ用
+  bool _showTideOverlay = false;
+  late PageController _tidePageController;
+  DateTime _tideBaseDate = Common.instance.tideDate;
+  final GlobalKey<NavigatorState> _tideNavKey = GlobalKey<NavigatorState>();
+  late final _TideNavObserver _tideNavObserver;
+  gm.GoogleMapController? _gmController;
+  // 長押しによる「釣場新規申請」用ポイント
+  LatLng? _applyPoint;           // FlutterMap 用
+  gm.LatLng? _gmApplyPoint;      // GoogleMap 用
+  bool _applyMode = false;       // 「釣場申請」ボタン押下後の指定モード
+  bool _isSatellite = false; // Google Maps 用 衛星表示トグル
 
   @override
   void initState() {
     super.initState();
+    _sheetController = DraggableScrollableController();
+    _tidePageController = PageController(initialPage: 1000);
+    _tideNavObserver = _TideNavObserver(() { if (mounted) setState(() {}); });
     _prepare();
     _loadPointCoords();
     // Common の変更（堤防選択など）を監視して地図を更新
     Common.instance.addListener(_onCommonChanged);
     _initLocation();
     _startBlink();
+    // 初期表示時、シートを下部に表示（隠れている場合に備えて）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureSheetVisible();
+    });
+    _loadFavorites();
   }
 
   void _onCommonChanged() {
     // 堤防選択が変わった可能性があるため再準備
     _prepare();
+    // 再表示や選択変更時、非表示ならシートを下部に出す
+    final current = _safeSheetSize();
+    if (current <= 0.01) {
+      _recreateSheet(show: true);
+    } else {
+      _ensureSheetVisible(ifHiddenOnly: true);
+    }
+    // シートの内容（投稿一覧）を再取得するために再構築
+    if (mounted) setState(() { _sheetReloadTick++; });
   }
 
   Future<void> _prepare() async {
@@ -1306,11 +1242,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         _lastLng = lng;
         _lastName = name;
         await _loadMarkers(centerName: name, lat: lat, lng: lng, radiusKm: 30.0);
-        // マップの中心も即時移動
+        // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
-          try {
-            _mapController.move(_center!, _zoomForRadius(30.0) + 1.0);
-          } catch (_) {}
+          final z = _zoomForRadius(30.0) + 1.0;
+          final adjusted = _computeCenteredForSheet(_center!, z);
+          setState(() { _center = adjusted; });
+          try { _mapController.move(adjusted, z); } catch (_) {}
+          try { if (baseMap == 2) { _gmController?.moveCamera(gm.CameraUpdate.newLatLngZoom(gm.LatLng(adjusted.latitude, adjusted.longitude), z)); } } catch (_) {}
         }
       }
     } else {
@@ -1330,9 +1268,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           _lastName = fallbackName;
           await _loadMarkers(centerName: fallbackName, lat: fallbackLat, lng: fallbackLng, radiusKm: 30.0);
           if (mounted && _center != null) {
-            try {
-              _mapController.move(_center!, _zoomForRadius(30.0) + 1.0);
-            } catch (_) {}
+            final z = _zoomForRadius(30.0) + 1.0;
+            final adjusted = _computeCenteredForSheet(_center!, z);
+            setState(() { _center = adjusted; });
+            try { _mapController.move(adjusted, z); } catch (_) {}
+            try { if (baseMap == 2) { _gmController?.moveCamera(gm.CameraUpdate.newLatLngZoom(gm.LatLng(adjusted.latitude, adjusted.longitude), z)); } } catch (_) {}
           }
         }
       } else {
@@ -1377,40 +1317,90 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 
   Future<void> _loadMarkers({required String centerName, required double lat, required double lng, required double radiusKm}) async {
     _markers.clear();
+    _appleAnnotations.clear();
+    _gmMarkers.clear();
+    _gmPolylines.clear();
+    _gmCircles.clear();
     final rows = await SioDatabase().getAllTeibouWithPrefecture();
-    final center = LatLng(lat, lng);
-    _markers.add(
-      fm.Marker(
-        width: 180,
-        height: 64,
-        point: center,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.location_pin, color: Colors.red, size: 32),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
-              ),
-              child: Text(
-                centerName,
-                style: const TextStyle(fontSize: 11, color: Colors.black),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ],
+    var center = LatLng(lat, lng);
+    double maxDkm = 0.0; // 外接円半径計算用
+    // 中心マーカー（お気に入りなら拡大＆太字）
+    int? centerPortId;
+    bool centerPending = false;
+    bool centerRejected = false;
+    String cn = centerName;
+    for (final r in rows) {
+      final name = (r['port_name'] ?? '').toString();
+      final dlat0 = _toDouble(r['latitude']);
+      final dlng0 = _toDouble(r['longitude']);
+      if (dlat0 == null || dlng0 == null) continue;
+      if ((name == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) {
+        centerPortId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+        centerPending = (flag == -1);
+        centerRejected = (flag == -2);
+        break;
+      }
+    }
+    // 非承認が現在選択中なら、最寄りの別スポットへフォールバック
+    if (centerRejected) {
+      double best = double.infinity;
+      Map<String, dynamic>? bestRow;
+      const double d2r = 3.141592653589793 / 180.0;
+      final rlat = lat * d2r;
+      for (final r in rows) {
+        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+        if (flag == -2) continue;
+        final dlat0 = _toDouble(r['latitude']);
+        final dlng0 = _toDouble(r['longitude']);
+        if (dlat0 == null || dlng0 == null) continue;
+        final a = _haversine(lat, lng, dlat0, dlng0, cosLat: rlat);
+        if (a < best) { best = a; bestRow = r; }
+      }
+      if (bestRow != null) {
+        final nlat = _toDouble(bestRow['latitude']) ?? lat;
+        final nlng = _toDouble(bestRow['longitude']) ?? lng;
+        cn = (bestRow['port_name'] ?? '').toString();
+        center = LatLng(nlat, nlng);
+        centerPortId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
+        final int? f2 = bestRow['flag'] is int ? bestRow['flag'] as int : int.tryParse(bestRow['flag']?.toString() ?? '');
+        centerPending = (f2 == -1);
+        centerRejected = false;
+        try {
+          String? np;
+          if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
+          final int? prefId = bestRow['todoufuken_id'] is int
+              ? bestRow['todoufuken_id'] as int
+              : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
+          await Common.instance.saveSelectedTeibou(cn, np ?? (Common.instance.tidePoint), id: centerPortId, lat: nlat, lng: nlng, prefId: prefId);
+          Common.instance.shouldJumpPage = true;
+          Common.instance.notify();
+        } catch (_) {}
+      }
+    }
+    final bool isCenterFav = centerPortId != null && _favoriteIds.contains(centerPortId);
+    // AppleMap 中心注釈
+    if (!centerRejected) {
+      _appleAnnotations.add(
+        am.Annotation(
+          annotationId: am.AnnotationId('c'),
+          position: am.LatLng(center.latitude, center.longitude),
         ),
-      ),
-    );
+      );
+    }
+    // GoogleMap 中心マーカー（後でzIndex高めで追加）
 
     for (final r in rows) {
       final dlat = _toDouble(r['latitude']);
       final dlng = _toDouble(r['longitude']);
       final name = (r['port_name'] ?? '').toString();
+      final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+      final bool isPending = flag == -1;
+      // 非承認は非表示
+      if (flag == -2) {
+        continue;
+      }
+      final displayName = isPending ? '$name (申請中)' : name;
       final int? prefId = r['todoufuken_id'] is int
           ? r['todoufuken_id'] as int
           : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '');
@@ -1420,13 +1410,53 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (dlat == null || dlng == null) continue;
       final d = _distanceKm(lat, lng, dlat, dlng);
       if (d <= radiusKm && !(dlat == lat && dlng == lng)) {
+        if (d > maxDkm) maxDkm = d;
+        final bool isFav = portId != null && _favoriteIds.contains(portId);
         _markers.add(
           fm.Marker(
-            width: 200,
-            height: 60,
+            width: 220,
+            height: isFav ? 76 : 60,
             point: LatLng(dlat, dlng),
             child: GestureDetector(
               onTap: () async {
+                // 申請中ピンを編集（申請者本人 or 管理者）
+                if (_applyMode && isPending) {
+                  try {
+                    final info = await loadUserInfo() ?? await getOrInitUserInfo();
+                    final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+                    final int? owner = r['user_id'] is int ? r['user_id'] as int : int.tryParse(r['user_id']?.toString() ?? '');
+                    if (isAdmin || (owner != null && owner == info.userId)) {
+                      final prefName = (r['todoufuken_name'] ?? '').toString();
+                      if (!mounted) return;
+                      final res = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SpotApplyFormPage(
+                            lat: dlat,
+                            lng: dlng,
+                            editMode: true,
+                            initialKind: (r['kubun'] ?? '').toString(),
+                            initialName: name,
+                            initialYomi: (r['j_yomi'] ?? r['furigana'] ?? '').toString(),
+                            initialAddress: (r['address'] ?? '').toString(),
+                            initialPrefName: prefName,
+                            initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
+                            initialPortId: portId,
+                          ),
+                        ),
+                      );
+                      if (res == true && mounted) {
+                        setState(() {
+                          _applyMode = false;
+                          _applyPoint = null;
+                          _gmApplyPoint = null;
+                          try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                        });
+                      }
+                      return;
+                    }
+                  } catch (_) {}
+                }
                 // 近隣ポイントへ選択切替（一覧と同じ挙動）
                 String? np;
                 if (!_pointsLoading && _pointCoords.isNotEmpty) {
@@ -1446,18 +1476,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 );
                 Common.instance.shouldJumpPage = true;
                 Common.instance.notify();
-                // マップも新しい中心へ移動
-                setState(() {
-                  _center = LatLng(dlat, dlng);
-                });
-                try { _mapController.move(_center!, _zoomForRadius(30.0) + 1.0); } catch (_) {}
+                // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
                 // マーカーを再構築
                 await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm);
+                // 投稿一覧リロード。シートが非表示なら再表示、表示中はサイズ維持
+                if (mounted) setState(() { _sheetReloadTick++; });
+                if (_safeSheetSize() <= 0.01) {
+                  _recreateSheet(show: true);
+                } else {
+                  _ensureSheetVisible(ifHiddenOnly: true);
+                }
               },
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.location_pin, color: Colors.blueAccent, size: 28),
+                  // ラベル上、ピン下
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
@@ -1466,17 +1499,276 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
                     ),
                     child: Text(
-                      '$name (${d.toStringAsFixed(1)}km)',
-                      style: const TextStyle(fontSize: 10, color: Colors.black),
+                      displayName,
+                      style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: isFav ? FontWeight.bold : FontWeight.normal),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                  ),
+                  Icon(
+                    Icons.location_pin,
+                    color: (flag != null && flag != 0) ? Colors.green : Colors.blueAccent,
+                    size: isFav ? 42 : 28,
                   ),
                 ],
               ),
             ),
           ),
         );
+        // AppleMap 近隣注釈（非承認はここに来ない）
+        _appleAnnotations.add(
+          am.Annotation(
+            annotationId: am.AnnotationId('n${portId ?? name}'),
+            position: am.LatLng(dlat, dlng),
+          ),
+        );
+        // GoogleMap 近隣マーカー（距離のスニペットは非表示）
+        _gmMarkers.add(
+          gm.Marker(
+            markerId: gm.MarkerId('n${portId ?? name}'),
+            position: gm.LatLng(dlat, dlng),
+            infoWindow: gm.InfoWindow(title: displayName),
+            icon: (flag != null && flag != 0)
+                ? gm.BitmapDescriptor.defaultMarkerWithHue(gm.BitmapDescriptor.hueGreen)
+                : gm.BitmapDescriptor.defaultMarker,
+            onTap: () async {
+              if (_applyMode && isPending) {
+                try {
+                  final info = await loadUserInfo() ?? await getOrInitUserInfo();
+                  final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+                  final int? owner = r['user_id'] is int ? r['user_id'] as int : int.tryParse(r['user_id']?.toString() ?? '');
+                  if (isAdmin || (owner != null && owner == info.userId)) {
+                    final prefName = (r['todoufuken_name'] ?? '').toString();
+                    if (!mounted) return;
+                    final res = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SpotApplyFormPage(
+                          lat: dlat,
+                          lng: dlng,
+                          editMode: true,
+                          initialKind: (r['kubun'] ?? '').toString(),
+                          initialName: name,
+                          initialYomi: (r['j_yomi'] ?? r['furigana'] ?? '').toString(),
+                          initialAddress: (r['address'] ?? '').toString(),
+                          initialPrefName: prefName,
+                          initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
+                          initialPortId: portId,
+                        ),
+                      ),
+                    );
+                    if (res == true && mounted) {
+                      setState(() {
+                        _applyMode = false;
+                        _applyPoint = null;
+                        _gmApplyPoint = null;
+                        try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                      });
+                      try { await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm); } catch (_) {}
+                      if (mounted) setState(() {});
+                    }
+                    return;
+                  }
+                } catch (_) {}
+              }
+              // 近隣ポイントへ選択切替
+              String? np;
+              if (!_pointsLoading && _pointCoords.isNotEmpty) {
+                np = _nearestPointName(dlat, dlng);
+              }
+              if (np != null) {
+                Common.instance.tidePoint = np;
+                await Common.instance.savePoint(np);
+              }
+              await Common.instance.saveSelectedTeibou(
+                name,
+                np ?? (Common.instance.tidePoint),
+                id: portId,
+                lat: dlat,
+                lng: dlng,
+                prefId: prefId,
+              );
+              Common.instance.shouldJumpPage = true;
+              Common.instance.notify();
+              // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
+              // マーカー再構築
+              await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm);
+              if (mounted) setState(() { _sheetReloadTick++; });
+              if (_safeSheetSize() <= 0.01) {
+                _recreateSheet(show: true);
+              } else {
+                _ensureSheetVisible(ifHiddenOnly: true);
+              }
+            },
+            zIndex: 0,
+          ),
+        );
+      }
+    }
+
+    // 中心マーカーを最後に追加（最前面に表示）
+    if (!centerRejected) _markers.add(
+      fm.Marker(
+        width: 200,
+        height: isCenterFav ? 84 : 64,
+        point: center,
+        child: GestureDetector(
+          onTap: () async {
+            if (_applyMode && centerPending) {
+              try {
+                final info = await loadUserInfo() ?? await getOrInitUserInfo();
+                final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+                // 対応する行を検索
+                Map<String, dynamic>? cr;
+                for (final r in rows) {
+                  final n = (r['port_name'] ?? '').toString();
+                  final dlat0 = _toDouble(r['latitude']);
+                  final dlng0 = _toDouble(r['longitude']);
+                  if (dlat0 == null || dlng0 == null) continue;
+                  if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+                }
+                final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
+                if (isAdmin || (owner != null && owner == info.userId)) {
+                  final prefName = cr == null ? '' : (cr['todoufuken_name'] ?? '').toString();
+                  if (!mounted) return;
+                  final res = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SpotApplyFormPage(
+                        lat: center.latitude,
+                        lng: center.longitude,
+                        editMode: true,
+                        initialKind: cr == null ? '' : (cr['kubun'] ?? '').toString(),
+                        initialName: centerName,
+                        initialYomi: cr == null ? '' : (cr['j_yomi'] ?? cr['furigana'] ?? '').toString(),
+                        initialAddress: cr == null ? '' : (cr['address'] ?? '').toString(),
+                        initialPrefName: prefName,
+                        initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
+                        initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
+                      ),
+                    ),
+                  );
+                    if (res == true && mounted) {
+                      setState(() {
+                        _applyMode = false;
+                        _applyPoint = null;
+                        _gmApplyPoint = null;
+                        try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                      });
+                      try { await _loadMarkers(centerName: centerName, lat: center.latitude, lng: center.longitude, radiusKm: 30.0); } catch (_) {}
+                      if (mounted) setState(() {});
+                    }
+                  return;
+                }
+              } catch (_) {}
+            }
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
+                ),
+              child: Text(
+                centerPending ? '$cn (申請中)' : cn,
+                style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: isCenterFav ? FontWeight.bold : FontWeight.normal),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+              Icon(Icons.location_pin, color: Colors.red, size: isCenterFav ? 48 : 32),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    // GoogleMap 中心マーカー（zIndexを高めに）
+    if (!centerRejected) _gmMarkers.add(
+      gm.Marker(
+        markerId: const gm.MarkerId('c'),
+        position: gm.LatLng(center.latitude, center.longitude),
+        infoWindow: gm.InfoWindow(title: centerPending ? '$cn (申請中)' : cn, snippet: '中心'),
+        onTap: () async {
+          if (_applyMode && centerPending) {
+            try {
+              final info = await loadUserInfo() ?? await getOrInitUserInfo();
+              final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+              Map<String, dynamic>? cr;
+              for (final r in rows) {
+                final n = (r['port_name'] ?? '').toString();
+                final dlat0 = _toDouble(r['latitude']);
+                final dlng0 = _toDouble(r['longitude']);
+                if (dlat0 == null || dlng0 == null) continue;
+                if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+              }
+              final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
+              if (isAdmin || (owner != null && owner == info.userId)) {
+                final prefName = cr == null ? '' : (cr['todoufuken_name'] ?? '').toString();
+                if (!mounted) return;
+                final res = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SpotApplyFormPage(
+                      lat: center.latitude,
+                      lng: center.longitude,
+                      editMode: true,
+                      initialKind: cr == null ? '' : (cr['kubun'] ?? '').toString(),
+                      initialName: centerName,
+                      initialYomi: cr == null ? '' : (cr['j_yomi'] ?? cr['furigana'] ?? '').toString(),
+                      initialAddress: cr == null ? '' : (cr['address'] ?? '').toString(),
+                      initialPrefName: prefName,
+                      initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
+                      initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
+                    ),
+                  ),
+                );
+                if (res == true && mounted) {
+                  setState(() {
+                    _applyMode = false;
+                    _applyPoint = null;
+                    _gmApplyPoint = null;
+                    try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                  });
+                }
+                return;
+              }
+            } catch (_) {}
+          }
+        },
+        zIndex: 1000,
+      ),
+    );
+
+    // GoogleMap: 外接円（候補範囲） - 曖昧表示のときのみ
+    if (_center != null && maxDkm > 0 && ambiguous_plevel == 2) {
+      _gmCircles.add(
+        gm.Circle(
+          circleId: const gm.CircleId('enclosing'),
+          center: gm.LatLng(_center!.latitude, _center!.longitude),
+          radius: maxDkm * 1000.0,
+          strokeColor: Colors.redAccent.withOpacity(0.35),
+          strokeWidth: 2,
+          fillColor: Colors.redAccent.withOpacity(0.12),
+        ),
+      );
+    }
+
+    // GoogleMap: メッシュ（ambiguous_plevel == 2 のとき）
+    if (ambiguous_plevel == 2) {
+      _gmPolylines.clear();
+      for (final pl in _buildMeshPolylines()) {
+        final pts = pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
+        _gmPolylines.add(gm.Polyline(
+          polylineId: gm.PolylineId('mesh-${_gmPolylines.length}'),
+          points: pts,
+          color: Colors.black.withOpacity(0.2),
+          width: 1,
+        ));
       }
     }
     if (mounted) setState(() {});
@@ -1488,30 +1780,692 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       height: widget.height,
       child: _center == null
           ? const ColoredBox(color: Colors.black)
-          : fm.FlutterMap(
-              options: fm.MapOptions(
-                initialCenter: _center!,
-                // 半径30km相当より1段ズームイン（約2倍拡大）
-                initialZoom: _zoomForRadius(30.0) + 1.0,
-                interactionOptions: const fm.InteractionOptions(flags: fm.InteractiveFlag.all),
-              ),
-              mapController: _mapController,
+          : Stack(
               children: [
-                fm.TileLayer(
-                  urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  subdomains: const ['a', 'b', 'c'],
-                  userAgentPackageName: 'jp.bouzer.siowadou',
-                  tileProvider: fm.NetworkTileProvider(),
+                if (Platform.isIOS && baseMap == 1)
+                  am.AppleMap(
+                    initialCameraPosition: am.CameraPosition(
+                      target: am.LatLng(_center!.latitude, _center!.longitude),
+                      zoom: 12,
+                    ),
+                    annotations: _appleAnnotations,
+                  )
+                else if (baseMap == 2)
+                  gm.GoogleMap(
+                    initialCameraPosition: gm.CameraPosition(
+                      target: gm.LatLng(_center!.latitude, _center!.longitude),
+                      zoom: 12,
+                    ),
+                    mapType: _isSatellite ? gm.MapType.hybrid : gm.MapType.normal,
+                    onMapCreated: (c) => _gmController = c,
+                    onLongPress: (pos) {
+                      if (!_applyMode) return; // 申請モードでないときは無視
+                      // 長押しで申請用ピンを設置
+                      setState(() {
+                        _gmApplyPoint = pos;
+                        // 既存の 'apply' マーカーを除去してから追加
+                        _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+                        _gmMarkers.add(
+                          gm.Marker(
+                            markerId: const gm.MarkerId('apply'),
+                            position: pos,
+                            infoWindow: gm.InfoWindow(
+                              title: '釣場新規申請',
+                              onTap: () {
+                                _openApplyForm(pos.latitude, pos.longitude);
+                              },
+                            ),
+                            onTap: () {
+                              // タップでインフォウィンドウを表示
+                              try { _gmController?.showMarkerInfoWindow(const gm.MarkerId('apply')); } catch (_) {}
+                            },
+                          ),
+                        );
+                      });
+                      // 可能なら情報ウィンドウを即表示
+                      try { _gmController?.showMarkerInfoWindow(const gm.MarkerId('apply')); } catch (_) {}
+                      // 案内表示
+                      final messenger = ScaffoldMessenger.maybeOf(context);
+                      messenger?.showSnackBar(
+                        const SnackBar(
+                          content: Text('そのポイントでよければ「釣場新規申請」をタップして情報入力お願いします'),
+                          duration: Duration(seconds: 3),
+                        ),
+                      );
+                    },
+                    onCameraMove: (pos) {
+                      if (!mounted) return;
+                      setState(() {
+                        _center = LatLng(pos.target.latitude, pos.target.longitude);
+                        _currentZoom = pos.zoom;
+                      });
+                      // メッシュはズーム・中心に応じて動的だが、簡易に再計算
+                      if (ambiguous_plevel == 2) {
+                        _gmPolylines.clear();
+                        for (final pl in _buildMeshPolylines()) {
+                          final pts = pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
+                          _gmPolylines.add(gm.Polyline(
+                            polylineId: gm.PolylineId('mesh-${_gmPolylines.length}-${DateTime.now().millisecondsSinceEpoch}'),
+                            points: pts,
+                            color: Colors.black.withOpacity(0.2),
+                            width: 1,
+                          ));
+                        }
+                        if (mounted) setState(() {});
+                      }
+                    },
+                    markers: _gmMarkers,
+                    polylines: _gmPolylines,
+                    circles: _gmCircles,
+                    myLocationEnabled: _myPos != null,
+                    myLocationButtonEnabled: true,
+                    compassEnabled: true,
+                    zoomControlsEnabled: false,
+                  )
+                else
+                  fm.FlutterMap(
+                    options: fm.MapOptions(
+                      initialCenter: _center!,
+                      // 半径30km相当より1段ズームイン（約2倍拡大）
+                      initialZoom: _zoomForRadius(30.0) + 1.0,
+                      interactionOptions: const fm.InteractionOptions(flags: fm.InteractiveFlag.all),
+                      onLongPress: (tapPosition, latlng) {
+                        if (!_applyMode) return; // 申請モードでないときは無視
+                        // 長押しで申請用ピンを設置
+                        setState(() {
+                          _applyPoint = latlng;
+                        });
+                        final messenger = ScaffoldMessenger.maybeOf(context);
+                        messenger?.showSnackBar(
+                          const SnackBar(
+                            content: Text('そのポイントでよければ「釣場新規申請」をタップして情報入力お願いします'),
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      },
+                      onPositionChanged: (pos, hasGesture) {
+                        if (!mounted) return;
+                        setState(() {
+                          if (pos.center != null) {
+                            _center = pos.center;
+                          }
+                          if (pos.zoom != null) {
+                            _currentZoom = pos.zoom!;
+                          }
+                        });
+                      },
+                    ),
+                    mapController: _mapController,
+                    children: [
+                      fm.TileLayer(
+                        urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        subdomains: const ['a', 'b', 'c'],
+                        userAgentPackageName: 'jp.bouzer.siowadou',
+                        tileProvider: fm.NetworkTileProvider(),
+                      ),
+                      if (ambiguous_plevel == 2)
+                        fm.PolylineLayer(polylines: _buildMeshPolylines()),
+                      if (ambiguous_plevel == 2)
+                        fm.MarkerLayer(markers: _buildGridCenterMarkers()),
+                      fm.MarkerLayer(markers: _buildAllMarkers()),
+                      const fm.RichAttributionWidget(
+                        attributions: [
+                          fm.TextSourceAttribution('© OpenStreetMap contributors'),
+                        ],
+                      ),
+                    ],
+                  ),
+                // 地図上部に白背景のパネルを配置（釣果 / お気に入り / 経路表示）
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: _buildTopOverlayPanel(context),
                 ),
-                fm.MarkerLayer(markers: _buildAllMarkers()),
-                const fm.RichAttributionWidget(
-                  attributions: [
-                    fm.TextSourceAttribution('© OpenStreetMap contributors'),
-                  ],
+                if (ambiguous_plevel == 2 && _center != null)
+                  // 画面中央に現在のグリッド識別子 (X, Y) を表示
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      ignoring: true,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(6),
+                            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                          ),
+                          child: Builder(
+                            builder: (_) {
+                              final g = Common.grid10kmXY(_center!.latitude, _center!.longitude);
+                              return Text(
+                                'X=${g.x}, Y=${g.y}',
+                                style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // 地図上（ボタン行の下）に [都道府県 釣り場名] をオーバーレイ表示
+                Positioned(
+                  top: 70, left: 0, right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _showCurrentSpotInfoDialog,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                        ),
+                        child: FutureBuilder<String>(
+                          future: () async {
+                          final spotName = Common.instance.selectedTeibouName.isNotEmpty ? Common.instance.selectedTeibouName : Common.instance.tidePoint;
+                          String prefName = '';
+                          try {
+                            int pid = Common.instance.selectedTeibouPrefId;
+                            if (pid == 0) {
+                              final rows = await SioDatabase().getAllTeibouWithPrefecture();
+                              for (final r in rows) {
+                                final n = (r['port_name'] ?? '').toString();
+                                if (n == Common.instance.selectedTeibouName && n.isNotEmpty) {
+                                  pid = r['todoufuken_id'] is int
+                                      ? r['todoufuken_id'] as int
+                                      : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
+                                  break;
+                                }
+                              }
+                            }
+                            if (pid != 0) {
+                              final prefs = await SioDatabase().getTodoufukenAll();
+                              for (final r in prefs) {
+                                final id = r['todoufuken_id'] is int ? r['todoufuken_id'] as int : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+                                if (id == pid) {
+                                  prefName = (r['todoufuken_name'] ?? '').toString();
+                                  break;
+                                }
+                              }
+                            }
+                          } catch (_) {}
+                          return spotName;
+                        }(),
+                        builder: (context, snap) {
+                          final txt = snap.data ?? '';
+                          return Text(
+                            txt,
+                            style: const TextStyle(fontSize: 17, color: Colors.black87, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          );
+                        },
+                      ),
+                      ),
+                    ),
+                  ),
                 ),
+                // 下から引っ張り出すボトムシート（投稿一覧などを想定）
+                Builder(
+                  key: _sheetActuatorKey,
+                  builder: (context) => DraggableScrollableActuator(
+                    child: KeyedSubtree(
+                      key: ValueKey('epoch-$_sheetEpoch'),
+                      child: _buildDraggableBottomSheet(),
+                    ),
+                  ),
+                ),
+                if (_showTideOverlay) Positioned.fill(child: _buildTideOverlay()),
               ],
             ),
     );
+  }
+
+  Widget _buildDraggableBottomSheet() {
+    return DraggableScrollableSheet(
+      controller: _sheetController,
+      initialChildSize: 0.15, // 初期は少しだけ見せる（広めに）
+      minChildSize: 0.0,      // 非表示まで下げられる
+      maxChildSize: 0.92,     // 上部に余白を残す
+      snap: true,
+      snapAnimationDuration: const Duration(milliseconds: 200),
+      // 下方向(0.0)へのスナップは使わず、上方向の段階にだけスナップ
+      snapSizes: const [0.15, 0.5, 0.9],
+      builder: (context, controller) {
+        // シートサイズの変化を監視して記録
+        try {
+          _sheetController.removeListener(_onSheetChanged);
+        } catch (_) {}
+        _sheetController.addListener(_onSheetChanged);
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: Material(
+            elevation: 8,
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: _BottomSheetCatchList(key: ValueKey('sheet-${_sheetReloadTick}'), extController: controller),
+          ),
+        );
+      },
+    );
+  }
+
+  void _ensureSheetVisible({bool ifHiddenOnly = false}) {
+    try {
+      final current = _sheetController.size;
+      if (!ifHiddenOnly || current <= 0.01) {
+        _sheetController.animateTo(
+          0.15,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (_) {}
+    // フォールバック: Actuatorで初期サイズにリセット
+    try {
+      final ctx = _sheetActuatorKey.currentContext;
+      if (ctx != null && _safeSheetSize() <= 0.01) {
+        DraggableScrollableActuator.reset(ctx);
+      }
+    } catch (_) {}
+  }
+
+  void _recreateSheet({bool show = false}) {
+    // コントローラを作り直して初期サイズに戻す
+    _sheetController = DraggableScrollableController();
+    if (mounted) setState(() { _sheetEpoch++; });
+    if (show) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSheetVisible());
+    }
+  }
+
+  void _onSheetChanged() {
+    try {
+      final s = _sheetController.size;
+      if (s > 0.01) _lastSheetSize = s;
+    } catch (_) {}
+  }
+
+  double _safeSheetSize() {
+    try { return _sheetController.size; } catch (_) { return 0.0; }
+  }
+
+  List<fm.Polyline> _buildMeshPolylines() {
+    if (_center == null) return const <fm.Polyline>[];
+    // Web Mercator メートル座標で 10km グリッドを固定生成
+    const double R = 6378137.0; // Web Mercator 半径（m）
+    final double gridM = meshSize.toDouble() * 1000.0; // 可変メッシュ（km -> m）
+
+    // 中心のメルカトル座標
+    final _M xy = _projectToMercator(_center!.latitude, _center!.longitude);
+
+    // ズームに応じた描画範囲（半径km）
+    double radiusKm;
+    if (_currentZoom >= 14) radiusKm = 12;
+    else if (_currentZoom >= 13) radiusKm = 20;
+    else if (_currentZoom >= 12) radiusKm = 35;
+    else if (_currentZoom >= 11) radiusKm = 60;
+    else radiusKm = 100;
+    final double rangeM = radiusKm * 1000.0;
+
+    // 表示領域（概算）
+    final double xMin = xy.x - rangeM;
+    final double xMax = xy.x + rangeM;
+    final double yMin = (xy.y - rangeM).clamp(-math.pi * R, math.pi * R);
+    final double yMax = (xy.y + rangeM).clamp(-math.pi * R, math.pi * R);
+
+    // グリッド開始点（原点 0 を基準に 10km きざみ）
+    final double startX = (xMin / gridM).floorToDouble() * gridM;
+    final double startY = (yMin / gridM).floorToDouble() * gridM;
+
+    const int segs = 16; // 線分近似の分割数
+    final lines = <fm.Polyline>[];
+
+    // 垂直線 x = const
+    for (double x = startX; x <= xMax + 1e-6; x += gridM) {
+      final pts = <LatLng>[];
+      for (int i = 0; i <= segs; i++) {
+        final double t = i / segs;
+        final double y = yMin + (yMax - yMin) * t;
+        final latlng = _unprojectFromMercator(x, y);
+        pts.add(latlng);
+      }
+      lines.add(fm.Polyline(points: pts, color: Colors.black.withOpacity(0.20), strokeWidth: 1.0));
+    }
+
+    // 水平線 y = const
+    for (double y = startY; y <= yMax + 1e-6; y += gridM) {
+      final pts = <LatLng>[];
+      for (int i = 0; i <= segs; i++) {
+        final double t = i / segs;
+        final double x = xMin + (xMax - xMin) * t;
+        final latlng = _unprojectFromMercator(x, y);
+        pts.add(latlng);
+      }
+      lines.add(fm.Polyline(points: pts, color: Colors.black.withOpacity(0.20), strokeWidth: 1.0));
+    }
+
+    return lines;
+  }
+
+  List<fm.Marker> _buildGridCenterMarkers() {
+    if (_center == null) return const <fm.Marker>[];
+    // 低ズームでは密集しすぎるため非表示
+    if (_currentZoom < 11) return const <fm.Marker>[];
+
+    const double R = 6378137.0; // Web Mercator 半径
+    final double gridM = meshSize.toDouble() * 1000.0; // 可変メッシュ（km -> m）
+    final _M xy = _projectToMercator(_center!.latitude, _center!.longitude);
+
+    double radiusKm;
+    if (_currentZoom >= 14) radiusKm = 12;
+    else if (_currentZoom >= 13) radiusKm = 20;
+    else if (_currentZoom >= 12) radiusKm = 35;
+    else radiusKm = 60;
+    final double rangeM = radiusKm * 1000.0;
+
+    final double xMin = xy.x - rangeM;
+    final double xMax = xy.x + rangeM;
+    final double yMin = (xy.y - rangeM).clamp(-math.pi * R, math.pi * R);
+    final double yMax = (xy.y + rangeM).clamp(-math.pi * R, math.pi * R);
+
+    final double startX = (xMin / gridM).floorToDouble() * gridM;
+    final double startY = (yMin / gridM).floorToDouble() * gridM;
+
+    final markers = <fm.Marker>[];
+    for (double x = startX; x <= xMax + 1e-6; x += gridM) {
+      for (double y = startY; y <= yMax + 1e-6; y += gridM) {
+        final double cx = x + gridM / 2.0;
+        final double cy = y + gridM / 2.0;
+        if (cx < xMin || cx > xMax || cy < yMin || cy > yMax) continue;
+        final LatLng ll = _unprojectFromMercator(cx, cy);
+        final g = Common.grid10kmXY(ll.latitude, ll.longitude);
+        markers.add(
+          fm.Marker(
+            width: 140,
+            height: 30,
+            point: ll,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.90),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              alignment: Alignment.center,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  'X=${g.x}, Y=${g.y}',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return markers;
+  }
+
+  // Web Mercator <-> LatLng 変換
+  _M _projectToMercator(double lat, double lon) {
+    const double R = 6378137.0;
+    final double x = R * (lon * math.pi / 180.0);
+    final double y = R * math.log(math.tan(math.pi / 4.0 + (lat * math.pi / 180.0) / 2.0));
+    return _M(x, y);
+  }
+
+  LatLng _unprojectFromMercator(double x, double y) {
+    const double R = 6378137.0;
+    final double lon = (x / R) * 180.0 / math.pi;
+    final double lat = (2.0 * math.atan(math.exp(y / R)) - math.pi / 2.0) * 180.0 / math.pi;
+    return LatLng(lat, lon);
+  }
+
+  Widget _buildTideOverlay() {
+    const double headerH = 48;
+    final bool canPop = _tideNavKey.currentState?.canPop() ?? false;
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: Material(
+      color: Colors.white,
+      child: Column(
+        children: [
+          SizedBox(
+            height: headerH,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(canPop ? Icons.arrow_back : Icons.close),
+                  onPressed: () {
+                    if (canPop) {
+                      _tideNavKey.currentState?.maybePop();
+                    } else {
+                      setState(() => _showTideOverlay = false);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  canPop ? '日付' : '潮汐',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Navigator(
+              key: _tideNavKey,
+              observers: [_tideNavObserver],
+              onGenerateRoute: (settings) {
+                return MaterialPageRoute(builder: (_) => _TideHomePage(controller: _tidePageController, baseDate: _tideBaseDate));
+              },
+            ),
+          ),
+        ],
+      ),
+    ));
+  }
+
+
+  Widget _buildTopOverlayPanel(BuildContext context) {
+    Widget item({required Widget icon, required String label, required VoidCallback? onTap}) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 6.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              const SizedBox(height: 2),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      alignment: Alignment.center,
+      color: Colors.white,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // お気に入り：ブックマーク
+          item(
+            icon: const Icon(Icons.bookmark_border, color: Colors.black87),
+            label: 'お気に入り',
+            onTap: () => _onToggleFavorite(context),
+          ),
+          // 釣場申請：長押し案内
+          item(
+            icon: Icon(Icons.add_location_alt, color: _applyMode ? Colors.deepPurple : Colors.black87),
+            label: _applyMode ? '釣場指定中' : '釣場追加申請',
+            onTap: () {
+              // 先に新しいモードを決定してから setState に渡す
+              final bool newMode = !_applyMode;
+              setState(() {
+                _applyMode = newMode;
+                if (!newMode) {
+                  // 申請モード解除時は申請ピンを消す
+                  _applyPoint = null;
+                  _gmApplyPoint = null;
+                  try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                }
+              });
+              if (newMode) {
+                final messenger = ScaffoldMessenger.maybeOf(context);
+                messenger?.showSnackBar(
+                  const SnackBar(
+                    content: Text('新規釣場申請したいポイントを長押ししてください'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            },
+          ),
+          // 経路表示：車
+          item(
+            icon: const Icon(Icons.directions_car, color: Colors.black87),
+            label: '経路表示',
+            onTap: () => _onOpenRoute(context),
+          ),
+          // 衛星表示（Google Maps のみ表示）
+          if (baseMap == 2)
+            item(
+              icon: Icon(
+                _isSatellite ? Icons.satellite_alt : Icons.satellite_alt_outlined,
+                color: Colors.black87,
+              ),
+              label: '衛星表示',
+              onTap: () => setState(() {
+                _isSatellite = !_isSatellite;
+              }),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onToggleFavorite(BuildContext context) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      int? portId = prefs.getInt('selected_teibou_id');
+      String portName = Common.instance.selectedTeibouName;
+      if ((portId == null || portId <= 0) && portName.isNotEmpty) {
+        // 名前から検索して補完
+        try {
+          final rows = await SioDatabase().getAllTeibouWithPrefecture();
+          for (final r in rows) {
+            final n = (r['port_name'] ?? '').toString();
+            if (n == portName) {
+              portId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+      if (portId == null || portId <= 0) {
+        messenger?.showSnackBar(const SnackBar(content: Text('釣り場情報が見つかりません')));
+        return;
+      }
+      // 現在の登録状態を判定
+      final favs = await SioDatabase().getFavoriteTeibouIds();
+      final isFav = favs.contains(portId);
+      if (isFav) {
+        await SioDatabase().removeFavoriteTeibou(portId);
+      } else {
+        await SioDatabase().addFavoriteTeibou(portId);
+      }
+      // リモート同期（失敗は通知して継続）
+      try {
+        final info = await loadUserInfo() ?? await getOrInitUserInfo();
+        final url = '${AppConfig.instance.baseUrl}regist_favorite.php';
+        final resp = await http
+            .post(
+              Uri.parse(url),
+              headers: const {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json, text/plain, */*',
+              },
+              body: {
+                'user_id': info.userId.toString(),
+                'spot_id': portId.toString(),
+                'action': isFav ? 'delete' : 'enter',
+              },
+            )
+            .timeout(kHttpTimeout);
+        if (resp.statusCode != 200) {
+          messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除の同期に失敗しました（${resp.statusCode}）' : 'お気に入りの同期に失敗しました（${resp.statusCode}）'), duration: const Duration(seconds: 3)));
+        } else {
+          messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除: $portName' : 'お気に入り登録: $portName')));
+        }
+      } catch (_) {
+        messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除の同期中にエラーが発生しました（ローカル保存済み）' : 'お気に入りの同期中にエラーが発生しました（ローカル保存済み）'), duration: const Duration(seconds: 3)));
+      }
+      // 再読込して反映（マーカー拡大/太字を即座に反映）
+      await _loadFavorites();
+      try {
+        final name = (_lastName.isNotEmpty) ? _lastName : Common.instance.selectedTeibouName;
+        final lat = (_lastLat ?? Common.instance.selectedTeibouLat);
+        final lng = (_lastLng ?? Common.instance.selectedTeibouLng);
+        if ((lat != 0.0 || lng != 0.0) && name.isNotEmpty) {
+          await _loadMarkers(centerName: name, lat: lat, lng: lng, radiusKm: 30.0);
+        } else if (_center != null) {
+          await _loadMarkers(centerName: name, lat: _center!.latitude, lng: _center!.longitude, radiusKm: 30.0);
+        }
+      } catch (_) {}
+      if (mounted) setState(() {});
+    } catch (_) {
+      messenger?.showSnackBar(const SnackBar(content: Text('お気に入りの更新に失敗しました')));
+    }
+  }
+
+  Future<void> _onOpenRoute(BuildContext context) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final lat = Common.instance.selectedTeibouLat;
+    final lng = Common.instance.selectedTeibouLng;
+    if (lat == 0.0 && lng == 0.0) {
+      // フォールバック: gSioInfo
+      final fl = Common.instance.gSioInfo.lat;
+      final fg = Common.instance.gSioInfo.lang;
+      if (fl == 0.0 && fg == 0.0) {
+        messenger?.showSnackBar(const SnackBar(content: Text('位置情報がありません')));
+        return;
+      }
+      if (Common.instance.mapKind == MapType.googleMaps.index) {
+        await Common.instance.openGoogleMaps(fl, fg);
+      } else if (Common.instance.mapKind == MapType.appleMaps.index) {
+        await Common.instance.openAppleMaps(fl, fg);
+      } else {
+        messenger?.showSnackBar(const SnackBar(content: Text('設定から地図アプリを選択してください')));
+      }
+      return;
+    }
+
+    if (Common.instance.mapKind == MapType.googleMaps.index) {
+      await Common.instance.openGoogleMaps(lat, lng);
+    } else if (Common.instance.mapKind == MapType.appleMaps.index) {
+      await Common.instance.openAppleMaps(lat, lng);
+    } else {
+      messenger?.showSnackBar(const SnackBar(content: Text('設定から地図アプリを選択してください')));
+    }
   }
 
   Future<void> _loadPointCoords() async {
@@ -1575,6 +2529,38 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 
   List<fm.Marker> _buildAllMarkers() {
     final list = <fm.Marker>[];
+    // 申請ピン（FlutterMap）
+    if (_applyPoint != null) {
+      list.add(
+        fm.Marker(
+          width: 200,
+          height: 64,
+          point: _applyPoint!,
+          child: GestureDetector(
+            onTap: () => _openApplyForm(_applyPoint!.latitude, _applyPoint!.longitude),
+            child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
+                ),
+                child: const Text(
+                  '釣場新規申請',
+                  style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.location_on, color: Colors.purple, size: 28),
+            ],
+            ),
+          ),
+        ),
+      );
+    }
     list.addAll(_markers);
     if (_myPos != null) {
       list.add(
@@ -1600,6 +2586,24 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       );
     }
     return list;
+  }
+
+  void _openApplyForm(double lat, double lng) {
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SpotApplyFormPage(lat: lat, lng: lng)),
+    ).then((res) {
+      if (!mounted) return;
+      if (res == true) {
+        setState(() {
+          _applyMode = false;
+          _applyPoint = null;
+          _gmApplyPoint = null;
+          try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+        });
+      }
+    });
   }
 
   @override
@@ -1630,6 +2634,239 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return 10.0;
   }
 
+  String? _kubunLabelLocal(String kubun) {
+    final v = kubun.trim();
+    final lv = v.toLowerCase();
+    switch (lv) {
+      case '1': return '地域港';
+      case '2': return '拠点港';
+      case '3': return '主要港';
+      case '4': return '特殊港';
+      case 'gyoko': return '漁港';
+      case 'iso': return '磯';
+      case 'kako': return '河口';
+      case 'surf': return 'サーフ';
+      case 'teibo': return '堤防';
+      case 'teibou': return '堤防';
+      default:
+        if (v == '特3') return '最重要港';
+        return null;
+    }
+  }
+
+  Future<void> _showCurrentSpotInfoDialog() async {
+    try {
+      final spotName = Common.instance.selectedTeibouName.isNotEmpty ? Common.instance.selectedTeibouName : Common.instance.tidePoint;
+      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      Map<String, dynamic>? row;
+      // 1) ID優先（保存済みの selected_teibou_id）
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final sid = prefs.getInt('selected_teibou_id');
+        if (sid != null && sid > 0) {
+          for (final r in rows) {
+            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) { row = r; break; }
+          }
+        }
+      } catch (_) {}
+      // 2) 見つからなければ名前一致
+      if (row == null) {
+        for (final r in rows) {
+          final n = (r['port_name'] ?? '').toString();
+          if (n == spotName) { row = r; break; }
+        }
+      }
+      // 見つからない場合は、現在の選択座標に最も近い行を採用
+      final double selLat = Common.instance.selectedTeibouLat != 0.0 ? Common.instance.selectedTeibouLat : (_center?.latitude ?? 0.0);
+      final double selLng = Common.instance.selectedTeibouLng != 0.0 ? Common.instance.selectedTeibouLng : (_center?.longitude ?? 0.0);
+      if (row == null && (selLat != 0.0 || selLng != 0.0)) {
+        double best = double.infinity;
+        Map<String, dynamic>? bestRow;
+        for (final r in rows) {
+          final dlat0 = _toDouble(r['latitude']);
+          final dlng0 = _toDouble(r['longitude']);
+          if (dlat0 == null || dlng0 == null) continue;
+          final d = _distanceKm(selLat, selLng, dlat0, dlng0);
+          if (d < best) { best = d; bestRow = r; }
+        }
+        if (bestRow != null) row = bestRow;
+      }
+      String prefName = '';
+      if (row != null) {
+        prefName = (row['todoufuken_name'] ?? '').toString();
+        if (prefName.isEmpty) {
+          final pid = row['todoufuken_id'] is int ? row['todoufuken_id'] as int : int.tryParse(row['todoufuken_id']?.toString() ?? '');
+          if (pid != null && pid > 0) {
+            final prefs = await SioDatabase().getTodoufukenAll();
+            for (final p in prefs) {
+              final id = p['todoufuken_id'] is int ? p['todoufuken_id'] as int : int.tryParse(p['todoufuken_id']?.toString() ?? '');
+              if (id == pid) { prefName = (p['todoufuken_name'] ?? '').toString(); break; }
+            }
+          }
+        }
+      }
+      final lat = Common.instance.selectedTeibouLat != 0.0 ? Common.instance.selectedTeibouLat : _center?.latitude ?? 0.0;
+      final lng = Common.instance.selectedTeibouLng != 0.0 ? Common.instance.selectedTeibouLng : _center?.longitude ?? 0.0;
+      final kubun = (((row != null) ? row['kubun'] : '') ?? '').toString();
+      final kubunLabel = _kubunLabelLocal(kubun) ?? '';
+      final yomi = (((row != null) ? (row['j_yomi'] ?? row['furigana']) : '') ?? '').toString();
+      final dynamic _uidRaw = (row != null) ? row['user_id'] : null;
+      final int? ownerId = (_uidRaw is int) ? _uidRaw : int.tryParse((_uidRaw?.toString() ?? ''));
+      String? nick;
+      try {
+        if (ownerId != null) {
+          final me = await loadUserInfo();
+          if (me != null && ownerId == me.userId) {
+            nick = me.nickName ?? '';
+          } else {
+            // サーバJOIN値（registrant_name）があれば優先
+            final rn = ((row != null) ? (row['registrant_name']?.toString() ?? '') : '').trim();
+            if (rn.isNotEmpty) nick = rn; // 投稿と同様: 追加問い合わせは行わない
+          }
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (_) => AlertDialog(
+          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _infoRow('都道府県', prefName),
+              const SizedBox(height: 6),
+              _infoRow('釣場名', yomi.isNotEmpty ? '$spotName（$yomi）' : spotName),
+              const SizedBox(height: 6),
+              _infoRow('種別', kubunLabel),
+              const SizedBox(height: 6),
+              _infoRow('緯度経度', '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}'),
+              const SizedBox(height: 6),
+              _infoRow('登録者', (ownerId != null) ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)' : '−'),
+            ],
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  Widget _infoRow(String k, String v) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 80, child: Text('$k:', style: const TextStyle(fontWeight: FontWeight.w600))),
+        const SizedBox(width: 6),
+        Expanded(child: Text(v.isNotEmpty ? v : '−')),
+      ],
+    );
+  }
+
+  // スクロール補正量（論理px）: 投稿一覧シートと上部オーバーレイを考慮
+  double _scrollDeltaForSheet(double zoom) {
+    final s = _safeSheetSize().clamp(0.0, 0.95);
+    if (s <= 0.01) return 0.0;
+    final H = widget.height;
+    const double kTopOverlay = 60.0;
+    final sheetH = H * s;
+    // 中央へ寄せるために必要なスクロール（画面座標系, 下方向=正）
+    // GoogleMap.scrollBy は y>0 で地図を下にスクロール＝見えるコンテンツが上へ移動。
+    // マーカーを下げたい（中央へ持ってきたい）場合は y を負方向に与える。
+    double delta = (sheetH - kTopOverlay) / 2.0; // 余分な加算なし
+    if (delta < 0) delta = 0;
+    final visibleH = (H - sheetH).clamp(0.0, H);
+    final maxDelta = visibleH * 0.50; // 安全上限（可視の半分）
+    if (delta > maxDelta) delta = maxDelta;
+    return -delta; // 上方向スクロール（マーカーを下げる）
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final ids = await SioDatabase().getFavoriteTeibouIds();
+      if (mounted) setState(() { _favoriteIds = ids; });
+    } catch (_) {}
+  }
+
+  // 現在のボトムシートサイズと上部オーバーレイに応じて、
+  // マーカーが可視領域の中央に来るよう中心を調整
+  LatLng _computeCenteredForSheet(LatLng marker, double zoom) {
+    final s = _safeSheetSize().clamp(0.0, 0.95); // 0..1 のシート占有率
+    if (s <= 0.01) return marker; // 非表示なら通常通り
+    final H = widget.height; // 地図ウィジェットの高さ（論理px）
+    const double kTopOverlay = 60.0; // 上部メニューの高さ
+    final double worldPx = 256.0 * math.pow(2.0, zoom).toDouble();
+
+    double latToPixelY(double lat) {
+      final rad = lat * math.pi / 180.0;
+      final mercN = math.log(math.tan(math.pi / 4.0 + rad / 2.0));
+      final normY = (1 - (mercN / math.pi)) / 2.0; // 0..1
+      return normY * worldPx;
+    }
+
+    double pixelYToLat(double py) {
+      final normY = (py / worldPx);
+      final mercN = (1 - 2 * normY) * math.pi;
+      final lat = (2 * math.atan(math.exp(mercN)) - math.pi / 2.0) * 180.0 / math.pi;
+      return lat;
+    }
+
+    final pMarker = latToPixelY(marker.latitude);
+    // 可視領域中心へ寄せるための縦方向オフセット（論理px）
+    final sheetH = H * s;
+    // 可視領域中央（上部オーバーレイと下部シートを考慮）へ寄せるための中心ピクセルY補正
+    double delta = (sheetH - kTopOverlay) / 2.0;
+    if (delta < 0) delta = 0; // 過補正しない
+    final visibleH = (H - sheetH).clamp(0.0, H);
+    final maxDelta = visibleH * 0.50; // 安全上限
+    if (delta > maxDelta) delta = maxDelta;
+    // 理論式: centerY = pMarker - (desiredScreenY - H/2)
+    // desiredScreenY = topOverlay + (visibleH - topOverlay)/2
+    // => centerY = pMarker + (sheetH - topOverlay)/2 (= pMarker + delta)
+    final desiredCenterPy = pMarker + delta;
+    final centerLat = pixelYToLat(desiredCenterPy);
+    return LatLng(centerLat, marker.longitude);
+  }
+
+  Set<am.Annotation> _buildAppleAnnotations() {
+    final set = <am.Annotation>{};
+    int idx = 0;
+    // 中心と近隣のポイントを簡易的に再構築（_markersからの復元が難しいため、中心のみ確実に追加）
+    if (_center != null) {
+      set.add(am.Annotation(
+        annotationId: am.AnnotationId('c'),
+        position: am.LatLng(_center!.latitude, _center!.longitude),
+      ));
+      idx++;
+    }
+    // 近隣はDBから半径30kmで再取得して簡易注釈
+    try {
+      final rows = SioDatabase().getAllTeibouWithPrefecture();
+      rows.then((list) {
+        if (!mounted || _center == null) return;
+        final lat = _center!.latitude;
+        final lng = _center!.longitude;
+        for (final r in list) {
+          final dlat = _toDouble(r['latitude']);
+          final dlng = _toDouble(r['longitude']);
+          if (dlat == null || dlng == null) continue;
+          final d = _distanceKm(lat, lng, dlat, dlng);
+          if (d <= 30 && !(dlat == lat && dlng == lng)) {
+            final name = (r['port_name'] ?? '').toString();
+            set.add(am.Annotation(
+              annotationId: am.AnnotationId('n${idx++}'),
+              position: am.LatLng(dlat, dlng),
+            ));
+          }
+        }
+        // 再描画
+        if (mounted) setState(() {});
+      });
+    } catch (_) {}
+    return set;
+  }
+
   double? _toDouble(dynamic v) {
     if (v == null) return null;
     if (v is double) return v;
@@ -1637,6 +2874,370 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return double.tryParse(v.toString());
   }
 }
+
+class _BottomSheetCatchList extends StatefulWidget {
+  const _BottomSheetCatchList({Key? key, required this.extController}) : super(key: key);
+  final ScrollController extController;
+  @override
+  State<_BottomSheetCatchList> createState() => _BottomSheetCatchListState();
+}
+
+class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
+  final List<_PostItem> _items = [];
+  bool _loading = false;
+  bool _hasMore = true;
+  int _page = 1;
+  String _mode = 'catch'; // 'catch' or 'env'
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFirst();
+    widget.extController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    widget.extController.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_hasMore || _loading) return;
+    if (widget.extController.position.pixels >= widget.extController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<List<_PostItem>> _fetch({required int page, required int kind}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final spotId = prefs.getInt('selected_teibou_id');
+      final ts = DateTime.now().millisecondsSinceEpoch;
+      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts');
+      final body = <String, String>{
+        'get_kind': kind.toString(),
+        'page': page.toString(),
+        'page_size': kPostPageSize.toString(),
+        'ts': ts.toString(),
+      };
+      if (spotId != null && spotId > 0) body['spot_id'] = spotId.toString();
+      final resp = await http
+          .post(
+            uri,
+            body: body,
+            headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+          )
+          .timeout(kHttpTimeout);
+      if (resp.statusCode != 200) return [];
+      final data = jsonDecode(resp.body);
+      if (data is Map && data['status'] == 'success') {
+        final List rows = (data['rows'] as List?) ?? [];
+        return rows.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      if (data is List) {
+        return data.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _loadFirst() async {
+    if (!mounted || _loading) return;
+    setState(() { _loading = true; _page = 1; _hasMore = true; });
+    final kind = (_mode == 'catch') ? 1 : 0;
+    var rows = await _fetch(page: 1, kind: kind);
+    rows = await _applyAmbiguityFilter(rows);
+    if (!mounted) return;
+    setState(() {
+      _items
+        ..clear()
+        ..addAll(rows);
+      _hasMore = rows.length >= kPostPageSize;
+      _page = 2;
+      _loading = false;
+    });
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    if (!mounted) return;
+    setState(() => _loading = true);
+    final kind = (_mode == 'catch') ? 1 : 0;
+    var rows = await _fetch(page: _page, kind: kind);
+    rows = await _applyAmbiguityFilter(rows);
+    if (!mounted) return;
+    setState(() {
+      _items.addAll(rows);
+      _hasMore = rows.length >= kPostPageSize;
+      _page += 1;
+      _loading = false;
+    });
+  }
+
+  Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
+    if (ambiguous_plevel != 0) return rows;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selId = prefs.getInt('selected_teibou_id');
+      if (selId == null || selId <= 0) return rows;
+      return rows.where((e) => e.spotId == selId).toList();
+    } catch (_) {
+      return rows;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isCatch = _mode == 'catch';
+    final totalCount = 1 /*header*/ + _items.length + (_hasMore ? 1 : 0);
+    return ListView.builder(
+      controller: widget.extController,
+      padding: EdgeInsets.zero,
+      itemCount: totalCount,
+      itemBuilder: (context, index) {
+        // 0: ヘッダー（グラブハンドル＋タイトル）
+        if (index == 0) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 60,
+                height: 6,
+                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(3)),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    // 左端: ＋ 投稿 ボタン（アイコンなし、全角プラス）
+                    OutlinedButton(
+                      onPressed: () async {
+                        final posted = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => InputPost(initialType: _mode == 'catch' ? 'catch' : 'env'),
+                          ),
+                        );
+                        if (posted == true) {
+                          if (!mounted) return;
+                          setState(() {
+                            _items.clear();
+                            _page = 1;
+                            _hasMore = true;
+                            _loading = false;
+                          });
+                          await _loadFirst();
+                        }
+                      },
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      ),
+                      child: const Text('＋ 投稿', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    // 中央: 投稿一覧（中央寄せ）
+                    const Expanded(
+                      child: Center(
+                        child: Text('投稿一覧', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    // 右端: セグメント（釣果/環境）を右寄せで
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 0),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: CupertinoSegmentedControl<String>(
+                          groupValue: _mode,
+                          padding: const EdgeInsets.all(0),
+                          children: const {
+                            'catch': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('釣果')),
+                            'env': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('環境')),
+                          },
+                          onValueChanged: (val) {
+                            setState(() {
+                              _mode = val;
+                              // モード切替時は一覧をリセットして再取得
+                              _items.clear();
+                              _page = 1;
+                              _hasMore = true;
+                              _loading = false;
+                            });
+                            _loadFirst();
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+            ],
+          );
+        }
+        final listIndex = index - 1;
+        if (listIndex >= _items.length) {
+          // ローディングフッター
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final it = _items[listIndex];
+        final thumb = it.thumbUrl ?? it.imageUrl;
+        return Column(
+          children: [
+            ListTile(
+              leading: (thumb != null)
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(thumb, width: 48, height: 48, fit: BoxFit.cover))
+                  : const Icon(Icons.image, size: 40, color: Colors.black38),
+              title: Text(it.title?.isNotEmpty == true ? it.title! : (it.nickName ?? '投稿'), maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(it.detail?.isNotEmpty == true ? it.detail! : (it.createAt ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PostDetailPage(
+                    item: PostDetailItem(
+                      userId: it.userId,
+                      postId: it.postId,
+                      postKind: it.postKind,
+                      exist: it.exist,
+                      title: it.title,
+                      detail: it.detail,
+                      imageUrl: it.imageUrl ?? it.thumbUrl,
+                      nickName: it.nickName,
+                      createAt: it.createAt,
+                      spotId: it.spotId,
+                      showNearbyButton: true,
+                    ),
+                  ),
+                ));
+              },
+            ),
+            const Divider(height: 1),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TideNavObserver extends NavigatorObserver {
+  final VoidCallback onChanged;
+  _TideNavObserver(this.onChanged);
+  @override
+  void didPush(Route route, Route? previousRoute) { onChanged(); }
+  @override
+  void didPop(Route route, Route? previousRoute) { onChanged(); }
+}
+
+class _TideHomePage extends StatelessWidget {
+  const _TideHomePage({Key? key, required this.controller, required this.baseDate}) : super(key: key);
+  final PageController controller;
+  final DateTime baseDate;
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final height = constraints.maxHeight; // オーバーレイ内部での有効高さ
+      return PageView.builder(
+        controller: controller,
+        onPageChanged: (int index) async {
+          final newDate = baseDate.add(Duration(days: index - 1000));
+          Common.instance.tideDate = newDate;
+          try { await Common.instance.getTide(true, newDate); } catch (_) {}
+        },
+        itemBuilder: (context, index) {
+          final pageDate = baseDate.add(Duration(days: index - 1000));
+          return _SlidingContent(
+            key: ValueKey('tide-$pageDate'),
+            tidePoint: Common.instance.tidePoint,
+            teibouName: Common.instance.selectedTeibouName,
+            nearestPoint: Common.instance.selectedTeibouNearestPoint,
+            tideDate: pageDate,
+            availableHeight: height,
+          );
+        },
+      );
+    });
+  }
+}
+
+class _AppleMapsPanel extends StatelessWidget {
+  const _AppleMapsPanel({required this.center, required this.onOpen});
+  final LatLng center;
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            color: Colors.black12,
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.map, size: 56, color: Colors.black45),
+                const SizedBox(height: 12),
+                const Text('Apple Maps を使用します', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 8),
+                Text('(${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)})', style: const TextStyle(color: Colors.black45, fontSize: 12)),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Apple Maps で開く'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// 地図上部の「潮汐」アクションから開く簡易ページ
+class _TideStandalonePage extends StatelessWidget {
+  const _TideStandalonePage({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('潮汐'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final h = constraints.maxHeight;
+          return _SlidingContent(
+            key: ValueKey('tide-standalone-${Common.instance.tideDate.toIso8601String()}'),
+            tidePoint: Common.instance.tidePoint,
+            teibouName: Common.instance.selectedTeibouName,
+            nearestPoint: Common.instance.selectedTeibouNearestPoint,
+            tideDate: Common.instance.tideDate,
+            availableHeight: h,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _M {
+  final double x;
+  final double y;
+  const _M(this.x, this.y);
+}
+
 
 // 月画像はドラッグ不可に戻す（プロフィール用トリミングのみドラッグ対応）
 
@@ -1666,7 +3267,8 @@ class _SlidingContent extends StatelessWidget {
         final n = (r['port_name'] ?? '').toString();
         if (n == name) {
           final kubun = (r['kubun'] ?? '').toString();
-          final isPort = kubun == '1' || kubun == '2' || kubun == '3' || kubun == '4' || kubun == '特3';
+          final k = kubun.trim();
+          final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
           String yomi = (r['j_yomi'] ?? '').toString();
           if (yomi.isEmpty) yomi = (r['furigana'] ?? '').toString();
           return {'yomi': yomi, 'isPort': isPort};
@@ -1713,7 +3315,7 @@ class _SlidingContent extends StatelessWidget {
               label: const Text('日付変更', style: TextStyle(fontSize: 13)),
               onPressed: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => SetDatePage()),
+                  MaterialPageRoute(builder: (_) => SetDatePage(showBanner: true, showHeader: true)),
                 );
               },
             ),

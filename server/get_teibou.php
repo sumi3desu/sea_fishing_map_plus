@@ -30,7 +30,13 @@ try {
     // ==============================
     // データ取得
     // ==============================
-    $sql = "SELECT * FROM teibou;";
+    $sql = "
+      SELECT 
+        t.*, 
+        u.nick_name AS registrant_name
+      FROM teibou AS t
+      LEFT JOIN user AS u ON u.user_id = t.user_id AND u.delete_flg = 0
+    ";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute();

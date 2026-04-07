@@ -236,6 +236,77 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     }
   }
 
+  String? _kubunLabel(String kubun) {
+    final v = kubun.trim();
+    final lv = v.toLowerCase();
+    switch (lv) {
+      case '1':
+        return '地域港';
+      case '2':
+        return '拠点港';
+      case '3':
+        return '主要港';
+      case '4':
+        return '特殊港';
+      case 'gyoko':
+        return '漁港';
+      case 'iso':
+        return '磯';
+      case 'kako':
+        return '河口';
+      case 'surf':
+        return 'サーフ';
+      case 'teibou':
+        return '堤防';
+      case '特3': // 特殊なラベルはそのまま比較
+        return '最重要港';
+      default:
+        if (v == '特3') return '最重要港';
+        if (v == '1') return '地域港';
+        if (v == '2') return '拠点港';
+        if (v == '3') return '主要港';
+        if (v == '4') return '特殊港';
+        return null;
+    }
+  }
+
+  Widget _buildKubunIconOrPref(String kubun, String prefName, {bool isPending = false}) {
+    final k = kubun.trim();
+    IconData? icon;
+    Color color = Colors.blue.shade600;
+    if (k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko') {
+      icon = Icons.anchor; // 港系
+      color = Colors.blue.shade600;
+    } else if (k == 'teibou') {
+      icon = Icons.fence; // 堤防
+      color = Colors.brown.shade600;
+    } else if (k == 'surf') {
+      icon = Icons.waves; // サーフ
+      color = Colors.teal.shade700;
+    } else if (k == 'kako') {
+      icon = Icons.water; // 河口
+      color = Colors.indigo.shade600;
+    } else if (k == 'iso') {
+      icon = Icons.terrain; // 磯
+      color = Colors.green.shade700;
+    }
+    if (isPending && icon != null) {
+      color = Colors.grey; // 申請中はグレー表示
+    }
+    if (icon != null) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Icon(icon, color: color, size: 18),
+      );
+    }
+    // kubun が不明な場合は都道府県名を表示
+    return Text(
+      prefName,
+      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
   Future<void> _load() async {
     final db = SioDatabase();
     final rows = await db.getAllTeibouWithPrefecture();
@@ -766,7 +837,14 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       }
     }
     final kubun = (row['kubun'] ?? '').toString();
-    final isPort = kubun == '1' || kubun == '2' || kubun == '3' || kubun == '4' || kubun == '特3';
+    final kubunLabel = _kubunLabel(kubun);
+    final k = kubun.trim();
+    final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
+    final int? flag = row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? '');
+    final bool isPending = flag == -1;
+    if (isPending) {
+      title = '$title (申請中)';
+    }
     final lat = _toDouble(row['latitude']);
     final lng = _toDouble(row['longitude']);
     final hasPosition = lat != null && lng != null && (lat != 0.0 || lng != 0.0);
@@ -1030,20 +1108,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             children: [
             SizedBox(
               width: 80,
-              child: isPort
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Icon(
-                        Icons.anchor,
-                        color: Colors.blue.shade600,
-                        size: 18,
-                      ),
-                    )
-                  : Text(
-                      prefName,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              child: _buildKubunIconOrPref(k, prefName, isPending: isPending),
             ),
               const SizedBox(width: 8),
             Expanded(
@@ -1077,14 +1142,29 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             ),
               const SizedBox(width: 8),
               if (!hasPosition && !isNearbyTab)
-                Text(
-                  '位置なし',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
+                      Text(
+                        kubunLabel,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                      ),
+                    Text(
+                      '位置なし',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
                 ),
               if (isNearbyTab)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
+                      Text(
+                        kubunLabel,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                      ),
                     if (hasPosition)
                       Text(
                         '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
@@ -1105,6 +1185,11 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
+                      Text(
+                        kubunLabel,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                      ),
                     Text(
                       '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade700),

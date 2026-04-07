@@ -434,6 +434,16 @@ extension _MosaicBuilders on _FishingResultGridState {
       }
     }
     final bottomLabel = it.nickName ?? '';
+    final bool canShowSpotName = (ambiguous_plevel == 0) || _isAdmin;
+    final String? spotName = (it.spotId != null) ? _spotNameById[it.spotId] : null;
+    final String combinedTopLabel = () {
+      String s = '';
+      if (topLabel.isNotEmpty) s = topLabel;
+      if (canShowSpotName && spotName != null && spotName.isNotEmpty) {
+        s = s.isEmpty ? spotName! : '$s $spotName';
+      }
+      return s;
+    }();
     return Positioned(
       left: left,
       top: top,
@@ -441,7 +451,7 @@ extension _MosaicBuilders on _FishingResultGridState {
       height: h,
       child: InkWell(
         onTap: () async {
-          if (!ambiguous_point && it.spotId != null) {
+          if (ambiguous_plevel == 0 && it.spotId != null) {
             // 釣り場が曖昧でない場合、該当スポットを選択して釣場詳細へ
             final ok = await Common.instance.selectTeibouById(it.spotId!);
             if (ok) {
@@ -505,30 +515,24 @@ extension _MosaicBuilders on _FishingResultGridState {
             fit: StackFit.expand,
             children: [
               url != null ? Image.network(url, fit: BoxFit.cover) : const ColoredBox(color: Colors.black12),
-              // 上部ラベル行（左: 都道府県、右: 管理者のみ釣り場名）
-              if (topLabel.isNotEmpty || (_isAdmin && it.spotId != null && _spotNameById[it.spotId] != null))
+              // 上部ラベル行（都道府県 + 釣り場名を半角スペース区切りで1つのラベルに）
+              if (combinedTopLabel.isNotEmpty)
                 Positioned(
                   top: 4,
                   left: 4,
                   right: 4,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [
-                      if (topLabel.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-                          child: Text(topLabel, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      if (_isAdmin && it.spotId != null && _spotNameById[it.spotId] != null) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
-                          child: Text(_spotNameById[it.spotId]!, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
-                    ],
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
+                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                      child: Text(
+                        combinedTopLabel,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ),
                 ),
               if (bottomLabel.isNotEmpty)

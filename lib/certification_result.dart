@@ -65,7 +65,7 @@ class CertificationResult extends StatelessWidget {
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const MainPage(title: '海釣りJAPAN', initialIndex: 3)),
+                        builder: (_) => const MainPage(title: '海釣りMAP+', initialIndex: 3)),
                     (Route<dynamic> route) => false,
                   );
                 },

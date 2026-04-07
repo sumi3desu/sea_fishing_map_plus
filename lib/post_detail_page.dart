@@ -16,6 +16,7 @@ import 'html_view_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io' show Platform;
 import 'main.dart';
+import 'constants.dart';
 
 class PostDetailPage extends StatefulWidget {
   const PostDetailPage({super.key, required this.item});
@@ -589,13 +590,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
                   const SizedBox(width: 4),
                   const Text('投稿詳細', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
                   const Spacer(),
-                  if (widget.item.showNearbyButton && (widget.item.spotId ?? 0) > 0)
+                  if (widget.item.showNearbyButton && (widget.item.spotId ?? 0) > 0 && ambiguous_plevel != 0)
                     Padding(
                       padding: const EdgeInsets.only(right: 4),
                       child: TextButton.icon(
                         onPressed: _openNearbyMap,
                         icon: const Icon(Icons.map),
-                        label: const Text('近辺表示'),
+                        label: const Text('釣れた周辺の釣り場を見る'),
                         style: TextButton.styleFrom(
                           foregroundColor: AppConfig.instance.appBarForegroundColor,
                         ),
