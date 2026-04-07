@@ -28,7 +28,7 @@ class SpotApplyFormPage extends StatefulWidget {
 
 class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   final _formKey = GlobalKey<FormState>();
-  String _kind = 'gyoko';
+  String _kind = '';
   final TextEditingController _nameCtl = TextEditingController();
   final TextEditingController _yomiCtl = TextEditingController();
   String? _address;
@@ -39,6 +39,19 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   String? _resultMessage; // 未使用（確認画面で表示）
   bool? _resultOk;        // 未使用（確認画面で表示）
   bool _isAdmin = false;
+
+  DropdownMenuItem<String> _kindMenuItem(String value, IconData icon, String label) {
+    return DropdownMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -147,15 +160,21 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                 const Text('釣場種別', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _kind,
-                  items: const [
-                    DropdownMenuItem(value: 'gyoko', child: Text('漁港')),
-                    DropdownMenuItem(value: 'teibou', child: Text('堤防')),
-                    DropdownMenuItem(value: 'surf', child: Text('サーフ')),
-                    DropdownMenuItem(value: 'kako', child: Text('河口')),
-                    DropdownMenuItem(value: 'iso', child: Text('磯')),
+                  value: _kind.isEmpty ? null : _kind,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  hint: const Text('選択してください'),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return '釣場種別を選択してください';
+                    return null;
+                  },
+                  items: [
+                    _kindMenuItem('gyoko', Icons.anchor, '漁港'),
+                    _kindMenuItem('teibou', Icons.fence, '堤防'),
+                    _kindMenuItem('surf', Icons.waves, 'サーフ'),
+                    _kindMenuItem('kako', Icons.water, '河口'),
+                    _kindMenuItem('iso', Icons.terrain, '磯'),
                   ],
-                  onChanged: (v) => setState(() => _kind = v ?? 'gyoko'),
+                  onChanged: (v) => setState(() => _kind = v ?? ''),
                 ),
                 const SizedBox(height: 16),
                 const Text('釣場名（32文字以内）', style: TextStyle(fontWeight: FontWeight.w600)),

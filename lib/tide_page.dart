@@ -1342,6 +1342,38 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         break;
       }
     }
+    // フォールバック: 厳密一致で見つからなかった場合、選択IDや名前から再判定
+    if (!centerPending && !centerRejected) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final sid = prefs.getInt('selected_teibou_id');
+        Map<String, dynamic>? rr;
+        if (sid != null && sid > 0) {
+          for (final r in rows) {
+            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) { rr = r; break; }
+          }
+        }
+        rr ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+          (r) => (r?['port_name'] ?? '').toString() == centerName,
+          orElse: () => null,
+        );
+        if (rr != null) {
+          final int? f = rr['flag'] is int ? rr['flag'] as int : int.tryParse(rr['flag']?.toString() ?? '');
+          centerPending = (f == -1);
+          centerRejected = (f == -2);
+          centerPortId ??= rr['port_id'] is int ? rr['port_id'] as int : int.tryParse(rr['port_id']?.toString() ?? '');
+          if (!centerRejected) {
+            final dlat1 = _toDouble(rr['latitude']);
+            final dlng1 = _toDouble(rr['longitude']);
+            if (dlat1 != null && dlng1 != null) {
+              center = LatLng(dlat1, dlng1);
+            }
+            cn = (rr['port_name'] ?? cn).toString();
+          }
+        }
+      } catch (_) {}
+    }
     // 非承認が現在選択中なら、最寄りの別スポットへフォールバック
     if (centerRejected) {
       double best = double.infinity;
@@ -1522,12 +1554,42 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             position: am.LatLng(dlat, dlng),
           ),
         );
-        // GoogleMap 近隣マーカー（距離のスニペットは非表示）
+        // GoogleMap 近隣マーカー（住所/状態をスニペット表示）
         _gmMarkers.add(
           gm.Marker(
             markerId: gm.MarkerId('n${portId ?? name}'),
             position: gm.LatLng(dlat, dlng),
-            infoWindow: gm.InfoWindow(title: displayName),
+            infoWindow: gm.InfoWindow(
+              title: displayName,
+              snippet: () {
+                String _flagText(int? f) {
+                  switch (f) {
+                    case 0:
+                      return '運営登録済み';
+                    case -1:
+                      return 'ユーザ申請中';
+                    case -2:
+                      return 'ユーザ申請非承認';
+                    case 1:
+                      return 'ユーザ登録承認ずみ';
+                    default:
+                      return '';
+                  }
+                }
+                String _shortAddress(String s) {
+                  final t = s.trim();
+                  if (t.isEmpty) return t;
+                  final parts = t.split(RegExp(r'\s+'));
+                  return parts.length >= 2 ? '${parts[0]} ${parts[1]}' : parts[0];
+                }
+                final addr = _shortAddress((r['address'] ?? '').toString());
+                final st = _flagText(flag);
+                final latlng = '緯度: ${dlat.toStringAsFixed(5)}, 経度: ${dlng.toStringAsFixed(5)}';
+                final addrLine = '住所: ' + (addr.isNotEmpty ? addr : '不明');
+                final stLine = '状態: ' + (st.isNotEmpty ? st : '不明');
+                return '$latlng\n$addrLine\n$stLine';
+              }(),
+            ),
             icon: (flag != null && flag != 0)
                 ? gm.BitmapDescriptor.defaultMarkerWithHue(gm.BitmapDescriptor.hueGreen)
                 : gm.BitmapDescriptor.defaultMarker,
@@ -1963,35 +2025,34 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         ),
                         child: FutureBuilder<String>(
                           future: () async {
-                          final spotName = Common.instance.selectedTeibouName.isNotEmpty ? Common.instance.selectedTeibouName : Common.instance.tidePoint;
-                          String prefName = '';
-                          try {
-                            int pid = Common.instance.selectedTeibouPrefId;
-                            if (pid == 0) {
+                            final spotName = Common.instance.selectedTeibouName.isNotEmpty
+                                ? Common.instance.selectedTeibouName
+                                : Common.instance.tidePoint;
+                            String display = spotName;
+                            try {
                               final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                              for (final r in rows) {
-                                final n = (r['port_name'] ?? '').toString();
-                                if (n == Common.instance.selectedTeibouName && n.isNotEmpty) {
-                                  pid = r['todoufuken_id'] is int
-                                      ? r['todoufuken_id'] as int
-                                      : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-                                  break;
+                              Map<String, dynamic>? row;
+                              try {
+                                final prefs = await SharedPreferences.getInstance();
+                                final sid = prefs.getInt('selected_teibou_id');
+                                if (sid != null && sid > 0) {
+                                  for (final r in rows) {
+                                    final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+                                    if (rid == sid) { row = r; break; }
+                                  }
                                 }
-                              }
-                            }
-                            if (pid != 0) {
-                              final prefs = await SioDatabase().getTodoufukenAll();
-                              for (final r in prefs) {
-                                final id = r['todoufuken_id'] is int ? r['todoufuken_id'] as int : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-                                if (id == pid) {
-                                  prefName = (r['todoufuken_name'] ?? '').toString();
-                                  break;
-                                }
-                              }
-                            }
-                          } catch (_) {}
-                          return spotName;
-                        }(),
+                              } catch (_) {}
+                              row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+                                (r) => ((r?['port_name'] ?? '').toString() == spotName),
+                                orElse: () => null,
+                              );
+                              final int? flag = row == null
+                                  ? null
+                                  : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+                              if (flag == -1) display = '$spotName (申請中)';
+                            } catch (_) {}
+                            return display;
+                          }(),
                         builder: (context, snap) {
                           final txt = snap.data ?? '';
                           return Text(
@@ -2711,6 +2772,32 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final kubun = (((row != null) ? row['kubun'] : '') ?? '').toString();
       final kubunLabel = _kubunLabelLocal(kubun) ?? '';
       final yomi = (((row != null) ? (row['j_yomi'] ?? row['furigana']) : '') ?? '').toString();
+      final address = (((row != null) ? row['address'] : '') ?? '').toString();
+      String _shortAddress(String s) {
+        final t = s.trim();
+        if (t.isEmpty) return t;
+        final parts = t.split(RegExp(r'\s+'));
+        return parts.length >= 2 ? '${parts[0]} ${parts[1]}' : parts[0];
+      }
+      final addressShort = _shortAddress(address);
+      final int? flag = (row != null)
+          ? (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''))
+          : null;
+      String _flagText(int? f) {
+        switch (f) {
+          case 0:
+            return '運営登録済み';
+          case -1:
+            return 'ユーザ申請中';
+          case -2:
+            return 'ユーザ申請非承認';
+          case 1:
+            return 'ユーザ登録承認ずみ';
+          default:
+            return '';
+        }
+      }
+      final statusText = _flagText(flag);
       final dynamic _uidRaw = (row != null) ? row['user_id'] : null;
       final int? ownerId = (_uidRaw is int) ? _uidRaw : int.tryParse((_uidRaw?.toString() ?? ''));
       String? nick;
@@ -2739,11 +2826,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             children: [
               _infoRow('都道府県', prefName),
               const SizedBox(height: 6),
-              _infoRow('釣場名', yomi.isNotEmpty ? '$spotName（$yomi）' : spotName),
+              _infoRow(
+                '釣場名',
+                (() {
+                  final base = yomi.isNotEmpty ? '$spotName（$yomi）' : spotName;
+                  return (flag == -1) ? '$base (申請中)' : base;
+                })(),
+              ),
               const SizedBox(height: 6),
               _infoRow('種別', kubunLabel),
               const SizedBox(height: 6),
               _infoRow('緯度経度', '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}'),
+              const SizedBox(height: 6),
+              _infoRow('住所', addressShort),
+              const SizedBox(height: 6),
+              _infoRow('状態', statusText),
               const SizedBox(height: 6),
               _infoRow('登録者', (ownerId != null) ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)' : '−'),
             ],
