@@ -12,6 +12,9 @@ import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'appconfig.dart';
 import 'dart:convert';
+import 'sio_database.dart';
+import 'common.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
 
 class InputPost extends StatefulWidget {
   const InputPost({
@@ -113,6 +116,77 @@ class _InputPostState extends State<InputPost> {
     _envSummaryController.dispose();
     _envDetailController.dispose();
     super.dispose();
+  }
+
+  Future<String> _spotDisplayText() async {
+    try {
+      final common = Common.instance;
+      final baseName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
+      String display = baseName;
+      try {
+        final rows = await SioDatabase().getAllTeibouWithPrefecture();
+        Map<String, dynamic>? row;
+        // ID優先（selected_teibou_id）
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final sid = prefs.getInt('selected_teibou_id');
+          if (sid != null && sid > 0) {
+            for (final r in rows) {
+              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) { row = r; break; }
+            }
+          }
+        } catch (_) {}
+        // 名前一致フォールバック
+        row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+          (r) => ((r?['port_name'] ?? '').toString() == baseName),
+          orElse: () => null,
+        );
+        final int? flag = row == null ? null : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+        if (flag == -1) display = '$baseName (申請中)';
+      } catch (_) {}
+      return display;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // 画面見出し用の整形済みテキスト
+  Future<String> _spotTitleText() async {
+    try {
+      final common = Common.instance;
+      final baseName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
+      String name = baseName;
+      String yomi = '';
+      try {
+        final rows = await SioDatabase().getAllTeibouWithPrefecture();
+        Map<String, dynamic>? row;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final sid = prefs.getInt('selected_teibou_id');
+          if (sid != null && sid > 0) {
+            for (final r in rows) {
+              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) { row = r; break; }
+            }
+          }
+        } catch (_) {}
+        row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+          (r) => ((r?['port_name'] ?? '').toString() == baseName),
+          orElse: () => null,
+        );
+        if (row != null) {
+          final int? flag = (row['flag'] is int) ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? '');
+          if (flag == -1) name = '$baseName (申請中)';
+          yomi = ((row['j_yomi'] ?? row['furigana']) ?? '').toString();
+        }
+      } catch (_) {}
+      // タイトル形式: 釣り場名 : 名称 (ふりがな)
+      final suffix = yomi.trim().isNotEmpty ? ' ($yomi)' : '';
+      return '釣り場名 : $name$suffix';
+    } catch (_) {
+      return '釣り場名 : ';
+    }
   }
 
   Future<void> _pickFromGallery() async {
@@ -418,7 +492,7 @@ class _InputPostState extends State<InputPost> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_postType == 'catch' ? '釣果投稿入力' : '環境投稿入力'),
+        title: const Text('投稿入力'),
         backgroundColor: AppConfig.instance.appBarBackgroundColor,
         foregroundColor: AppConfig.instance.appBarForegroundColor,
         toolbarHeight: 0, // タイトルは本文側に表示（バナーの下）
@@ -446,7 +520,7 @@ class _InputPostState extends State<InputPost> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _postType == 'catch' ? '釣果投稿入力' : '環境投稿入力',
+                  '投稿入力',
                   style: TextStyle(
                     color: AppConfig.instance.appBarForegroundColor,
                     fontSize: 20,
@@ -490,6 +564,50 @@ class _InputPostState extends State<InputPost> {
                             )),
                 ),
               ],
+            ),
+          ),
+          // 釣り場名表示（白背景のエリア）
+          Container(
+            height: kToolbarHeight,
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            alignment: Alignment.centerLeft,
+            child: FutureBuilder<String>(
+              future: _spotTitleText(),
+              builder: (context, snap) {
+                final txt = (snap.data ?? '').trim();
+                return Text(
+                  txt.isNotEmpty ? txt : '（釣り場未選択）',
+                  style: const TextStyle(fontSize: 18, color: Colors.black87, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
+              },
+            ),
+          ),
+          // 種別切替（釣果/環境）
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Colors.white,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: CupertinoSegmentedControl<String>(
+                groupValue: _postType,
+                padding: const EdgeInsets.all(0),
+                children: const {
+                  'catch': Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Text('釣果')),
+                  'env': Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Text('環境')),
+                },
+                onValueChanged: (val) {
+                  setState(() {
+                    _postType = (val == 'env') ? 'env' : 'catch';
+                    // 入力可否などを即時再評価
+                    _onChangedAny('');
+                  });
+                  // 投稿一覧の選択状態としても反映（起動中は維持）
+                  try { Common.instance.setPostListMode(_postType); } catch (_) {}
+                },
+              ),
             ),
           ),
           const Divider(height: 1),

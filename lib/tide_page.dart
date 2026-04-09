@@ -44,6 +44,7 @@ class TidePageState extends State<TidePage> {
   static const int initialPage = 1000;
   int _catchRefreshTick = 0;
   int _envRefreshTick = 0;
+  final GlobalKey<_FishingInfoPaneState> _fishingPaneKey = GlobalKey<_FishingInfoPaneState>();
 
   //static bool cacheMoon = false;
 
@@ -123,6 +124,11 @@ class TidePageState extends State<TidePage> {
     setState(() { _catchRefreshTick++; });
   }
 
+  // 外部から投稿一覧シート全体の再読み込みを要求
+  void forceReloadPostList() {
+    try { _fishingPaneKey.currentState?.reloadPostList(); } catch (_) {}
+  }
+
   @override
   void dispose() {
     _timer.cancel();
@@ -169,7 +175,7 @@ class TidePageState extends State<TidePage> {
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
                       // 地図（全面表示）
-                      _FishingInfoPane(height: contentHeight),
+                      _FishingInfoPane(key: _fishingPaneKey, height: contentHeight),
                       // 潮汐（スワイプ可能）
                       _TideTab(height: contentHeight),
                     ],
@@ -1149,7 +1155,7 @@ class _EnvTabbedList extends StatelessWidget {
 }
 
 class _FishingInfoPane extends StatefulWidget {
-  const _FishingInfoPane({required this.height});
+  const _FishingInfoPane({Key? key, required this.height}) : super(key: key);
   final double height;
 
   @override
@@ -1181,7 +1187,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   late DraggableScrollableController _sheetController;
   final GlobalKey _sheetActuatorKey = GlobalKey();
   int _sheetEpoch = 0; // シート完全再生成用
-  double _lastSheetSize = 0.15; // 直近のシートサイズ（可視時）
+  double _lastSheetSize = 0.25; // 直近のシートサイズ（可視時）
   int _sheetReloadTick = 0; // 投稿一覧シートの再構築用トリガ
   Set<int> _favoriteIds = <int>{};
   // 潮汐オーバーレイ表示とスワイプ用
@@ -1191,11 +1197,53 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   final GlobalKey<NavigatorState> _tideNavKey = GlobalKey<NavigatorState>();
   late final _TideNavObserver _tideNavObserver;
   gm.GoogleMapController? _gmController;
-  // 長押しによる「釣り場情報入力」用ポイント
+  // 長押しによる「釣り場登録」用ポイント
   LatLng? _applyPoint;           // FlutterMap 用
   gm.LatLng? _gmApplyPoint;      // GoogleMap 用
   bool _applyMode = false;       // 「釣り場申請」ボタン押下後の指定モード
   bool _isSatellite = false; // Google Maps 用 衛星表示トグル
+
+  void reloadPostList() {
+    if (mounted) setState(() { _sheetReloadTick++; });
+  }
+
+  Future<void> _onViewLongPress(double llat, double llng) async {
+    try {
+      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      double best = double.infinity;
+      Map<String, dynamic>? bestRow;
+      const double d2r = 3.141592653589793 / 180.0;
+      final rlat = llat * d2r;
+      for (final r in rows) {
+        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+        if (flag == -2) continue; // 非承認は除外
+        final dlat = _toDouble(r['latitude']);
+        final dlng = _toDouble(r['longitude']);
+        if (dlat == null || dlng == null) continue;
+        final d = _haversine(llat, llng, dlat, dlng, cosLat: rlat);
+        if (d < best) { best = d; bestRow = r; }
+      }
+      if (bestRow == null) return;
+      final nlat = _toDouble(bestRow['latitude']) ?? llat;
+      final nlng = _toDouble(bestRow['longitude']) ?? llng;
+      final name = (bestRow['port_name'] ?? '').toString();
+      // 選択保存（最寄り潮汐ポイントは既知の座標から算出）
+      String? np;
+      if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
+      final int? prefId = bestRow['todoufuken_id'] is int
+          ? bestRow['todoufuken_id'] as int
+          : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
+      final int? portId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
+      try {
+        await Common.instance.saveSelectedTeibou(name, np ?? (Common.instance.tidePoint), id: portId, lat: nlat, lng: nlng, prefId: prefId);
+        Common.instance.shouldJumpPage = true;
+        Common.instance.notify();
+      } catch (_) {}
+      // 中心を最寄り釣り場にセットし、半径30kmのピンを再構成
+      await _loadMarkers(centerName: name, lat: nlat, lng: nlng, radiusKm: 30.0);
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -1917,8 +1965,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     ),
                     mapType: _isSatellite ? gm.MapType.hybrid : gm.MapType.normal,
                     onMapCreated: (c) => _gmController = c,
-                    onLongPress: (pos) {
-                      if (!_applyMode) return; // 申請モードでないときは無視
+                    onLongPress: (pos) async {
+                      if (!_applyMode) {
+                        // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
+                        await _onViewLongPress(pos.latitude, pos.longitude);
+                        return;
+                      }
                       // 長押しで申請用ピンを設置
                       setState(() {
                         _gmApplyPoint = pos;
@@ -1929,7 +1981,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                             markerId: const gm.MarkerId('apply'),
                             position: pos,
                             infoWindow: gm.InfoWindow(
-                              title: '釣り場情報入力',
+                              title: '釣り場登録',
                               onTap: () {
                                 _openApplyForm(pos.latitude, pos.longitude);
                               },
@@ -1988,8 +2040,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       // 半径30km相当より1段ズームイン（約2倍拡大）
                       initialZoom: _zoomForRadius(30.0) + 1.0,
                       interactionOptions: const fm.InteractionOptions(flags: fm.InteractiveFlag.all),
-                      onLongPress: (tapPosition, latlng) {
-                        if (!_applyMode) return; // 申請モードでないときは無視
+                      onLongPress: (tapPosition, latlng) async {
+                        if (!_applyMode) {
+                          // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
+                          await _onViewLongPress(latlng.latitude, latlng.longitude);
+                          return;
+                        }
                         // 長押しで申請用ピンを設置
                         setState(() {
                           _applyPoint = latlng;
@@ -2176,13 +2232,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Widget _buildDraggableBottomSheet() {
     return DraggableScrollableSheet(
       controller: _sheetController,
-      initialChildSize: 0.15, // 初期は少しだけ見せる（広めに）
+      initialChildSize: 0.25, // 初期は少しだけ見せる（広めに）
       minChildSize: 0.0,      // 非表示まで下げられる
       maxChildSize: 0.92,     // 上部に余白を残す
       snap: true,
       snapAnimationDuration: const Duration(milliseconds: 200),
       // 下方向(0.0)へのスナップは使わず、上方向の段階にだけスナップ
-      snapSizes: const [0.15, 0.5, 0.9],
+      snapSizes: const [0.25, 0.5, 0.9],
       builder: (context, controller) {
         // シートサイズの変化を監視して記録
         try {
@@ -2207,7 +2263,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final current = _sheetController.size;
       if (!ifHiddenOnly || current <= 0.01) {
         _sheetController.animateTo(
-          0.15,
+          0.25,
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOut,
         );
@@ -3077,10 +3133,15 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   bool _hasMore = true;
   int _page = 1;
   String _mode = 'catch'; // 'catch' or 'env'
+  String _lastCommonMode = 'catch';
 
   @override
   void initState() {
     super.initState();
+    // 直前の選択状態を復元（起動中のみ保持）
+    try { _mode = Common.instance.postListMode; } catch (_) {}
+    _lastCommonMode = _mode;
+    try { Common.instance.addListener(_onCommonModeChanged); } catch (_) {}
     _loadFirst();
     widget.extController.addListener(_onScroll);
   }
@@ -3088,7 +3149,25 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   @override
   void dispose() {
     widget.extController.removeListener(_onScroll);
+    try { Common.instance.removeListener(_onCommonModeChanged); } catch (_) {}
     super.dispose();
+  }
+
+  void _onCommonModeChanged() {
+    final cm = Common.instance.postListMode;
+    if (cm != _lastCommonMode) {
+      _lastCommonMode = cm;
+      if (mounted && _mode != cm) {
+        setState(() {
+          _mode = cm;
+          _items.clear();
+          _page = 1;
+          _hasMore = true;
+          _loading = false;
+        });
+        _loadFirst();
+      }
+    }
   }
 
   void _onScroll() {
@@ -3250,6 +3329,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                           onValueChanged: (val) {
                             setState(() {
                               _mode = val;
+                              // 現在の選択をアプリ起動中は維持
+                              try { Common.instance.setPostListMode(val); } catch (_) {}
                               // モード切替時は一覧をリセットして再取得
                               _items.clear();
                               _page = 1;

@@ -87,14 +87,19 @@ class _NewAccountPageState extends State<NewAccountPage> {
 
       // サーバーの戻り値は環境により表記ゆれの可能性があるため網羅的に判定
       final result = (responseData['result'] ?? '').toString().toLowerCase();
+      final reasonText = (responseData['reason'] ?? '').toString();
+      // 既登録（機種変想定）や仮登録、未登録のいずれでも確認コード送信を許可
       final proceedValues = {
-        'unregisted', // 既存コード想定
-        'unregist',   // 表記ゆれ
+        'unregisted',   // 既存コード想定
+        'unregist',     // 表記ゆれ
         'unregistered', // 英語正書法
-        'temporary',  // 仮登録は確認コード入力へ誘導
+        'temporary',    // 仮登録は確認コード入力へ誘導
+        'registed',     // 既登録（機種変想定）でも確認コード送付して本人確認
+        'registered',   // 英語表記ゆれ
       };
+      final shouldProceed = proceedValues.contains(result) || reasonText.contains('機種変');
 
-      if (proceedValues.contains(result)) {
+      if (shouldProceed) {
         // 既存ユーザ・仮登録の場合はサーバから正規のUUIDを取得して保存（再インストール対策）
         if (result == 'registed' || result == 'registered' || result == 'temporary') {
           try {

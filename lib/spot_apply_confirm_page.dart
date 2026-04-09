@@ -180,7 +180,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _row('タイトル', '釣り場情報入力'),
+          _row('タイトル', '釣り場登録'),
           const SizedBox(height: 8),
           _row('釣り場種別', _kindLabel(widget.kind)),
           const SizedBox(height: 8),

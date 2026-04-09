@@ -31,6 +31,7 @@ import 'html_view_page.dart';
 import 'sql_db.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'db_rebuild_screen.dart';
+import 'input_post_page.dart';
 
 /// 初回データのダウンロードをユーザーに確認してから実行する共通関数
 Future<void> confirmAndDownloadInitialData({
@@ -502,6 +503,7 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  static const double _postFabDiameter = 61.0;
   BannerAd? _bannerAd;
   // 規約・プライバシーポリシー同意ダイアログ制御
   bool _consentDialogShown = false;
@@ -520,14 +522,21 @@ class _MainPageState extends State<MainPage> {
   int _lastNavigateToTideTick = 0;
 
   void _onItemTapped(int index) {
+    // 中央の「投稿」アイテムは FAB と同じ動作に割り当てる
+    if (index == 2) {
+      _onPressCreatePost();
+      return;
+    }
+    // 下部ナビのインデックスをページインデックスに変換
+    final int pageIndex = index > 2 ? index - 1 : index;
     setState(() {
-      _selectedIndex = index;
+      _selectedIndex = pageIndex;
     });
     // 釣り場詳細(TidePage) が選択された場合だけ TidePage の refreshTide() を呼び出す
-    if (index == 2) {
+    if (pageIndex == 2) {
       tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
       // 釣り場一覧タブが選択されたときにDB更新を通知して再読込を促す
-    } else if (index == 1) {
+    } else if (pageIndex == 1) {
       try { SioDatabase().notifyListeners(); } catch (_) {}
       try { Common.instance.requestListCentering(); } catch (_) {}
     }
@@ -885,6 +894,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     final common = fp.Provider.of<Common>(context);
     /// メインコンテンツは各タブごとに作成（IndexedStack により各状態が保持される）
     final List<Widget> pages = [
@@ -894,28 +904,35 @@ class _MainPageState extends State<MainPage> {
       SettingPage(),
     ];
     return Scaffold(
+      extendBody: true,
       // AppBar は使用しないのでコメントアウトまたは削除します
       // appBar: AppBar(
       //   title: Text(widget.title),
       //   backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       // ),
-      body: SafeArea(
-        // SafeArea でラップすることで、システムUI（ステータスバー、ノッチなど）に重ならないレイアウトに
-        child: Column(
-          children: [
-            if (_bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
-            // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
-            if (_selectedIndex == 2)
-              SizedBox(
-                height: kToolbarHeight,
-                width: double.infinity,
-                child: FutureBuilder<String>(
+      body: Stack(
+        children: [
+          // 本文は SafeArea (bottom: false) で保護し、ナビの分だけ下に余白を確保
+          SafeArea(
+            top: true,
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight),
+              child: Column(
+                children: [
+                  if (_bannerAd != null)
+                    Container(
+                      alignment: Alignment.center,
+                      width: _bannerAd!.size.width.toDouble(),
+                      height: _bannerAd!.size.height.toDouble(),
+                      child: AdWidget(ad: _bannerAd!),
+                    ),
+                // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
+                if (_selectedIndex == 2)
+                  SizedBox(
+                    height: kToolbarHeight,
+                    width: double.infinity,
+                    child: FutureBuilder<String>(
                   future: () async {
                     final spotName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
                     String prefName = '';
@@ -991,25 +1008,95 @@ class _MainPageState extends State<MainPage> {
                   },
                 ),
               ),
-            // 釣り場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
-            Expanded(
-              child: IndexedStack(index: _selectedIndex, children: pages),
+                // 釣り場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
+                Expanded(
+                  child: IndexedStack(index: _selectedIndex, children: pages),
+                ),
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        items: <BottomNavigationBarItem>[
-          const BottomNavigationBarItem(icon: Text('🐟', style: TextStyle(fontSize: 20)), label: '釣果'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣り場一覧'),
-      BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣り場詳細'),
-      BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
-      ],
+          ),
+          // ボトムナビゲーション（オーバーレイ）
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              bottom: false,
+              child: BottomNavigationBar(
+                type: BottomNavigationBarType.fixed,
+                elevation: 0,
+                currentIndex: _navIndexFromPageIndex(_selectedIndex),
+                onTap: _onItemTapped,
+                items: <BottomNavigationBarItem>[
+                  const BottomNavigationBarItem(icon: Text('🐟', style: TextStyle(fontSize: 20)), label: '釣果'),
+                  const BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣り場一覧'),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.add_circle, color: Colors.transparent),
+                    label: '',
+                  ),
+                  const BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣り場詳細'),
+                  const BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
+                ],
+              ),
+            ),
+          ),
+          // 中央の＋ボタン（オーバーレイ固定・ナビの手前）
+            Positioned(
+              left: 0,
+              right: 0,
+            // 現在の位置から約5px下げる（= 半重なりをわずかに深く）
+            bottom: (kBottomNavigationBarHeight - (_postFabDiameter / 2)) + 30,
+            child: Center(child: _buildPostFab(context)),
+          ),
+        ],
       ),
     );
+  }
+
+  int _navIndexFromPageIndex(int pageIndex) {
+    if (pageIndex <= 1) return pageIndex; // 0:釣果, 1:一覧
+    if (pageIndex == 2) return 3;         // 釣り場詳細はナビの3番目
+    return 4;                              // 設定はナビの4番目
+  }
+
+  Widget _buildPostFab(BuildContext context) {
+    return RawMaterialButton(
+      onPressed: _onPressCreatePost,
+      elevation: 0,
+      highlightElevation: 0,
+      disabledElevation: 0,
+      constraints: const BoxConstraints.tightFor(width: _postFabDiameter, height: _postFabDiameter),
+      shape: const CircleBorder(),
+      fillColor: const Color(0xFF1E90FF),
+      child: const Icon(Icons.add, color: Colors.white, size: 26),
+    );
+  }
+
+  Future<void> _onPressCreatePost() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (!(info.canReport)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('現在は投稿できません')));
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    String initType = 'catch';
+    try {
+      final mode = Common.instance.postListMode;
+      initType = (mode == 'env') ? 'env' : 'catch';
+    } catch (_) {}
+    final res = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => InputPost(initialType: initType)),
+    );
+    if (res == true) {
+      // 投稿成功時、TidePage の投稿一覧を再読込
+      try { tidePageKey.currentState?.forceReloadPostList(); } catch (_) {}
+    }
   }
 }
 

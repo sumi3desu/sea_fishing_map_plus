@@ -532,6 +532,17 @@ class Common extends ChangeNotifier {
   int navigateToTideTick = 0;
   SioInfo oneDaySioInfoAlt = SioInfo();
 
+  // 投稿一覧の表示モード（'catch' or 'env'）。アプリ起動中のみ保持。
+  String postListMode = 'catch';
+
+  void setPostListMode(String mode) {
+    final m = (mode == 'env') ? 'env' : 'catch';
+    if (postListMode != m) {
+      postListMode = m;
+      notifyListeners();
+    }
+  }
+
   Future<void> saveSelectedTeibou(String name, String nearestPoint, {int? id, double? lat, double? lng, int? prefId}) async {
     selectedTeibouName = name;
     selectedTeibouNearestPoint = nearestPoint;

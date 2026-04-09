@@ -148,7 +148,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
           lng: widget.lng,
           address: addr,
           prefName: _prefName ?? '',
-          privateFlag: _private ? 1 : 0,
+          privateFlag: 0,
           portId: widget.initialPortId,
         ),
       ),
@@ -158,7 +158,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.editMode ? '釣り場申請編集' : '釣り場情報入力'), backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar: AppBar(title: Text(widget.editMode ? '釣り場申請編集' : '釣り場登録'), backgroundColor: Colors.black, foregroundColor: Colors.white),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -167,23 +167,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 公開/非公開 セグメント（投稿一覧の「釣果/環境」と同じUI）
-                const Text('公開/非公開選択', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: CupertinoSegmentedControl<String>(
-                    groupValue: _private ? 'private' : 'public',
-                    padding: const EdgeInsets.all(0),
-                    children: const {
-                      'public': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('公開')),
-                      'private': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('非公開')),
-                    },
-                    onValueChanged: (val) {
-                      setState(() { _private = (val == 'private'); });
-                    },
-                  ),
-                ),
+                // 公開/非公開選択は廃止（すべて公開として処理）
                 const SizedBox(height: 12),
                 const Text('釣り場種別', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
@@ -245,7 +229,14 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                         final base = (_address ?? '').trim();
                         if (base.isEmpty) return base;
                         if (base == '住所を取得できませんでした') return base;
-                        return pref.isNotEmpty ? '$pref $base' : base;
+                        String short2(String s) {
+                          final parts = s.split(RegExp(r'\s+')).where((e) => e.trim().isNotEmpty).toList();
+                          if (parts.isEmpty) return s;
+                          final take = parts.take(2).join(' ');
+                          return take;
+                        }
+                        final b2 = short2(base);
+                        return pref.isNotEmpty ? '$pref $b2' : b2;
                       })()),
                 const SizedBox(height: 12),
                 const Divider(),
