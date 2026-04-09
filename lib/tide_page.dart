@@ -1191,10 +1191,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   final GlobalKey<NavigatorState> _tideNavKey = GlobalKey<NavigatorState>();
   late final _TideNavObserver _tideNavObserver;
   gm.GoogleMapController? _gmController;
-  // 長押しによる「釣場新規申請」用ポイント
+  // 長押しによる「釣り場情報入力」用ポイント
   LatLng? _applyPoint;           // FlutterMap 用
   gm.LatLng? _gmApplyPoint;      // GoogleMap 用
-  bool _applyMode = false;       // 「釣場申請」ボタン押下後の指定モード
+  bool _applyMode = false;       // 「釣り場申請」ボタン押下後の指定モード
   bool _isSatellite = false; // Google Maps 用 衛星表示トグル
 
   @override
@@ -1329,18 +1329,54 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     bool centerPending = false;
     bool centerRejected = false;
     String cn = centerName;
-    for (final r in rows) {
-      final name = (r['port_name'] ?? '').toString();
-      final dlat0 = _toDouble(r['latitude']);
-      final dlng0 = _toDouble(r['longitude']);
-      if (dlat0 == null || dlng0 == null) continue;
-      if ((name == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) {
-        centerPortId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
-        centerPending = (flag == -1);
-        centerRejected = (flag == -2);
-        break;
+    Map<String, dynamic>? centerRow;
+    // 1) 選択済みID優先
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sid = prefs.getInt('selected_teibou_id');
+      if (sid != null && sid > 0) {
+        for (final r in rows) {
+          final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+          if (rid == sid) { centerRow = r; break; }
+        }
       }
+    } catch (_) {}
+    // 2) 座標一致（厳密 or 近傍）
+    if (centerRow == null) {
+      const eps = 1e-8;
+      for (final r in rows) {
+        final dlat0 = _toDouble(r['latitude']);
+        final dlng0 = _toDouble(r['longitude']);
+        if (dlat0 == null || dlng0 == null) continue;
+        if ((dlat0 - lat).abs() < eps && (dlng0 - lng).abs() < eps) { centerRow = r; break; }
+      }
+    }
+    // 3) 名前一致のうち、中心に最も近い行
+    if (centerRow == null) {
+      double best = double.infinity;
+      Map<String, dynamic>? bestRow;
+      for (final r in rows) {
+        final name = (r['port_name'] ?? '').toString();
+        if (name != centerName) continue;
+        final dlat0 = _toDouble(r['latitude']);
+        final dlng0 = _toDouble(r['longitude']);
+        if (dlat0 == null || dlng0 == null) continue;
+        final d = _distanceKm(lat, lng, dlat0, dlng0);
+        if (d < best) { best = d; bestRow = r; }
+      }
+      centerRow = bestRow;
+    }
+    if (centerRow != null) {
+      centerPortId = centerRow['port_id'] is int ? centerRow['port_id'] as int : int.tryParse(centerRow['port_id']?.toString() ?? '');
+      final int? flag = centerRow['flag'] is int ? centerRow['flag'] as int : int.tryParse(centerRow['flag']?.toString() ?? '');
+      centerPending = (flag == -1);
+      centerRejected = (flag == -2);
+      final dlat1 = _toDouble(centerRow['latitude']);
+      final dlng1 = _toDouble(centerRow['longitude']);
+      if (dlat1 != null && dlng1 != null) {
+        center = LatLng(dlat1, dlng1);
+      }
+      cn = (centerRow['port_name'] ?? cn).toString();
     }
     // フォールバック: 厳密一致で見つからなかった場合、選択IDや名前から再判定
     if (!centerPending && !centerRejected) {
@@ -1474,6 +1510,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                             initialPrefName: prefName,
                             initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
                             initialPortId: portId,
+                            canModerate: isAdmin,
                           ),
                         ),
                       );
@@ -1616,6 +1653,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           initialPrefName: prefName,
                           initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
                           initialPortId: portId,
+                          canModerate: isAdmin,
                         ),
                       ),
                     );
@@ -1680,14 +1718,22 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               try {
                 final info = await loadUserInfo() ?? await getOrInitUserInfo();
                 final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-                // 対応する行を検索
+                // 対応する行を検索（port_id 最優先）
                 Map<String, dynamic>? cr;
-                for (final r in rows) {
-                  final n = (r['port_name'] ?? '').toString();
-                  final dlat0 = _toDouble(r['latitude']);
-                  final dlng0 = _toDouble(r['longitude']);
-                  if (dlat0 == null || dlng0 == null) continue;
-                  if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+                if (centerPortId != null) {
+                  for (final r in rows) {
+                    final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+                    if (rid == centerPortId) { cr = r; break; }
+                  }
+                }
+                if (cr == null) {
+                  for (final r in rows) {
+                    final n = (r['port_name'] ?? '').toString();
+                    final dlat0 = _toDouble(r['latitude']);
+                    final dlng0 = _toDouble(r['longitude']);
+                    if (dlat0 == null || dlng0 == null) continue;
+                    if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+                  }
                 }
                 final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
                 if (isAdmin || (owner != null && owner == info.userId)) {
@@ -1707,6 +1753,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         initialPrefName: prefName,
                         initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
                         initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
+                        canModerate: isAdmin,
                       ),
                     ),
                   );
@@ -1760,13 +1807,22 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             try {
               final info = await loadUserInfo() ?? await getOrInitUserInfo();
               final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+              // port_id 最優先で検索
               Map<String, dynamic>? cr;
-              for (final r in rows) {
-                final n = (r['port_name'] ?? '').toString();
-                final dlat0 = _toDouble(r['latitude']);
-                final dlng0 = _toDouble(r['longitude']);
-                if (dlat0 == null || dlng0 == null) continue;
-                if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+              if (centerPortId != null) {
+                for (final r in rows) {
+                  final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+                  if (rid == centerPortId) { cr = r; break; }
+                }
+              }
+              if (cr == null) {
+                for (final r in rows) {
+                  final n = (r['port_name'] ?? '').toString();
+                  final dlat0 = _toDouble(r['latitude']);
+                  final dlng0 = _toDouble(r['longitude']);
+                  if (dlat0 == null || dlng0 == null) continue;
+                  if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+                }
               }
               final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
               if (isAdmin || (owner != null && owner == info.userId)) {
@@ -1786,6 +1842,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       initialPrefName: prefName,
                       initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
                       initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
+                      canModerate: isAdmin,
                     ),
                   ),
                 );
@@ -1872,7 +1929,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                             markerId: const gm.MarkerId('apply'),
                             position: pos,
                             infoWindow: gm.InfoWindow(
-                              title: '釣場新規申請',
+                              title: '釣り場情報入力',
                               onTap: () {
                                 _openApplyForm(pos.latitude, pos.longitude);
                               },
@@ -1890,7 +1947,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       final messenger = ScaffoldMessenger.maybeOf(context);
                       messenger?.showSnackBar(
                         const SnackBar(
-                          content: Text('そのポイントでよければ「釣場新規申請」をタップして情報入力お願いします'),
+                          content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
                           duration: Duration(seconds: 3),
                         ),
                       );
@@ -1940,7 +1997,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         final messenger = ScaffoldMessenger.maybeOf(context);
                         messenger?.showSnackBar(
                           const SnackBar(
-                            content: Text('そのポイントでよければ「釣場新規申請」をタップして情報入力お願いします'),
+                            content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
                             duration: Duration(seconds: 3),
                           ),
                         );
@@ -2010,62 +2067,94 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       ),
                     ),
                   ),
-                // 地図上（ボタン行の下）に [都道府県 釣り場名] をオーバーレイ表示
+                // 地図上（ボタン行の下）に [都道府県 釣り場名] または 登録案内 をオーバーレイ表示
                 Positioned(
                   top: 70, left: 0, right: 0,
                   child: Center(
-                    child: GestureDetector(
-                      onTap: _showCurrentSpotInfoDialog,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(6),
-                          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
-                        ),
-                        child: FutureBuilder<String>(
-                          future: () async {
-                            final spotName = Common.instance.selectedTeibouName.isNotEmpty
-                                ? Common.instance.selectedTeibouName
-                                : Common.instance.tidePoint;
-                            String display = spotName;
-                            try {
-                              final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                              Map<String, dynamic>? row;
-                              try {
-                                final prefs = await SharedPreferences.getInstance();
-                                final sid = prefs.getInt('selected_teibou_id');
-                                if (sid != null && sid > 0) {
-                                  for (final r in rows) {
-                                    final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                                    if (rid == sid) { row = r; break; }
-                                  }
-                                }
-                              } catch (_) {}
-                              row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-                                (r) => ((r?['port_name'] ?? '').toString() == spotName),
-                                orElse: () => null,
-                              );
-                              final int? flag = row == null
-                                  ? null
-                                  : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
-                              if (flag == -1) display = '$spotName (申請中)';
-                            } catch (_) {}
-                            return display;
-                          }(),
-                        builder: (context, snap) {
-                          final txt = snap.data ?? '';
-                          return Text(
-                            txt,
-                            style: const TextStyle(fontSize: 17, color: Colors.black87, fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          );
-                        },
-                      ),
-                      ),
-                    ),
+                    child: _applyMode
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                            ),
+                            child: const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '地図上で登録したい場所を長押ししてください。',
+                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
+                                  textAlign: TextAlign.start,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'ピンが表示されたら「釣り場登録」をタップしてください。',
+                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
+                                  textAlign: TextAlign.start,
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  '申請中のピンを申請者本人がタップすると入力項目の修正ができます。',
+                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
+                                  textAlign: TextAlign.start,
+                                ),
+                              ],
+                            ),
+                          )
+                        : GestureDetector(
+                            onTap: _showCurrentSpotInfoDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(6),
+                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                              ),
+                              child: FutureBuilder<String>(
+                                future: () async {
+                                  final spotName = Common.instance.selectedTeibouName.isNotEmpty
+                                      ? Common.instance.selectedTeibouName
+                                      : Common.instance.tidePoint;
+                                  String display = spotName;
+                                  try {
+                                    final rows = await SioDatabase().getAllTeibouWithPrefecture();
+                                    Map<String, dynamic>? row;
+                                    try {
+                                      final prefs = await SharedPreferences.getInstance();
+                                      final sid = prefs.getInt('selected_teibou_id');
+                                      if (sid != null && sid > 0) {
+                                        for (final r in rows) {
+                                          final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+                                          if (rid == sid) { row = r; break; }
+                                        }
+                                      }
+                                    } catch (_) {}
+                                    row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+                                      (r) => ((r?['port_name'] ?? '').toString() == spotName),
+                                      orElse: () => null,
+                                    );
+                                    final int? flag = row == null
+                                        ? null
+                                        : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+                                    if (flag == -1) display = '$spotName (申請中)';
+                                  } catch (_) {}
+                                  return display;
+                                }(),
+                                builder: (context, snap) {
+                                  final txt = snap.data ?? '';
+                                  return Text(
+                                    txt,
+                                    style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
                   ),
                 ),
                 // 下から引っ張り出すボトムシート（投稿一覧などを想定）
@@ -2373,10 +2462,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             label: 'お気に入り',
             onTap: () => _onToggleFavorite(context),
           ),
-          // 釣場申請：長押し案内
+          // 釣り場申請：長押し案内
           item(
             icon: Icon(Icons.add_location_alt, color: _applyMode ? Colors.deepPurple : Colors.black87),
-            label: _applyMode ? '釣場指定中' : '釣場追加申請',
+            label: _applyMode ? '釣り場登録中...' : '釣り場登録',
             onTap: () {
               // 先に新しいモードを決定してから setState に渡す
               final bool newMode = !_applyMode;
@@ -2389,15 +2478,18 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
                 }
               });
+/*
               if (newMode) {
                 final messenger = ScaffoldMessenger.maybeOf(context);
                 messenger?.showSnackBar(
                   const SnackBar(
-                    content: Text('新規釣場申請したいポイントを長押ししてください'),
+                    content: Text('新規釣り場申請したいポイントを長押ししてください'),
                     duration: Duration(seconds: 3),
                   ),
                 );
               }
+*/
+
             },
           ),
           // 経路表示：車
@@ -2610,7 +2702,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
                 ),
                 child: const Text(
-                  '釣場新規申請',
+                  '釣り場登録',
                   style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2827,7 +2919,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               _infoRow('都道府県', prefName),
               const SizedBox(height: 6),
               _infoRow(
-                '釣場名',
+                '釣り場名',
                 (() {
                   final base = yomi.isNotEmpty ? '$spotName（$yomi）' : spotName;
                   return (flag == -1) ? '$base (申請中)' : base;
@@ -3358,21 +3450,35 @@ class _SlidingContent extends StatelessWidget {
   Future<Map<String, dynamic>> _getSelectedTeibouMeta() async {
     try {
       final name = teibouName ?? '';
-      if (name.isEmpty) return {'yomi': '', 'isPort': false};
+      if (name.isEmpty) return {'yomi': '', 'isPort': false, 'flag': null};
       final rows = await SioDatabase().getAllTeibouWithPrefecture();
-      for (final r in rows) {
-        final n = (r['port_name'] ?? '').toString();
-        if (n == name) {
-          final kubun = (r['kubun'] ?? '').toString();
-          final k = kubun.trim();
-          final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
-          String yomi = (r['j_yomi'] ?? '').toString();
-          if (yomi.isEmpty) yomi = (r['furigana'] ?? '').toString();
-          return {'yomi': yomi, 'isPort': isPort};
+      Map<String, dynamic>? hit;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final sid = prefs.getInt('selected_teibou_id');
+        if (sid != null && sid > 0) {
+          for (final r in rows) {
+            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) { hit = r; break; }
+          }
         }
+      } catch (_) {}
+      hit ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+        (r) => ((r?['port_name'] ?? '').toString() == name),
+        orElse: () => null,
+      );
+      if (hit != null) {
+        final kubun = (hit['kubun'] ?? '').toString();
+        final k = kubun.trim();
+        final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
+        String yomi = (hit['j_yomi'] ?? '').toString();
+        if (yomi.isEmpty) yomi = (hit['furigana'] ?? '').toString();
+        int? flag;
+        try { flag = hit['flag'] is int ? hit['flag'] as int : int.tryParse(hit['flag']?.toString() ?? ''); } catch (_) {}
+        return {'yomi': yomi, 'isPort': isPort, 'flag': flag};
       }
     } catch (_) {}
-    return {'yomi': '', 'isPort': false};
+    return {'yomi': '', 'isPort': false, 'flag': null};
   }
 
   Widget _valueBox(String text) {
@@ -3532,6 +3638,8 @@ class _SlidingContent extends StatelessWidget {
                               final meta = snapshot.data;
                               final isPort = (meta != null && meta['isPort'] == true);
                               final yomi = (meta != null && meta['yomi'] is String) ? meta['yomi'] as String : '';
+                              final isPending = (meta != null && (meta['flag'] == -1 || meta['flag'] == '-1'));
+                              final displayName = isPending ? '$name (申請中)' : name;
                               return Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -3546,8 +3654,8 @@ class _SlidingContent extends StatelessWidget {
                                         ),
                                       Flexible(
                                         child: Text(
-                                          name,
-                                          style: const TextStyle(fontSize: 24, color: Colors.white),
+                                          displayName,
+                                          style: const TextStyle(fontSize: 22, color: Colors.white),
                                           textAlign: TextAlign.center,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -3951,7 +4059,7 @@ class _SlidingContent extends StatelessWidget {
 
 }
 
-// (削除) 釣場環境 > 投稿一覧 タブは不要となったため実装も削除
+// (削除) 釣り場環境 > 投稿一覧 タブは不要となったため実装も削除
 
 class CircularMaskPainter extends CustomPainter {
   final double radius;

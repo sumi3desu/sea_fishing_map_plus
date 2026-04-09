@@ -527,8 +527,8 @@ class Common extends ChangeNotifier {
   double selectedTeibouLat = 0.0;
   double selectedTeibouLng = 0.0;
   int selectedTeibouPrefId = 0;
-  int listCenterTick = 0; // 釣場一覧で再センタリングの要求カウンタ
-  // 釣場一覧から釣場詳細タブへのナビゲーション要求カウンタ
+  int listCenterTick = 0; // 釣り場一覧で再センタリングの要求カウンタ
+  // 釣り場一覧から釣り場詳細タブへのナビゲーション要求カウンタ
   int navigateToTideTick = 0;
   SioInfo oneDaySioInfoAlt = SioInfo();
 
@@ -576,7 +576,7 @@ class Common extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 釣場詳細タブへ遷移要求（BottomNavigation のインデックス切替用）
+  // 釣り場詳細タブへ遷移要求（BottomNavigation のインデックス切替用）
   void requestNavigateToTidePage() {
     navigateToTideTick++;
     notifyListeners();
@@ -862,7 +862,7 @@ class Common extends ChangeNotifier {
   }
 
   //
-  // 釣場保存
+  // 釣り場保存
   //
   Future<void> savePoint(String point) async {
     final prefs = await SharedPreferences.getInstance();

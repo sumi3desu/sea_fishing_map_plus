@@ -6,10 +6,10 @@ const int kPostPageSize = 20; // 投稿一覧の1ページ件数
 final String _tosUrl = 'asset://assets/policies/terms_of_use.html';
 final String _privacyUrl = 'asset://assets/policies/privacy_policy.html';
  
-// ambiguous_plevel=0 釣場指定
+// ambiguous_plevel=0 釣り場指定
 // 
-const int ambiguous_plevel = 0;       // 釣場指定
-// const int ambiguous_plevel = 1;    // 近辺釣場(10個 + 揺らぎ)
+const int ambiguous_plevel = 0;       // 釣り場指定
+// const int ambiguous_plevel = 1;    // 近辺釣り場(10個 + 揺らぎ)
 // const int ambiguous_plevel = 2;    // Block区切り
 
 const int baseMap = 0;                 // open street map

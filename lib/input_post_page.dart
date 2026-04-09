@@ -51,10 +51,10 @@ class _InputPostState extends State<InputPost> {
   bool _submitting = false;
 
   // 投稿種別（画面遷移元で決定）
-  // 'catch' = 釣果, 'env' = 釣場環境
+  // 'catch' = 釣果, 'env' = 釣り場環境
   late String _postType;
 
-  // 釣場環境の投稿項目（単一選択）
+  // 釣り場環境の投稿項目（単一選択）
   final List<String> _envCategories = const ['規制', '駐車場', 'トイレ', '釣餌', 'コンビニ', 'その他'];
   String? _selectedEnvCategory;
 
@@ -91,7 +91,7 @@ class _InputPostState extends State<InputPost> {
   void _loadBanner() {
     _bannerAd = BannerAd(
       size: AdSize.banner,
-      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST用広告ID（釣場詳細/一覧/日付と同じ）
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST用広告ID（釣り場詳細/一覧/日付と同じ）
       // adUnitId: 'ca-app-pub-9290857735881347/1643363507', // 本番広告ID
       listener: BannerAdListener(
         onAdLoaded: (_) {

@@ -180,13 +180,13 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _row('タイトル', '釣場新規申請'),
+          _row('タイトル', '釣り場情報入力'),
           const SizedBox(height: 8),
-          _row('釣場種別', _kindLabel(widget.kind)),
+          _row('釣り場種別', _kindLabel(widget.kind)),
           const SizedBox(height: 8),
           _row('公開/非公開', widget.privateFlag == 1 ? '非公開' : '公開'),
           const SizedBox(height: 8),
-          _row('釣場名', widget.name),
+          _row('釣り場名', widget.name),
               const SizedBox(height: 8),
               _row('読み方', widget.yomi),
               const SizedBox(height: 8),

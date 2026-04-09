@@ -28,7 +28,7 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   final Map<int, String> _prefNameById = {};
   final Map<int, String> _spotNameById = {};
   bool _isAdmin = false;
-  bool _metaReady = false; // 都道府県/釣場名とadminの準備完了
+  bool _metaReady = false; // 都道府県/釣り場名とadminの準備完了
   final Map<int, String> _imgTsByPost = {}; // キャッシュバスター（編集後の差し替え用）
 
   @override
@@ -452,7 +452,7 @@ extension _MosaicBuilders on _FishingResultGridState {
       child: InkWell(
         onTap: () async {
           if (ambiguous_plevel == 0 && it.spotId != null) {
-            // 釣り場が曖昧でない場合、該当スポットを選択して釣場詳細へ
+            // 釣り場が曖昧でない場合、該当スポットを選択して釣り場詳細へ
             final ok = await Common.instance.selectTeibouById(it.spotId!);
             if (ok) {
               if (!mounted) return;

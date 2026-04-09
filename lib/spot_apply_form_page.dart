@@ -10,7 +10,7 @@ import 'spot_apply_confirm_page.dart';
 import 'main.dart';
 
 class SpotApplyFormPage extends StatefulWidget {
-  const SpotApplyFormPage({super.key, required this.lat, required this.lng, this.editMode = false, this.initialKind, this.initialName, this.initialYomi, this.initialAddress, this.initialPrefName, this.initialPrivate, this.initialPortId});
+  const SpotApplyFormPage({super.key, required this.lat, required this.lng, this.editMode = false, this.initialKind, this.initialName, this.initialYomi, this.initialAddress, this.initialPrefName, this.initialPrivate, this.initialPortId, this.canModerate = false});
   final double lat;
   final double lng;
   final bool editMode; // true のとき編集モード（タイトル差し替え）
@@ -21,12 +21,14 @@ class SpotApplyFormPage extends StatefulWidget {
   final String? initialPrefName; // 都道府県名
   final int? initialPrivate;     // 0/1
   final int? initialPortId;      // 既存のport_id（編集時）
+  final bool canModerate;        // 承認/非承認を表示可能か（admin からの遷移時のみ true）
 
   @override
   State<SpotApplyFormPage> createState() => _SpotApplyFormPageState();
 }
 
 class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
+  static const List<String> _kinds = ['gyoko', 'teibou', 'surf', 'kako', 'iso'];
   final _formKey = GlobalKey<FormState>();
   String _kind = '';
   final TextEditingController _nameCtl = TextEditingController();
@@ -39,6 +41,31 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   String? _resultMessage; // 未使用（確認画面で表示）
   bool? _resultOk;        // 未使用（確認画面で表示）
   bool _isAdmin = false;
+
+  String _normalizeKind(String raw) {
+    final k = raw.trim().toLowerCase();
+    switch (k) {
+      case 'gyoko':
+      case '漁港':
+        return 'gyoko';
+      case 'teibou':
+      case '堤防':
+        return 'teibou';
+      case 'surf':
+      case 'サーフ':
+        return 'surf';
+      case 'kako':
+      case '河口':
+        return 'kako';
+      case 'iso':
+      case '磯':
+        return 'iso';
+      default:
+        // 旧コード系や想定外は「漁港」に寄せる（未対応値は未選択にしない）
+        if (RegExp(r'^(?:[0-9]+|特)').hasMatch(k)) return 'gyoko';
+        return raw.trim();
+    }
+  }
 
   DropdownMenuItem<String> _kindMenuItem(String value, IconData icon, String label) {
     return DropdownMenuItem<String>(
@@ -59,6 +86,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
     // 権限チェック
     (() async {
       try {
+        // 起動時に最新化済みのローカル情報のみ参照（フォーム表示時の再取得はしない）
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
         if (mounted) setState(() { _isAdmin = ((info.role ?? '').toLowerCase() == 'admin'); });
       } catch (_) {}
@@ -66,7 +94,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
     // 初期値が渡された場合はそれを採用し、住所逆引きはスキップ
     bool applied = false;
     if (widget.initialKind != null || widget.initialName != null || widget.initialYomi != null || widget.initialAddress != null || widget.initialPrefName != null || widget.initialPrivate != null) {
-      if (widget.initialKind != null) _kind = widget.initialKind!;
+      if (widget.initialKind != null) _kind = _normalizeKind(widget.initialKind!);
       if (widget.initialName != null) _nameCtl.text = widget.initialName!;
       if (widget.initialYomi != null) _yomiCtl.text = widget.initialYomi!;
       if (widget.initialAddress != null) _address = widget.initialAddress;
@@ -130,7 +158,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.editMode ? '釣場申請編集' : '釣場新規申請'), backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar: AppBar(title: Text(widget.editMode ? '釣り場申請編集' : '釣り場情報入力'), backgroundColor: Colors.black, foregroundColor: Colors.white),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -157,14 +185,14 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text('釣場種別', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('釣り場種別', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _kind.isEmpty ? null : _kind,
+                  value: (_kind.isEmpty || !_kinds.contains(_kind)) ? null : _kind,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   hint: const Text('選択してください'),
                   validator: (v) {
-                    if (v == null || v.isEmpty) return '釣場種別を選択してください';
+                    if (v == null || v.isEmpty) return '釣り場種別を選択してください';
                     return null;
                   },
                   items: [
@@ -177,7 +205,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                   onChanged: (v) => setState(() => _kind = v ?? ''),
                 ),
                 const SizedBox(height: 16),
-                const Text('釣場名（32文字以内）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('釣り場名（32文字以内）', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _nameCtl,
@@ -185,12 +213,12 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                   decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '例）〇〇港 南防波堤'),
                   validator: (v) {
                     final s = (v ?? '').trim();
-                    if (s.isEmpty) return '釣場名を入力してください';
+                    if (s.isEmpty) return '釣り場名を入力してください';
                     return null;
                   },
                 ),
                 const SizedBox(height: 12),
-                const Text('釣場名の読み方（ひらがな）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text('釣り場名の読み方（ひらがな）', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _yomiCtl,
@@ -225,7 +253,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: widget.editMode && _isAdmin
+                      child: widget.editMode && (widget.canModerate && _isAdmin)
                           ? Row(
                               children: [
                                 Expanded(

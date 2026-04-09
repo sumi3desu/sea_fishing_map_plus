@@ -511,7 +511,7 @@ class _MainPageState extends State<MainPage> {
    // 初回起動で同意未完了の場合、同意後にデータ警告を出すための保留フラグ
   bool _noDataCheckPending = false;
 
-  // タブのインデックス（0: 釣果、1: 釣場一覧、2: 釣場詳細、3: 日付、4: 設定、5: 情報）
+  // タブのインデックス（0: 釣果、1: 釣り場一覧、2: 釣り場詳細、3: 日付、4: 設定、5: 情報）
   int _selectedIndex = 0;
 
   // TidePage の GlobalKey を作成
@@ -523,10 +523,10 @@ class _MainPageState extends State<MainPage> {
     setState(() {
       _selectedIndex = index;
     });
-    // 釣場詳細(TidePage) が選択された場合だけ TidePage の refreshTide() を呼び出す
+    // 釣り場詳細(TidePage) が選択された場合だけ TidePage の refreshTide() を呼び出す
     if (index == 2) {
       tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
-      // 釣場一覧タブが選択されたときにDB更新を通知して再読込を促す
+      // 釣り場一覧タブが選択されたときにDB更新を通知して再読込を促す
     } else if (index == 1) {
       try { SioDatabase().notifyListeners(); } catch (_) {}
       try { Common.instance.requestListCentering(); } catch (_) {}
@@ -540,12 +540,14 @@ class _MainPageState extends State<MainPage> {
     _selectedIndex = widget.initialIndex;
     _loadBanner();
     // 日付タブは廃止（Tide ページ内の「日付変更」ボタンから遷移）
-    // 共通状態からの「釣場詳細へ遷移」要求に反応
+    // 共通状態からの「釣り場詳細へ遷移」要求に反応
     try {
       Common.instance.addListener(_onCommonNavigateRequest);
     } catch (_) {}
     // 初回起動時に同意ダイアログを検討して表示
     _maybeShowConsentDialog();
+    // 起動時にユーザ情報(特に role)を最新化して保存（各画面の表示整合性のため）
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshUserRole());
     // すでに同意済みで初回データが未準備なら、確認なしで自動実行
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
@@ -556,6 +558,16 @@ class _MainPageState extends State<MainPage> {
         }
       } catch (_) {}
     });
+  }
+
+  Future<void> _refreshUserRole() async {
+    try {
+      final info = await getOrInitUserInfo();
+      try {
+        final refreshed = await getUserInfoFromServer(uuid: info.uuid);
+        await saveUserInfo(refreshed);
+      } catch (_) {}
+    } catch (_) {}
   }
 
   @override
@@ -571,7 +583,7 @@ class _MainPageState extends State<MainPage> {
       _lastNavigateToTideTick = common.navigateToTideTick;
       if (!mounted) return;
       setState(() {
-        _selectedIndex = 2; // 釣場詳細タブ
+        _selectedIndex = 2; // 釣り場詳細タブ
       });
       // 遷移直後に潮汐の再読込も実施
       try { tidePageKey.currentState?.refreshTide(Common.instance.tideDate); } catch (_) {}
@@ -898,7 +910,7 @@ class _MainPageState extends State<MainPage> {
                 height: _bannerAd!.size.height.toDouble(),
                 child: AdWidget(ad: _bannerAd!),
               ),
-            // タブ2(釣場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
+            // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
             if (_selectedIndex == 2)
               SizedBox(
                 height: kToolbarHeight,
@@ -910,14 +922,34 @@ class _MainPageState extends State<MainPage> {
                     try {
                       int pid = common.selectedTeibouPrefId;
                       if (pid == 0) {
-                        final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                        for (final r in rows) {
-                          final n = (r['port_name'] ?? '').toString();
-                          if (n == common.selectedTeibouName && n.isNotEmpty) {
-                            pid = r['todoufuken_id'] is int
-                                ? r['todoufuken_id'] as int
-                                : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-                            break;
+                        // まずは選択済みport_idで引く（同名別県の誤参照防止）
+                        try {
+                          final prefs = await SharedPreferences.getInstance();
+                          final sid = prefs.getInt('selected_teibou_id');
+                          if (sid != null && sid > 0) {
+                            final rows = await SioDatabase().getAllTeibouWithPrefecture();
+                            for (final r in rows) {
+                              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+                              if (rid == sid) {
+                                pid = r['todoufuken_id'] is int
+                                    ? r['todoufuken_id'] as int
+                                    : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
+                                break;
+                              }
+                            }
+                          }
+                        } catch (_) {}
+                        // port_id で取得できなかった場合のみ、名前一致でフォールバック
+                        if (pid == 0 && common.selectedTeibouName.isNotEmpty) {
+                          final rows = await SioDatabase().getAllTeibouWithPrefecture();
+                          for (final r in rows) {
+                            final n = (r['port_name'] ?? '').toString();
+                            if (n == common.selectedTeibouName) {
+                              pid = r['todoufuken_id'] is int
+                                  ? r['todoufuken_id'] as int
+                                  : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
+                              break;
+                            }
                           }
                         }
                       }
@@ -932,7 +964,7 @@ class _MainPageState extends State<MainPage> {
                         }
                       }
                     } catch (_) {}
-                    return '釣場詳細[' + (prefName.isNotEmpty ? '$prefName ' : '') + spotName + ']';
+                    return '釣り場詳細[' + (prefName.isNotEmpty ? '$prefName ' : '') + spotName + ']';
                   }(),
                   builder: (context, snap) {
                     return AppBar(
@@ -948,7 +980,7 @@ class _MainPageState extends State<MainPage> {
                           SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              '釣場詳細',
+                              '釣り場詳細',
                               style: TextStyle(color: Colors.white),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -959,7 +991,7 @@ class _MainPageState extends State<MainPage> {
                   },
                 ),
               ),
-            // 釣場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
+            // 釣り場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
             Expanded(
               child: IndexedStack(index: _selectedIndex, children: pages),
             ),
@@ -972,8 +1004,8 @@ class _MainPageState extends State<MainPage> {
         onTap: _onItemTapped,
         items: <BottomNavigationBarItem>[
           const BottomNavigationBarItem(icon: Text('🐟', style: TextStyle(fontSize: 20)), label: '釣果'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣場一覧'),
-      BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣場詳細'),
+          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣り場一覧'),
+      BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣り場詳細'),
       BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
       ],
       ),

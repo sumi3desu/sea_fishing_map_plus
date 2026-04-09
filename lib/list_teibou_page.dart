@@ -27,7 +27,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   bool _loading = true;
   List<Map<String, dynamic>> _rows = [];
   final List<String> _regions = const [
-    'お気に入り', '近くの釣場', '北海道', '東北', '関東', '中部', '近畿', '中国', '四国', '九州', '沖縄'
+    'お気に入り', '近くの釣り場', '北海道', '東北', '関東', '中部', '近畿', '中国', '四国', '九州', '沖縄'
   ];
   int _selectedRegionIndex = 0;
   final Map<String, Set<int>> _regionPrefSet = {};
@@ -38,7 +38,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   String? _selectedTeibouName;
   int? _selectedTeibouId;
   final Map<int, GlobalKey> _rowKeys = {};
-  // 近くの釣場（検索結果）
+  // 近くの釣り場（検索結果）
   List<Map<String, dynamic>> _nearby = [];
   bool _nearbyLoading = false;
   String? _nearbyError;
@@ -56,7 +56,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     _loadFavorites();
     // DB更新（設定画面での同期完了等）を検知して一覧を再読込
     SioDatabase().addListener(_onDbChanged);
-    // 釣場詳細の地図などからの選択変更を反映
+    // 釣り場詳細の地図などからの選択変更を反映
     Common.instance.addListener(_onCommonChangedJump);
   }
 
@@ -69,7 +69,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   int _lastCenterTick = 0;
   void _onCommonChangedJump() async {
     if (!mounted) return;
-    // 釣場詳細などで選択が更新された場合に、一覧側もスクロール＆選択
+    // 釣り場詳細などで選択が更新された場合に、一覧側もスクロール＆選択
     final common = Common.instance;
     // タブ切替直後の再センタリング要求（地域切替は行わずスクロールのみ）
     if (_lastCenterTick != common.listCenterTick) {
@@ -534,7 +534,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         final id = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
         return id != null && _favoriteIds.contains(id);
       }).toList();
-    } else if (selectedRegion == '近くの釣場') {
+    } else if (selectedRegion == '近くの釣り場') {
       filtered = List<Map<String, dynamic>>.from(_nearby); // 検索順（距離昇順）のまま
     } else {
       // todoufuken テーブル由来の地方→都道府県ID集合で厳密にフィルタ
@@ -551,7 +551,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     // 既に都道府県ID順、読み順で並んでいる想定（SQLのORDER BY）。
     // 表示のために都道府県ごとにグループ化。
     final List<_PrefGroup> groups = [];
-    if (selectedRegion == '近くの釣場') {
+    if (selectedRegion == '近くの釣り場') {
       // グループ化せず、検索結果をそのまま一括で表示
       groups.add(_PrefGroup(name: '検索結果', id: null, rows: filtered));
     } else {
@@ -612,7 +612,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       body: Column(
         children: [
           _buildRegionTabs(),
-          if (selectedRegion == '近くの釣場') ...[
+          if (selectedRegion == '近くの釣り場') ...[
             const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -635,7 +635,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             child: groups.isEmpty
                 ? Center(
                     child: Text(
-                      selectedRegion == '近くの釣場'
+                      selectedRegion == '近くの釣り場'
                           ? (_nearbyLoading
                               ? '検索中...'
                               : (_nearbyError ?? '「検索」を押して現在地から近い釣り場を表示'))
@@ -647,7 +647,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                     itemCount: groups.length,
                     itemBuilder: (context, index) {
                       final g = groups[index];
-                      if (selectedRegion == '近くの釣場') {
+                      if (selectedRegion == '近くの釣り場') {
                         // ヘッダー無しでそのまま並べる（近い順）
                         return Column(children: g.rows.map((row) => _buildRow(row)).toList());
                       } else {
@@ -752,7 +752,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   }
 
   String _buildListTitle() {
-    final base = '釣場一覧';
+    final base = '釣り場一覧';
     final spot = _selectedTeibouName ?? '';
     if (spot.isEmpty) return base;
     // 都道府県名の推定
@@ -829,8 +829,8 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     final yomi = (row['j_yomi'] ?? '').toString();
     final portId = row['port_id'] is int ? row['port_id'] as int : int.tryParse(row['port_id']?.toString() ?? '');
     String title = portName;
-    // 近くの釣場タブでは順位番号（①〜⑩）を付与
-    if (_regions[_selectedRegionIndex] == '近くの釣場' && portId != null) {
+    // 近くの釣り場タブでは順位番号（①〜⑩）を付与
+    if (_regions[_selectedRegionIndex] == '近くの釣り場' && portId != null) {
       final n = _nearbyNumberById[portId];
       if (n != null) {
         title = '${_circledNum(n)} $title';
@@ -852,7 +852,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     final isSelected = portId != null && _selectedTeibouId == portId;
     String? nearest;
     int? distanceMeters;
-    final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣場');
+    final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣り場');
     if (isNearbyTab) {
       if (portId != null) distanceMeters = _nearbyMetersById[portId];
     } else if (hasPosition && !_pointsLoading && _pointCoords.isNotEmpty) {
@@ -975,7 +975,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 return;
               }
           // 地図表示
-          final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣場');
+          final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣り場');
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) {
@@ -1088,7 +1088,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
               Common.instance.notify();
             }
           }
-          // 選択直後に「釣場詳細」タブへ遷移
+    // 選択直後に「釣り場詳細」タブへ遷移
           Common.instance.requestNavigateToTidePage();
         },
         child: Container(
