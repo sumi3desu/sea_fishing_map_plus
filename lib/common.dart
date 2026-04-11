@@ -543,6 +543,43 @@ class Common extends ChangeNotifier {
     }
   }
 
+  // ===== 投稿入力のドラフト（メール認証フロー復帰用） =====
+  bool draftAutoSubmit = false;
+  String? draftType; // 'catch' or 'env'
+  String? draftSummary;
+  String? draftDetail;
+  String? draftEnvSummary;
+  String? draftEnvDetail;
+  String? draftImagePath;
+
+  void savePostDraft({
+    required String type,
+    String? summary,
+    String? detail,
+    String? envSummary,
+    String? envDetail,
+    String? imagePath,
+    bool autoSubmit = false,
+  }) {
+    draftType = (type == 'env') ? 'env' : 'catch';
+    draftSummary = summary;
+    draftDetail = detail;
+    draftEnvSummary = envSummary;
+    draftEnvDetail = envDetail;
+    draftImagePath = imagePath;
+    draftAutoSubmit = autoSubmit;
+  }
+
+  void clearPostDraft() {
+    draftAutoSubmit = false;
+    draftType = null;
+    draftSummary = null;
+    draftDetail = null;
+    draftEnvSummary = null;
+    draftEnvDetail = null;
+    draftImagePath = null;
+  }
+
   Future<void> saveSelectedTeibou(String name, String nearestPoint, {int? id, double? lat, double? lng, int? prefId}) async {
     selectedTeibouName = name;
     selectedTeibouNearestPoint = nearestPoint;

@@ -8,6 +8,7 @@ import 'main.dart';
 import 'sio_database.dart';
 import 'common.dart';
 import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
+import 'new_account_page.dart';
 
 class SpotApplyConfirmPage extends StatefulWidget {
   const SpotApplyConfirmPage({super.key, required this.kind, required this.name, required this.yomi, required this.lat, required this.lng, required this.address, required this.prefName, required this.privateFlag, this.titleOverride, this.submitLabel, this.overrideFlag, this.portId});
@@ -33,6 +34,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
   bool _submitting = false;
   String? _resultMessage;
   bool? _resultOk;
+  bool _emailVerified = false;
 
   String _kindLabel(String k) {
     switch (k) {
@@ -172,6 +174,14 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 認証状態を一度だけ読み取り（必要に応じて更新）
+    (() async {
+      try {
+        final info = await loadUserInfo() ?? await getOrInitUserInfo();
+        final verified = (info.email.trim().isNotEmpty);
+        if (mounted && verified != _emailVerified) setState(() => _emailVerified = verified);
+      } catch (_) {}
+    })();
     return Scaffold(
       appBar: AppBar(title: Text(widget.titleOverride ?? '確認'), backgroundColor: Colors.black, foregroundColor: Colors.white),
       body: SafeArea(
@@ -196,6 +206,13 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 12),
+              if (!_emailVerified) ...[
+                const Text(
+                  '※ 釣り場申請はメール認証が必要です。申請ボタンを押すと「メール認証」を行います。',
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+                const SizedBox(height: 8),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -207,7 +224,29 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _submitting ? null : _submit,
+                      onPressed: _submitting
+                          ? null
+                          : () async {
+                              // 未認証ならアカウント登録へ遷移し、戻ってきてから改めて送信
+                              try {
+                                final info = await loadUserInfo() ?? await getOrInitUserInfo();
+                                if ((info.email).trim().isEmpty) {
+                                  final res = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const NewAccountPage(returnToInputPost: true)),
+                                  );
+                                  // 戻ってきたら認証状態を再確認
+                                  try {
+                                    final after = await loadUserInfo() ?? await getOrInitUserInfo();
+                                    final verified = (after.email.trim().isNotEmpty);
+                                    if (mounted) setState(() => _emailVerified = verified);
+                                    if (!verified) return;
+                                  } catch (_) { return; }
+                                }
+                              } catch (_) {}
+                              // 認証済みなら送信
+                              await _submit();
+                            },
                       child: _submitting
                           ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                           : Text(widget.submitLabel ?? '申請'),

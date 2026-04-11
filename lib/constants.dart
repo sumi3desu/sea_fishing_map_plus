@@ -19,3 +19,9 @@ const int baseMap = 0;                 // open street map
 
 // メッシュサイズ（km）: 例) 30 を指定すると 30km 間隔のグリッド
 const int meshSize = 30;
+
+//
+// Message
+//
+final String warningSelectSpot = '「釣果」で投稿を選ぶか「釣り場一覧」で釣り場を選んでください。';
+final String warningCertificationMail = 'メール認証をお願いします。';

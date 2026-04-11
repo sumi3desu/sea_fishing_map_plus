@@ -15,6 +15,7 @@ import 'dart:convert';
 import 'sio_database.dart';
 import 'common.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
+import 'new_account_page.dart';
 
 class InputPost extends StatefulWidget {
   const InputPost({
@@ -69,12 +70,22 @@ class _InputPostState extends State<InputPost> {
   String? _envAvailability; // 'あり' or 'なし'
   final TextEditingController _envSummaryController = TextEditingController(); // 30桁
   final TextEditingController _envDetailController = TextEditingController(); // 1000桁
+  bool _emailVerified = false;
 
   @override
   void initState() {
     super.initState();
-    _postType = (widget.initialType == 'env') ? 'env' : 'catch';
+    // ドラフトがあれば種別を上書き
+    final draftType = Common.instance.draftType;
+    _postType = (draftType != null) ? draftType : ((widget.initialType == 'env') ? 'env' : 'catch');
     _loadBanner();
+    // メール認証状態を取得
+    (() async {
+      try {
+        final info = await loadUserInfo() ?? await getOrInitUserInfo();
+        if (mounted) setState(() => _emailVerified = (info.email.trim().isNotEmpty));
+      } catch (_) {}
+    })();
     // 編集モードの事前入力
     if (widget.editMode) {
       if (_postType == 'catch') {
@@ -89,6 +100,10 @@ class _InputPostState extends State<InputPost> {
         _networkImageUrl = url;
       }
     }
+    // ドラフトの内容を復元
+    _restoreDraftIfAny();
+    // 認証後に自動投稿が要求されている場合は試行
+    WidgetsBinding.instance.addPostFrameCallback((_) => _tryAutoSubmitAfterAuth());
   }
 
   void _loadBanner() {
@@ -260,8 +275,65 @@ class _InputPostState extends State<InputPost> {
     if (mounted) setState(() {});
   }
 
+  void _restoreDraftIfAny() {
+    final c = Common.instance;
+    if (c.draftType == null) return;
+    if (c.draftType == 'catch') {
+      _summaryController.text = c.draftSummary ?? _summaryController.text;
+      _detailController.text = c.draftDetail ?? _detailController.text;
+    } else {
+      _envSummaryController.text = c.draftEnvSummary ?? _envSummaryController.text;
+      _envDetailController.text = c.draftEnvDetail ?? _envDetailController.text;
+    }
+    final p = (c.draftImagePath ?? '').trim();
+    if (p.isNotEmpty) {
+      try { _pickedImage = XFile(p); } catch (_) {}
+    }
+  }
+
+  Future<void> _tryAutoSubmitAfterAuth() async {
+    final c = Common.instance;
+    if (!c.draftAutoSubmit) return;
+    // 認証済みか確認
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final verified = (info.email.trim().isNotEmpty);
+      if (!verified) return;
+    } catch (_) { return; }
+    // 投稿可否を再評価
+    _onChangedAny('');
+    if (!_isPostEnabled) return;
+    // フラグを下げてから投稿（多重送信防止）
+    c.draftAutoSubmit = false;
+    await _submitPost();
+  }
+
   Future<void> _submitPost() async {
     if (_submitting) return;
+    // 未認証の場合はアカウント登録フローへ
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if ((info.email).trim().isEmpty) {
+        if (!mounted) return;
+        // 送信前のドラフトを保存して自動投稿を指示
+        Common.instance.savePostDraft(
+          type: _postType,
+          summary: _summaryController.text.trim(),
+          detail: _detailController.text.trim(),
+          envSummary: _envSummaryController.text.trim(),
+          envDetail: _envDetailController.text.trim(),
+          imagePath: _uploadImage?.path ?? _pickedImage?.path,
+          autoSubmit: true,
+        );
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const NewAccountPage(returnToInputPost: true)),
+        );
+        // 登録画面から戻ったら自動投稿を試行
+        await _tryAutoSubmitAfterAuth();
+        return;
+      }
+    } catch (_) {}
     setState(() => _submitting = true);
     try {
       // 画像圧縮が未完了の場合は待機
@@ -305,6 +377,7 @@ class _InputPostState extends State<InputPost> {
       final resp = await req.send();
       final status = resp.statusCode;
       if (status == 200) {
+        try { Common.instance.clearPostDraft(); } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('投稿を送信しました')));
         if (mounted) Navigator.pop(context, true);
       } else {
@@ -608,6 +681,30 @@ class _InputPostState extends State<InputPost> {
                   try { Common.instance.setPostListMode(_postType); } catch (_) {}
                 },
               ),
+            ),
+          ),
+          // 投稿種別に応じた説明文 + 認証の注意
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _postType == 'catch'
+                      ? '釣果の投稿を入力してください。'
+                      : '釣り場の規制/駐車場/トイレなどについての投稿を入力してください。',
+                ),
+                if (!_emailVerified)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      '※ 投稿するにはメール認証が必要です。',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ),
+              ],
             ),
           ),
           const Divider(height: 1),

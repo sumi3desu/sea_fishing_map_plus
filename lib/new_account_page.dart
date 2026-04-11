@@ -10,7 +10,8 @@ import 'appconfig.dart';
 import 'main.dart';
 
 class NewAccountPage extends StatefulWidget {
-  const NewAccountPage({super.key});
+  const NewAccountPage({super.key, this.returnToInputPost = false});
+  final bool returnToInputPost;
 
   @override
   _NewAccountPageState createState() => _NewAccountPageState();
@@ -127,7 +128,7 @@ class _NewAccountPageState extends State<NewAccountPage> {
         if (responseMailData['result'] == "OK") {
           // 次の6桁入力画面に遷移
           if (!mounted) return; // 非マウント時は遷移しない
-          Navigator.push(
+          final res = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CertificationMail(
@@ -135,9 +136,15 @@ class _NewAccountPageState extends State<NewAccountPage> {
                 action: "new_user",
                 authenticationNumber: authenticationNumber,
                 nickName: nickname,
+                returnToInputPost: widget.returnToInputPost,
               ),
             ),
           );
+          // 認証結果から true が返ってきたら、この画面を閉じて元の投稿入力へ戻る
+          if (res == true && mounted) {
+            Navigator.pop(context, true);
+            return;
+          }
         } else {
           final msg = responseMailData['reason'];
           setState(() {

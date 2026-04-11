@@ -76,6 +76,7 @@ function send_mail($ini_info, $user_name, $user_mail, $body_params)
     $mailer->CharSet = 'UTF-8';//UTF-8で送信
     $mailer->SMTPAuth = true;//SMTP認証を有効
     $mailer->Username = $smtp_auth_user; // ユーザー名
+
     $mailer->Password = $smtp_auth_password; // パスワード
     $mailer->SMTPSecure = 'ssl';// 465=ssl / 587=tls（iniのport_noに合わせてください）
     $mailer->Port = $port_no;
@@ -88,6 +89,12 @@ function send_mail($ini_info, $user_name, $user_mail, $body_params)
     $message = $body;  // メール本文（テキスト）
     // 差出人
     $mailer->setFrom($from_mail_addr, $from_mail_addr_name);
+
+    // 2026/4/11 [
+    $mailer->Sender = $from_mail_addr;
+    $mailer->addReplyTo($from_mail_addr, $from_mail_addr_name);
+    // ]
+
     // 件名/本文（UTF-8のままセット）
     $mailer->Subject = $subject;
     $mailer->isHTML(false); // プレーンテキスト

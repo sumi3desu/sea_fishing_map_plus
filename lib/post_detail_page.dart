@@ -172,6 +172,29 @@ class _PostDetailPageState extends State<PostDetailPage> {
     }
   }
 
+  Future<void> _onTapThumbDown() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final email = (info.email).trim();
+      if (email.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(warningCertificationMail)),
+        );
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(warningCertificationMail)),
+        );
+      }
+      return;
+    }
+    // 認証済みユーザは従来処理へ
+    await _openConfirmRequest();
+  }
+
   void _loadBanner() {
     _bannerAd = BannerAd(
       size: AdSize.banner,
@@ -753,7 +776,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(Icons.favorite, color: Colors.pink),
+                                      const Icon(Icons.thumb_up, color: Colors.blue),
                                       const SizedBox(width: 8),
                                       Text(_likeCount != null ? _likeCount.toString() : ''),
                                     ],
@@ -775,15 +798,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                   topRight: Radius.circular(12),
                                   bottomRight: Radius.circular(12),
                                 ),
-                                onTap: _openConfirmRequest,
+                                onTap: _onTapThumbDown,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: const [
-                                      Icon(Icons.warning_rounded, color: Colors.amber),
-                                      SizedBox(width: 8),
-                                      Flexible(child: Text('確認のお願い', overflow: TextOverflow.ellipsis)),
+                                      Icon(Icons.thumb_down, color: Colors.redAccent),
                                     ],
                                   ),
                                 ),

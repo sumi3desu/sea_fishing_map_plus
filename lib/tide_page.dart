@@ -191,7 +191,7 @@ class TidePageState extends State<TidePage> {
 }
 
 class _TideTab extends StatefulWidget {
-  const _TideTab({required this.height});
+  const _TideTab({Key? key, required this.height}) : super(key: key);
   final double height;
   @override
   State<_TideTab> createState() => _TideTabState();
@@ -205,6 +205,26 @@ class _TideTabState extends State<_TideTab> {
     super.initState();
     _baseDate = Common.instance.tideDate;
     _controller = PageController(initialPage: 1000);
+  }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 日付変更画面等で tideDate が更新された場合、基準日付を更新しページ位置を初期に戻す
+    final cur = Common.instance.tideDate;
+    if (cur.year != _baseDate.year || cur.month != _baseDate.month || cur.day != _baseDate.day) {
+      _baseDate = cur;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(1000);
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (_controller.hasClients) {
+            _controller.jumpToPage(1000);
+          }
+        });
+      }
+      setState(() {});
+    }
   }
   @override
   Widget build(BuildContext context) {
@@ -1207,6 +1227,50 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     if (mounted) setState(() { _sheetReloadTick++; });
   }
 
+  void _showModeInfoDialog() {
+    final isApply = _applyMode;
+    final String msg = isApply
+        ? '地図上で登録したい場所を長押ししてください。\nピンが表示されたら「釣り場登録」をタップしてください。\n申請中のピンを申請者本人がタップすると入力項目の修正ができます。\n\n「釣り場登録中...」ボタンをタップすると「閲覧モード」に遷移します。'
+        : '地図上の釣り場をタップして選びながら、釣果や環境の投稿を閲覧するモードです。\n\n長押しするとその近辺の釣り場がピン表示されます。\n\n「釣り場登録」ボタンをタップすると釣り場を登録する「釣り場登録モード」に遷移します。';
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AlertDialog(
+        content: Text(msg),
+      ),
+    );
+  }
+
+  Future<String> _currentSpotDisplay() async {
+    final spotName = Common.instance.selectedTeibouName.isNotEmpty
+        ? Common.instance.selectedTeibouName
+        : Common.instance.tidePoint;
+    String display = spotName;
+    try {
+      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      Map<String, dynamic>? row;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final sid = prefs.getInt('selected_teibou_id');
+        if (sid != null && sid > 0) {
+          for (final r in rows) {
+            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) { row = r; break; }
+          }
+        }
+      } catch (_) {}
+      row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+        (r) => ((r?['port_name'] ?? '').toString() == spotName),
+        orElse: () => null,
+      );
+      final int? flag = row == null
+          ? null
+          : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+      if (flag == -1) display = '$spotName (申請中)';
+    } catch (_) {}
+    return display;
+  }
+
   Future<void> _onViewLongPress(double llat, double llng) async {
     try {
       final rows = await SioDatabase().getAllTeibouWithPrefecture();
@@ -1227,19 +1291,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final nlat = _toDouble(bestRow['latitude']) ?? llat;
       final nlng = _toDouble(bestRow['longitude']) ?? llng;
       final name = (bestRow['port_name'] ?? '').toString();
-      // 選択保存（最寄り潮汐ポイントは既知の座標から算出）
-      String? np;
-      if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
-      final int? prefId = bestRow['todoufuken_id'] is int
-          ? bestRow['todoufuken_id'] as int
-          : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
-      final int? portId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
+      // 選択状態は更新（最寄りを選択）し、地図の表示位置・スケールは変更せず近辺ピンのみ再構成
       try {
+        String? np;
+        if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
+        final int? prefId = bestRow['todoufuken_id'] is int
+            ? bestRow['todoufuken_id'] as int
+            : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
+        final int? portId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
         await Common.instance.saveSelectedTeibou(name, np ?? (Common.instance.tidePoint), id: portId, lat: nlat, lng: nlng, prefId: prefId);
-        Common.instance.shouldJumpPage = true;
-        Common.instance.notify();
       } catch (_) {}
-      // 中心を最寄り釣り場にセットし、半径30kmのピンを再構成
+      // 地図の表示位置は変更せず、ピンのみ再構成（最寄りを赤ピン）
       await _loadMarkers(centerName: name, lat: nlat, lng: nlng, radiusKm: 30.0);
       if (mounted) setState(() {});
     } catch (_) {}
@@ -1823,20 +1885,23 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
+              GestureDetector(
+                onTap: _showCurrentSpotInfoDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                  ),
+                  child: Text(
+                    centerPending ? '$cn (申請中)' : cn,
+                    style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-              child: Text(
-                centerPending ? '$cn (申請中)' : cn,
-                style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: isCenterFav ? FontWeight.bold : FontWeight.normal),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
-            ),
               Icon(Icons.location_pin, color: Colors.red, size: isCenterFav ? 48 : 32),
             ],
           ),
@@ -2123,94 +2188,35 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       ),
                     ),
                   ),
-                // 地図上（ボタン行の下）に [都道府県 釣り場名] または 登録案内 をオーバーレイ表示
+                // 釣り場名の上部オーバーレイは廃止（選択ピン上のラベルで代替）
+                // 左上（同じY位置）にモード表示バッジ
                 Positioned(
-                  top: 70, left: 0, right: 0,
-                  child: Center(
-                    child: _applyMode
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.85),
-                              borderRadius: BorderRadius.circular(6),
-                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
-                            ),
-                            child: const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '地図上で登録したい場所を長押ししてください。',
-                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
-                                  textAlign: TextAlign.start,
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'ピンが表示されたら「釣り場登録」をタップしてください。',
-                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
-                                  textAlign: TextAlign.start,
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  '申請中のピンを申請者本人がタップすると入力項目の修正ができます。',
-                                  style: TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
-                                  textAlign: TextAlign.start,
-                                ),
-                              ],
-                            ),
-                          )
-                        : GestureDetector(
-                            onTap: _showCurrentSpotInfoDialog,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
-                              ),
-                              child: FutureBuilder<String>(
-                                future: () async {
-                                  final spotName = Common.instance.selectedTeibouName.isNotEmpty
-                                      ? Common.instance.selectedTeibouName
-                                      : Common.instance.tidePoint;
-                                  String display = spotName;
-                                  try {
-                                    final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                                    Map<String, dynamic>? row;
-                                    try {
-                                      final prefs = await SharedPreferences.getInstance();
-                                      final sid = prefs.getInt('selected_teibou_id');
-                                      if (sid != null && sid > 0) {
-                                        for (final r in rows) {
-                                          final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                                          if (rid == sid) { row = r; break; }
-                                        }
-                                      }
-                                    } catch (_) {}
-                                    row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-                                      (r) => ((r?['port_name'] ?? '').toString() == spotName),
-                                      orElse: () => null,
-                                    );
-                                    final int? flag = row == null
-                                        ? null
-                                        : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
-                                    if (flag == -1) display = '$spotName (申請中)';
-                                  } catch (_) {}
-                                  return display;
-                                }(),
-                                builder: (context, snap) {
-                                  final txt = snap.data ?? '';
-                                  return Text(
-                                    txt,
-                                    style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                  );
-                                },
-                              ),
-                            ),
+                  top: 70,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: _showModeInfoDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_applyMode ? Icons.edit_location_alt : Icons.remove_red_eye,
+                              size: 16, color: Colors.black87),
+                          const SizedBox(width: 6),
+                          Text(
+                            _applyMode ? '釣り場登録モード' : '閲覧モード',
+                            style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w600),
                           ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.info_outline, size: 16, color: Colors.black54),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 // 下から引っ張り出すボトムシート（投稿一覧などを想定）

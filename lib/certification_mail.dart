@@ -51,6 +51,7 @@ class CertificationMail extends StatefulWidget {
   final String action;
   String authenticationNumber;
   final String? nickName; // 追加: ニックネーム
+  final bool returnToInputPost;
 
   CertificationMail({
     Key? key,
@@ -58,6 +59,7 @@ class CertificationMail extends StatefulWidget {
     required this.action,
     required this.authenticationNumber,
     this.nickName,
+    this.returnToInputPost = false,
   }) : super(key: key);
 
   @override
@@ -197,7 +199,7 @@ class _CertificationMailState extends State<CertificationMail> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => CertificationResult(action: "edit_mail")),
+                    builder: (context) => CertificationResult(action: "edit_mail", returnToInputPost: widget.returnToInputPost)),
               );
             } else {
               setState(() {
@@ -260,7 +262,7 @@ class _CertificationMailState extends State<CertificationMail> {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => CertificationResult(action: "new_user")),
+                    builder: (context) => CertificationResult(action: "new_user", returnToInputPost: widget.returnToInputPost)),
               );
             } else {
               setState(() {

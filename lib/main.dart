@@ -529,6 +529,19 @@ class _MainPageState extends State<MainPage> {
     }
     // 下部ナビのインデックスをページインデックスに変換
     final int pageIndex = index > 2 ? index - 1 : index;
+    // 釣り場詳細(=pageIndex 2) への遷移は、未選択時はブロックして案内
+    if (pageIndex == 2) {
+      final hasSelection = (Common.instance.selectedTeibouName.isNotEmpty ||
+          Common.instance.selectedTeibouLat != 0.0 ||
+          Common.instance.selectedTeibouLng != 0.0);
+      if (!hasSelection) {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.showSnackBar(
+          SnackBar(content: Text(warningSelectSpot)),
+        );
+        return;
+      }
+    }
     setState(() {
       _selectedIndex = pageIndex;
     });
@@ -1075,6 +1088,17 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> _onPressCreatePost() async {
+    // 釣り場未選択のときは投稿画面へ遷移させない
+    final hasSelection = (Common.instance.selectedTeibouName.isNotEmpty ||
+        Common.instance.selectedTeibouLat != 0.0 ||
+        Common.instance.selectedTeibouLng != 0.0);
+    if (!hasSelection) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        SnackBar(content: Text(warningSelectSpot)),
+      );
+      return;
+    }
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       if (!(info.canReport)) {
