@@ -207,15 +207,13 @@ class _TideTabState extends State<_TideTab> {
     _controller = PageController(initialPage: 1000);
   }
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 日付変更画面等で tideDate が更新された場合、基準日付を更新しページ位置を初期に戻す
-    final cur = Common.instance.tideDate;
-    if (cur.year != _baseDate.year || cur.month != _baseDate.month || cur.day != _baseDate.day) {
-      _baseDate = cur;
-      if (_controller.hasClients) {
-        _controller.jumpToPage(1000);
-      } else {
+  Widget build(BuildContext context) {
+    // 日付変更画面などからの外部更新（shouldJumpPage）にのみ反応して基準日付を更新
+    final shouldJump = Provider.of<Common>(context).shouldJumpPage;
+    if (shouldJump) {
+      final cur = Common.instance.tideDate;
+      if (cur.year != _baseDate.year || cur.month != _baseDate.month || cur.day != _baseDate.day) {
+        _baseDate = cur;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           if (_controller.hasClients) {
@@ -223,11 +221,7 @@ class _TideTabState extends State<_TideTab> {
           }
         });
       }
-      setState(() {});
     }
-  }
-  @override
-  Widget build(BuildContext context) {
     return _TideHomePage(controller: _controller, baseDate: _baseDate);
   }
 }
