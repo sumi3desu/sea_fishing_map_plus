@@ -1338,14 +1338,60 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final name = Common.instance.selectedTeibouName;
     final lat = Common.instance.selectedTeibouLat;
     final lng = Common.instance.selectedTeibouLng;
-    if (lat != 0.0 || lng != 0.0) {
+    double useLat = lat;
+    double useLng = lng;
+    String useName = name;
+    // 追加フォールバック: 緯度経度が未保存だが名前やIDが保存されている場合、DBから取得して補完
+    if ((useLat == 0.0 && useLng == 0.0) && useName.isNotEmpty) {
+      try {
+        final rows = await SioDatabase().getAllTeibouWithPrefecture();
+        Map<String, dynamic>? hit;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final sid = prefs.getInt('selected_teibou_id');
+          if (sid != null && sid > 0) {
+            for (final r in rows) {
+              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) { hit = r; break; }
+            }
+          }
+        } catch (_) {}
+        hit ??= rows.cast<Map<String, dynamic>?>().firstWhere(
+          (r) => ((r?['port_name'] ?? '').toString() == useName),
+          orElse: () => null,
+        );
+        if (hit != null) {
+          final dlat = _toDouble(hit['latitude']);
+          final dlng = _toDouble(hit['longitude']);
+          if (dlat != null && dlng != null && !(dlat == 0.0 && dlng == 0.0)) {
+            useLat = dlat;
+            useLng = dlng;
+            useName = (hit['port_name'] ?? useName).toString();
+            // 保存して次回以降に活かす
+            try {
+              await Common.instance.saveSelectedTeibou(
+                useName,
+                Common.instance.selectedTeibouNearestPoint,
+                lat: useLat,
+                lng: useLng,
+                id: hit['port_id'] is int ? hit['port_id'] as int : int.tryParse(hit['port_id']?.toString() ?? ''),
+                prefId: hit['todoufuken_id'] is int
+                    ? hit['todoufuken_id'] as int
+                    : int.tryParse(hit['todoufuken_id']?.toString() ?? '') ?? int.tryParse(hit['pref_id_from_port']?.toString() ?? ''),
+              );
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+    if (useLat != 0.0 || useLng != 0.0) {
       // 変更検知（緯度経度 or 名前）
-      if (_lastLat != lat || _lastLng != lng || _lastName != name) {
-        _center = LatLng(lat, lng);
-        _lastLat = lat;
-        _lastLng = lng;
-        _lastName = name;
-        await _loadMarkers(centerName: name, lat: lat, lng: lng, radiusKm: 30.0);
+      if (_lastLat != useLat || _lastLng != useLng || _lastName != useName) {
+        _center = LatLng(useLat, useLng);
+        _lastLat = useLat;
+        _lastLng = useLng;
+        _lastName = useName;
+        await _loadMarkers(centerName: useName, lat: useLat, lng: useLng, radiusKm: 30.0);
         // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
           final z = _zoomForRadius(30.0) + 1.0;

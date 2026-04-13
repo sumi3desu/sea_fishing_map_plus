@@ -61,7 +61,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
     setState(() => _liking = true);
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_like_post.php');
+      final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_thumb_post.php');
       final resp = await http
           .post(
             uri,
@@ -479,7 +479,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
       final pid = widget.item.postId;
       if (pid == null || pid <= 0) return;
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_like_post.php');
+      final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_thumb_post.php');
       final resp = await http
           .post(
             uri,

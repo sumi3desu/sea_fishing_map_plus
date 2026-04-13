@@ -520,6 +520,8 @@ class _MainPageState extends State<MainPage> {
   final GlobalKey<TidePageState> tidePageKey = GlobalKey<TidePageState>();
   // 日付タブは廃止（Tide ページ内のボタンから遷移）
   int _lastNavigateToTideTick = 0;
+  // 起動時の最寄り自動選択（未選択時）の実行フラグ
+  bool _didStartupAutoSelect = false;
 
   void _onItemTapped(int index) {
     // 中央の「投稿」アイテムは FAB と同じ動作に割り当てる
@@ -575,8 +577,14 @@ class _MainPageState extends State<MainPage> {
       try {
         if (!mounted) return;
         final consented = await _hasPolicyConsent();
-        if (consented && await _isInitialDataMissing()) {
-          await _confirmAndDownloadInitialData();
+        if (consented) {
+          final missing = await _isInitialDataMissing();
+          if (missing) {
+            final ok = await _confirmAndDownloadInitialData();
+            if (ok) await _maybeStartupAutoSelectAndSearch();
+          } else {
+            await _maybeStartupAutoSelectAndSearch();
+          }
         }
       } catch (_) {}
     });
@@ -612,6 +620,28 @@ class _MainPageState extends State<MainPage> {
       // 釣果リストも強制再読み込み（選択釣り場の変更を確実に反映）
       try { tidePageKey.currentState?.forceReloadCatchList(); } catch (_) {}
     }
+  }
+
+  // 起動時用：未選択なら現在地から最寄りの釣り場を自動選択し、一覧側に近隣検索を依頼
+  Future<void> _maybeStartupAutoSelectAndSearch() async {
+    if (_didStartupAutoSelect) return;
+    // 既に選択されているか確認（共通状態 or 永続化）
+    try {
+      await Common.instance.loadSelectedTeibou();
+    } catch (_) {}
+    final hasSel = (Common.instance.selectedTeibouName.isNotEmpty ||
+        Common.instance.selectedTeibouLat != 0.0 ||
+        Common.instance.selectedTeibouLng != 0.0);
+    if (hasSel) {
+      _didStartupAutoSelect = true;
+      return;
+    }
+    _didStartupAutoSelect = true;
+    try {
+      await Common.instance.setupNearestByLocationIfUnset();
+    } catch (_) {}
+    // 検索一覧（「近くの釣り場」）にも結果を反映させるため、一覧ページへ検索の実行を依頼
+    try { Common.instance.requestAutoNearbySearch(); } catch (_) {}
   }
     // 初回準備が完了しているか（堤防テーブルが揃っているか）
   Future<bool> _isInitialDataMissing() async {
@@ -728,7 +758,10 @@ class _MainPageState extends State<MainPage> {
                                 _noDataCheckPending = false; // 旧警告フローはクリア
                                 try {
                                   if (await _isInitialDataMissing()) {
-                                    await _confirmAndDownloadInitialData();
+                                    final ok = await _confirmAndDownloadInitialData();
+                                    if (ok) await _maybeStartupAutoSelectAndSearch();
+                                  } else {
+                                    await _maybeStartupAutoSelectAndSearch();
                                   }
                                 } catch (_) {}
                               });
@@ -789,12 +822,12 @@ class _MainPageState extends State<MainPage> {
   }
 
   // 初回データダウンロード確認ダイアログ → 実行（共通化ラッパー）
-  Future<void> _confirmAndDownloadInitialData() async {
-    if (!mounted) return;
+  Future<bool> _confirmAndDownloadInitialData() async {
+    if (!mounted) return false;
     // ユーザー確認なしで即実行
     final ok = await _runInitialDataDownload();
     try {
-      if (!mounted) return;
+      if (!mounted) return false;
       final err = SioSyncService().lastError;
       final msg = ok
           ? '初回データの準備が完了しました'
@@ -803,6 +836,7 @@ class _MainPageState extends State<MainPage> {
               : '初回データの準備に失敗しました');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (_) {}
+    return ok;
   }
 
   // 実際のデータダウンロード処理（プログレス表示を含む）

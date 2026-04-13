@@ -580,6 +580,13 @@ class Common extends ChangeNotifier {
     draftImagePath = null;
   }
 
+  // ============= 自動「近くの釣り場」検索の起動時リクエスト =============
+  bool autoNearbySearchPending = false;
+  void requestAutoNearbySearch() {
+    autoNearbySearchPending = true;
+    notifyListeners();
+  }
+
   Future<void> saveSelectedTeibou(String name, String nearestPoint, {int? id, double? lat, double? lng, int? prefId}) async {
     selectedTeibouName = name;
     selectedTeibouNearestPoint = nearestPoint;

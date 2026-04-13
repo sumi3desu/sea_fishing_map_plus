@@ -46,6 +46,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   final Map<int, int> _nearbyMetersById = {}; // port_id -> meters from current location
   double? _nearbyUserLat;
   double? _nearbyUserLng;
+  // 起動時の自動近隣検索（未選択時）の実行フラグ（同一ライフサイクル内で一度だけ）
+  bool _didStartupNearbyAutoSelect = false;
+  bool _startupNearbyRunning = false;
+  bool _didAutoSearchOnNearbyTab = false; // 「近くの釣り場」タブ表示時に一度だけ自動検索
 
   @override
   void initState() {
@@ -58,6 +62,8 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     SioDatabase().addListener(_onDbChanged);
     // 釣り場詳細の地図などからの選択変更を反映
     Common.instance.addListener(_onCommonChangedJump);
+    // 起動時、未選択なら一度だけ「近くの釣り場」を検索して最寄りを自動選択
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeRunStartupNearbyAutoSelect());
   }
 
   void _onDbChanged() {
@@ -69,6 +75,23 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   int _lastCenterTick = 0;
   void _onCommonChangedJump() async {
     if (!mounted) return;
+    // 起動時の自動近隣検索要求が来ている場合は、一度だけ検索＋自動選択を実施
+    final cmn = Common.instance;
+    if (cmn.autoNearbySearchPending) {
+      // 直近の状態に基づいて検索（必要なら数百ms後に再試行）
+      if (_loading) {
+        Future.delayed(const Duration(milliseconds: 120), _onCommonChangedJump);
+        return;
+      }
+      // 実行時にフラグを下げる（読み込み中に下げると取りこぼす可能性があるため）
+      cmn.autoNearbySearchPending = false;
+      // Main側の選択反映後に呼ばれる想定のため、ここでは自動選択は行わず一覧のみ更新
+      await _performNearbySearch(autoSelectNearest: false);
+      if (_nearby.isNotEmpty) {
+        _didStartupNearbyAutoSelect = true;
+      }
+      // 以降の通知処理へも続けて対応
+    }
     // 釣り場詳細などで選択が更新された場合に、一覧側もスクロール＆選択
     final common = Common.instance;
     // タブ切替直後の再センタリング要求（地域切替は行わずスクロールのみ）
@@ -477,6 +500,28 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     if (name != null) await prefs.setString('selected_teibou_name', name);
   }
 
+  // 起動時用：一度だけ「近くの釣り場」を検索
+  void _maybeRunStartupNearbyAutoSelect() async {
+    if (!mounted) return;
+    if (_didStartupNearbyAutoSelect || _startupNearbyRunning) return;
+    // データ読み込み完了を待つ
+    if (_loading) {
+      Future.delayed(const Duration(milliseconds: 120), _maybeRunStartupNearbyAutoSelect);
+      return;
+    }
+    _startupNearbyRunning = true;
+    // 現在の選択状態を確認し、既に選択済みなら自動選択は行わず検索のみ反映
+    final alreadySelected = (_selectedTeibouId != null) ||
+        (Common.instance.selectedTeibouName.isNotEmpty ||
+            Common.instance.selectedTeibouLat != 0.0 ||
+            Common.instance.selectedTeibouLng != 0.0);
+    await _performNearbySearch(autoSelectNearest: !alreadySelected);
+    _startupNearbyRunning = false;
+    if (_nearby.isNotEmpty) {
+      _didStartupNearbyAutoSelect = true;
+    }
+  }
+
   Future<void> _loadPointCoords() async {
     // Common.portFileData: [pointName, fileName]
     final pairs = Common.instance.portFileData;
@@ -528,6 +573,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
 
     // 地方でフィルタ
     final selectedRegion = _regions[_selectedRegionIndex];
+    // 「近くの釣り場」タブが表示され、一覧が空なら一度だけ自動検索を実行
+    if (selectedRegion == '近くの釣り場' && !_nearbyLoading && (_nearby.isEmpty) && (_nearbyError == null) && !_didAutoSearchOnNearbyTab) {
+      _didAutoSearchOnNearbyTab = true;
+      // ボタン押下時と同等の処理だが、選択状態は変更しない
+      WidgetsBinding.instance.addPostFrameCallback((_) => _performNearbySearch(autoSelectNearest: false));
+    }
     List<Map<String, dynamic>> filtered;
     if (selectedRegion == 'お気に入り') {
       filtered = _rows.where((r) {
@@ -676,6 +727,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   }
 
   Future<void> _onSearchNearby() async {
+    // ユーザー操作（ボタン押下）時は自動選択しない
+    await _performNearbySearch(autoSelectNearest: false);
+  }
+
+  // 実体：近くの釣り場検索（autoSelectNearest=true のときのみ最寄りを自動選択）
+  Future<void> _performNearbySearch({required bool autoSelectNearest}) async {
     setState(() {
       _nearbyLoading = true;
       _nearbyError = null;
@@ -743,6 +800,38 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         _nearby = top;
         _nearbyLoading = false;
       });
+
+      // 起動時のみ：最寄りの釣り場を自動選択して保存
+      if (autoSelectNearest && top.isNotEmpty) {
+        final first = top.first;
+        final int? selId = first['port_id'] is int ? first['port_id'] as int : int.tryParse(first['port_id']?.toString() ?? '');
+        final String selName = (first['port_name'] ?? '').toString();
+        final double? selLat = _toDouble(first['latitude']);
+        final double? selLng = _toDouble(first['longitude']);
+        int? prefId;
+        try {
+          prefId = first['todoufuken_id'] is int
+              ? first['todoufuken_id'] as int
+              : int.tryParse(first['todoufuken_id']?.toString() ?? '') ?? int.tryParse(first['pref_id_from_port']?.toString() ?? '');
+        } catch (_) {}
+        if (selId != null) {
+          setState(() {
+            _selectedTeibouId = selId;
+            _selectedTeibouName = selName;
+          });
+          await _saveSelection(id: selId, name: selName);
+          // 潮汐ポイント（最寄り）も設定
+          if (selLat != null && selLng != null && !_pointsLoading && _pointCoords.isNotEmpty) {
+            final np = _nearestPointName(selLat, selLng);
+            if (np != null) {
+              Common.instance.tidePoint = np;
+              Common.instance.savePoint(np);
+              Common.instance.saveSelectedTeibou(selName, np, lat: selLat, lng: selLng, prefId: prefId);
+              Common.instance.notify();
+            }
+          }
+        }
+      }
     } catch (e) {
       setState(() {
         _nearbyError = '検索中にエラーが発生しました';
