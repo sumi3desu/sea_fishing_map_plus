@@ -208,7 +208,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
               const SizedBox(height: 12),
               if (!_emailVerified) ...[
                 const Text(
-                  '※ 釣り場申請はメール認証が必要です。申請ボタンを押すと「メール認証」を行います。',
+                  '※ 釣り場申請は「メール認証」が必要です。申請ボタンを押すと「メール認証」を行います。',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 8),

@@ -24,4 +24,4 @@ const int meshSize = 30;
 // Message
 //
 final String warningSelectSpot = '「釣果」で投稿を選ぶか「釣り場一覧」で釣り場を選んでください。';
-final String warningCertificationMail = 'メール認証をお願いします。';
+//final String warningCertificationMail = 'メール認証をお願いします。';

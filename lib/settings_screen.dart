@@ -13,8 +13,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:share_plus/share_plus.dart';
@@ -35,6 +33,9 @@ import 'html_view_page.dart';
 import 'sql_db.dart';
 import 'appconfig.dart';
 import 'db_rebuild_screen.dart';
+import 'providers/premium_state_notifier.dart';
+import 'premium_page.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 // Unify verification endpoint in one place
 String kVerifyUrl = '${AppConfig.instance.baseUrl}verify.php';
@@ -71,8 +72,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
 
   // use top-level kVerifyUrl
 
-  final InAppPurchase _iap = InAppPurchase.instance;
-  StreamSubscription<List<PurchaseDetails>>? _restoreSub; // ← 復元イベント購読を追加
+  // In-app purchase removed; RevenueCat migration planned. Stub fields removed.
 
   // ───────────── CSV Import/Export Helpers ─────────────
   Future<String> _exportTestResultCsvText() async {
@@ -384,15 +384,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
     WidgetsBinding.instance.addObserver(this);
     _loadHeaderFromPrefs();
 
-    // 設定画面でも purchaseStream を購読して、restorePurchases() の restored を拾う
-    _restoreSub = _iap.purchaseStream.listen(
-      _onPurchasesFromRestore,
-      onError: (e) {
-        testDebugPrint('[Settings] purchaseStream error: $e');
-      },
-    );
-
-    // 起動直後にレシート更新＋サーバ再検証を行い、権利状態を自動反映
+    // 起動直後に権利状態を再検証（IAP連携は削除済みのため、レシート更新は行わない）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshReceiptAndSyncHeader();
     });
@@ -406,7 +398,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
-    _restoreSub?.cancel();
     super.dispose();
   }
 
@@ -542,45 +533,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
     _lastHeaderRefreshMs = DateTime.now().millisecondsSinceEpoch;
     setState(() => _busyHeaderRefresh = true);
     try {
-      if (Platform.isIOS) {
-        try {
-          final add = _iap.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
-          final dyn = add as dynamic;
-          // まずは refreshReceipt を呼ばずに検証データだけ取得
-          String receiptBase64 = '';
-          try {
-            final ver = await dyn.refreshPurchaseVerificationData();
-            receiptBase64 = (ver.serverVerificationData as String?)
-                    ?.replaceAll('\n', '')
-                    .replaceAll('\r', '')
-                    .trim() ??
-                '';
-          } catch (_) {}
-          // 空なら refreshReceipt を一度だけ試す（ユーザー操作起点なので許容）
-          if (receiptBase64.isEmpty) {
-            try {
-              await dyn.refreshReceipt();
-              final ver2 = await dyn.refreshPurchaseVerificationData();
-              receiptBase64 = (ver2.serverVerificationData as String?)
-                      ?.replaceAll('\n', '')
-                      .replaceAll('\r', '')
-                      .trim() ??
-                  '';
-            } catch (_) {}
-          }
-          if (receiptBase64.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('lastReceiptData', receiptBase64);
-            if (mounted) setState(() => _hasReceiptData = true);
-            // productId の補完
-            final lastPid = prefs.getString('lastProductId');
-            final currPid = prefs.getString('currentProductId');
-            if (lastPid == null && currPid != null) {
-              await prefs.setString('lastProductId', currPid);
-            }
-          }
-        } catch (_) {}
-      }
+      // IAP連携削除のため、レシート更新処理はスキップ
       await _reverifyFromSavedReceipt();
     } finally {
       if (mounted) setState(() => _busyHeaderRefresh = false);
@@ -591,49 +544,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
     if (_busyHeaderRestore) return;
     setState(() => _busyHeaderRestore = true);
     try {
-      if (Platform.isIOS) {
-        try {
-          final add =
-              _iap.getPlatformAddition<InAppPurchaseStoreKitPlatformAddition>();
-          final dyn = add as dynamic;
-          // まずは検証データだけ取得
-          String receiptBase64 = '';
-          try {
-            final ver = await dyn.refreshPurchaseVerificationData();
-            receiptBase64 = (ver.serverVerificationData as String?)
-                    ?.replaceAll('\n', '')
-                    .replaceAll('\r', '')
-                    .trim() ??
-                '';
-          } catch (_) {}
-          // 空なら refreshReceipt を一度だけ試す
-          if (receiptBase64.isEmpty) {
-            try {
-              await dyn.refreshReceipt();
-              final ver2 = await dyn.refreshPurchaseVerificationData();
-              receiptBase64 = (ver2.serverVerificationData as String?)
-                      ?.replaceAll('\n', '')
-                      .replaceAll('\r', '')
-                      .trim() ??
-                  '';
-            } catch (_) {}
-          }
-          if (receiptBase64.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('lastReceiptData', receiptBase64);
-            if (mounted) setState(() => _hasReceiptData = true);
-            final lastPid = prefs.getString('lastProductId');
-            final currPid = prefs.getString('currentProductId');
-            if (lastPid == null && currPid != null) {
-              await prefs.setString('lastProductId', currPid);
-            }
-          }
-        } catch (_) {}
-      }
-      // ここで復元を呼ぶと、restored イベントが purchaseStream に流れてくる → _onPurchasesFromRestore で処理
-      await _iap.restorePurchases();
-
-      // レシートのみで検証できるケースもあるので最後に再検証も実行
+      // IAPの復元処理は削除。保存済みレシートでの再検証のみ実施。
       await _reverifyFromSavedReceipt();
 
       if (mounted) {
@@ -652,126 +563,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
     }
   }
 
-  // ← 復元イベント（restorePurchases の結果）をここで処理する
-  Future<void> _onPurchasesFromRestore(List<PurchaseDetails> purchases) async {
-    for (final p in purchases) {
-      if (p.status == PurchaseStatus.purchased || p.status == PurchaseStatus.restored) {
-        try {
-          await _verifyAndSaveFromPurchaseDetails(p);
-        } catch (e) {
-          testDebugPrint('[Settings] verify error: $e');
-        } finally {
-          try {
-            if (p.pendingCompletePurchase) {
-              await _iap.completePurchase(p);
-            }
-          } catch (_) {}
-        }
-      }
-    }
-  }
+  // IAP復元イベント処理は削除（RevenueCat移行後に再実装）
 
-  // purchase.details から verificationData を保存→サーバ検証→expiresDateMs/currentProductId を保存
-  Future<void> _verifyAndSaveFromPurchaseDetails(PurchaseDetails p) async {
-    final token = p.verificationData.serverVerificationData
-        .replaceAll('\n', '')
-        .replaceAll('\r', '')
-        .trim();
-
-    if (token.isEmpty) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastReceiptData', token);
-    await prefs.setString('lastProductId', p.productID);
-
-    final resp = await http.post(
-      Uri.parse(kVerifyUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'productId': p.productID, 'receiptData': token}),
-    );
-
-    if (resp.statusCode != 200) return;
-
-    final jsonResp = json.decode(resp.body) as Map<String, dynamic>;
-    final isActive = jsonResp['isActive'] == true;
-    final expiresMs =
-        (jsonResp['expiresDateMs'] is num) ? (jsonResp['expiresDateMs'] as num).toInt() : null;
-    final serverPid =
-        (jsonResp['productId'] is String) ? jsonResp['productId'] as String : null;
-    final env = (jsonResp['environment'] is String) ? jsonResp['environment'] as String : null;
-    final autoRenew = (jsonResp['autoRenewStatus'] is String)
-        ? jsonResp['autoRenewStatus'] as String
-        : null; // '1' or '0'
-    final reason = (jsonResp['reason'] is String) ? jsonResp['reason'] as String : null;
-
-    if (isActive) {
-      if (expiresMs != null) {
-        await prefs.setInt('expiresDateMs', expiresMs);
-        // 最終既知の有効期限も更新（起動直後の楽観的判定で使用）
-        await prefs.setInt('lastExpiresDateMs', expiresMs);
-      }
-      if (serverPid != null) await prefs.setString('currentProductId', serverPid);
-      if (mounted) {
-        setState(() {
-          _entExpiresMs = expiresMs ?? _entExpiresMs;
-          _entProductId = serverPid ?? _entProductId;
-          _entEnvironment = env ?? _entEnvironment;
-        });
-      }
-      // Home に再描画を促す
-      try {
-        ref.read(entitlementVersionProvider.notifier).state++;
-      } catch (_) {}
-      // 復元操作中であれば、環境と有効期限を軽く表示
-      if (mounted && _busyHeaderRestore) {
-        final when = _formatExpiry(expiresMs);
-        final labelEnv = env ?? '不明';
-        final msg = '復元結果: 環境=$labelEnv / 期限=${when ?? 'なし'}';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      }
-
-      // ログ出力: 購入/復元（expires_at が unknown の場合はログしない）
-      if (expiresMs != null) {
-        final purchasedMs = int.tryParse(p.transactionDate ?? '') ?? 0;
-        final purchasedAt = _fmtMs(purchasedMs);
-        final expiresAt = _fmtMs(expiresMs);
-        final autoLabel = (autoRenew == '1') ? 'ON' : (autoRenew == '0') ? 'OFF' : 'unknown';
-        logPrint('purchase_or_restore product_id=${serverPid ?? p.productID} purchased_at=$purchasedAt expires_at=$expiresAt auto_renew_status=$autoLabel env=${env ?? 'unknown'}');
-      }
-    } else {
-      // 明確に無効ならクリア。ただし直前の期限は lastExpiresDateMs に退避
-      final prevExp = prefs.getInt('expiresDateMs');
-      if (prevExp != null) {
-        await prefs.setInt('lastExpiresDateMs', prevExp);
-      } else if (expiresMs != null) {
-        await prefs.setInt('lastExpiresDateMs', expiresMs);
-      }
-      await prefs.remove('expiresDateMs');
-      await prefs.remove('currentProductId');
-      // last* は残しておく（必要に応じて後続で再検証）
-      if (mounted) {
-        setState(() {
-          _entExpiresMs = null;
-          _entProductId = null;
-          _entEnvironment = env ?? _entEnvironment;
-        });
-      }
-      try {
-        ref.read(entitlementVersionProvider.notifier).state++;
-      } catch (_) {}
-      if (mounted && _busyHeaderRestore) {
-        final labelEnv = env ?? '不明';
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('復元結果: 環境=$labelEnv / 未購入')));
-      }
-
-      // ログ出力: 検証失敗や未購入（理由があれば付与）
-      final purchasedMs = int.tryParse(p.transactionDate ?? '') ?? 0;
-      final purchasedAt = _fmtMs(purchasedMs);
-      final r = reason ?? 'unknown';
-      logPrint('verification_inactive product_id=${serverPid ?? p.productID} purchased_at=$purchasedAt reason=$r env=${env ?? 'unknown'}');
-    }
-  }
+  // IAP連携削除のためプレースホルダ（RevenueCat移行後に置換）
+  Future<void> _verifyAndSaveFromPurchaseDetailsPlaceholder() async {}
 
   // lastReceiptData / lastProductId → サーバ再検証 → Prefs + UI 反映
   Future<void> _reverifyFromSavedReceipt() async {
@@ -1095,8 +890,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
                       final isRegistered = ref.watch(isEmailRegisteredProvider);
                       final user = asyncUser.valueOrNull;
                       final currentEmail = user?.email ?? '';
-                      final accountLabel = isRegistered ? 'アカウントの編集' : 'アカウントの登録';
-                      final accountIcon = isRegistered ? Icons.manage_accounts : Icons.person_add_alt_1;
+                      final accountLabel = 'アカウント設定';
+                      final accountIcon = Icons.manage_accounts;
                       return _actionRow(
                         icon: accountIcon,
                         label: accountLabel,
@@ -1118,6 +913,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
                   ),
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          _sectionTitle(context, 'プレミアム'),
+          const SizedBox(height: 12),
+          // 現在の状態カード
+          _sectionCard(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12.0),
+              child: Consumer(builder: (context, ref, _) {
+                final st = ref.watch(premiumStateProvider);
+                final String title;
+                if (st.isLoading) {
+                  title = '現在の状態 : 読み込み中';
+                } else {
+                  title = st.isPremium ? '現在の状態 : 購入済み' : '現在の状態 : 未購入';
+                }
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  title: Text(title),
+                  subtitle: (st.errorMessage ?? '').isNotEmpty ?
+                    Text('エラー: ${st.errorMessage}', style: const TextStyle(color: Colors.red)) : null,
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // プレミアム設定への遷移カード
+          _sectionCard(
+            child: _actionRow(
+              icon: Icons.workspace_premium_outlined,
+              label: 'プレミアム設定',
+              onTap: () {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumPage()));
+              },
+              showChevron: true,
             ),
           ),
 
@@ -1154,33 +986,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    //const Icon(Icons.monetization_on, size: _leadingIconSize),
-                    const SizedBox(width: _leadingGap),
-                    Expanded(
-                      child: Text(
-                        _currentPlanLabel(),
-                        style: Theme.of(context).textTheme.bodyMedium,
+                Builder(builder: (_) {
+                  final st = ref.watch(premiumStateProvider);
+                  String title;
+                  if (st.isLoading) title = 'プレミアム状態 : 読み込み中';
+                  else title = st.isPremium ? 'プレミアム状態 : 購入済み' : 'プレミアム状態 : 未購入';
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(width: _leadingGap),
+                          Expanded(child: Text(title, style: Theme.of(context).textTheme.bodyMedium)),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-                if (active && _entExpiresMs != null) ...[
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.only(left: _statusIndent),
-                    child: Text('有効期限: ${_formatExpiry(_entExpiresMs)}',
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                ],
-                if (_entEnvironment != null && _entEnvironment != 'Production') ...[
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.only(left: _statusIndent),
-                    child: Text('環境: Sandbox', style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                ],
+                      if ((st.errorMessage ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: _statusIndent),
+                          child: Text('エラー: ${st.errorMessage}', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red)),
+                        ),
+                      ],
+                    ],
+                  );
+                }),
 
                 const SizedBox(height: 12),
                 const Divider(height: 1),
@@ -1189,11 +1018,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
                   padding: const EdgeInsets.only(left: 0),
                   child: _actionRow(
                     icon: Icons.workspace_premium_outlined,
-                    label: active ? 'プレミアムの表示' : 'プレミアムの購入',
+                    label: 'プレミアム',
                     onTap: () {
-                      Navigator.of(context)
-                          .push(MaterialPageRoute(builder: (_) => const PaywallPage()))
-                          .then((_) => _refreshReceiptAndSyncHeader());
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumPage()));
                     },
                     showChevron: true,
                   ),
@@ -1309,12 +1136,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> with WidgetsBin
   }
 }
 
-/// ─────────────────────────────────────────────────────────
-/// ここから：ペイウォール（変更なし：購読は従来通り）
-/// ─────────────────────────────────────────────────────────
+class _PremiumStatusRow extends StatelessWidget {
+  final bool isLoading;
+  final bool isPremium;
+  const _PremiumStatusRow({required this.isLoading, required this.isPremium});
 
-enum _PlanState { currentActive, other }
+  Future<String> _resolvePlanLabel() async {
+    if (!isPremium) return '未購入';
+    try {
+      final info = await Purchases.getCustomerInfo();
+      // アクティブなエンタイトルメントから productIdentifier を取得
+      final ent = info.entitlements.active.values.isNotEmpty ? info.entitlements.active.values.first : null;
+      final pid = ent?.productIdentifier ?? '';
+      if (pid.isEmpty) return '購入済み';
+      // Offerings から該当商品のタイトルを探す
+      try {
+        final offerings = await Purchases.getOfferings();
+        final pkgs = <Package>[];
+        if (offerings.current != null) {
+          pkgs.addAll(offerings.current!.availablePackages);
+        }
+        for (final o in offerings.all.values) {
+          pkgs.addAll(o.availablePackages);
+        }
+        for (final p in pkgs) {
+          if (p.storeProduct.identifier == pid) {
+            final title = p.storeProduct.title;
+            return title.isNotEmpty ? title : '購入済み';
+          }
+        }
+      } catch (_) {}
+      // フォールバックで期間推測
+      if (pid.toLowerCase().contains('month')) return '月額プラン';
+      if (pid.toLowerCase().contains('year')) return '年額プラン';
+      return '購入済み';
+    } catch (_) {
+      return '購入済み';
+    }
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const ListTile(
+        contentPadding: EdgeInsets.symmetric(horizontal: 12),
+        title: Text('現在の状態: 読み込み中'),
+      );
+    }
+    return FutureBuilder<String>(
+      future: _resolvePlanLabel(),
+      builder: (context, snap) {
+        final label = snap.data ?? (isPremium ? '購入済み' : '未購入');
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          title: Text('現在の状態: $label'),
+        );
+      },
+    );
+  }
+}
+
+// PaywallPage は RevenueCat 移行後に再実装予定（現在は削除）
+/*
 class PaywallPage extends ConsumerStatefulWidget {
   const PaywallPage({super.key});
   @override
@@ -2081,6 +1964,7 @@ class _PaywallPageState extends ConsumerState<PaywallPage> {
     );
   }
 }
+*/
 
 class _VerifyResult {
   final bool active;

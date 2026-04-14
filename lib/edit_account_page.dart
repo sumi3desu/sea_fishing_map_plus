@@ -104,8 +104,8 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
         title: const Text('アカウント登録を解除しますか？'),
         content: const Text(
           'メールアドレスの登録を解除します。\n'
-          'メールアドレスの登録を解除しても直ちにはテスト結果は削除されません。\n'
-          '但し機種変更やアプリの再インストール時にテスト結果の引き継ぎができなくなります。',
+          'メールアドレスの登録を解除しても直ちにはお気に入り(釣り場)は削除されません。\n'
+          '但し機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
@@ -172,7 +172,7 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('アカウントの編集'),
+        title: const Text('アカウント設定'),
         backgroundColor: AppConfig.instance.appBarBackgroundColor,
         foregroundColor: AppConfig.instance.appBarForegroundColor,
         toolbarHeight: 0, // タイトルはボディ側に自前で表示（バナーの下）
@@ -199,7 +199,7 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
                 ),
                 Expanded(
                   child: Text(
-                    'アカウントの編集',
+                    'アカウント設定',
                     textAlign: TextAlign.left,
                     style: TextStyle(
                       color: AppConfig.instance.appBarForegroundColor,
@@ -294,7 +294,7 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        '登録を解除すると、機種変更やアプリの再インストール時にテスト結果の引き継ぎができなくなります。',
+                        '登録を解除すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
                         style: TextStyle(fontSize: 12.5, color: Colors.black87),
                         textAlign: TextAlign.left,
                       ),

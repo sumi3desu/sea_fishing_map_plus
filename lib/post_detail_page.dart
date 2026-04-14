@@ -33,6 +33,9 @@ class _PostDetailPageState extends State<PostDetailPage> {
   bool _triedServerAvatar = false;
   bool _liking = false;
   int? _likeCount;
+  int? _downCount; // 低評価件数
+  int? _myUpDown; // 1=thumb up, 0=thumb down, null/その他=未投票
+  bool _disliking = false; // 低評価送信中
   bool _canEdit = false;
   String _cacheTs = '';
   bool _updated = false; // 編集で更新されたか（戻り値用）
@@ -73,6 +76,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
               'post_id': pid.toString(),
               'user_id': info.userId.toString(),
               'action': 'regist',
+              'up_down': '1',
             },
           )
           .timeout(kHttpTimeout);
@@ -83,11 +87,22 @@ class _PostDetailPageState extends State<PostDetailPage> {
           final data = jsonDecode(resp.body);
           final status = (data is Map) ? (data['status']?.toString() ?? '') : '';
           if (status == 'success' && data is Map) {
-            final c = data['count'];
-            int? cc;
-            if (c is int) cc = c; else if (c is String) cc = int.tryParse(c);
+            int? cu; int? cd;
+            try {
+              final cUp = data['count_up'] ?? data['count'];
+              if (cUp is int) cu = cUp; else if (cUp is String) cu = int.tryParse(cUp);
+            } catch (_) {}
+            try {
+              final cDown = data['count_down'];
+              if (cDown is int) cd = cDown; else if (cDown is String) cd = int.tryParse(cDown);
+            } catch (_) {}
             if (mounted) {
-              setState(() => _likeCount = (cc != null && cc > 0) ? cc : null);
+              setState(() {
+                _likeCount = (cu != null && cu > 0) ? cu : null;
+                _downCount = (cd != null && cd > 0) ? cd : null;
+                final my = data['my_up_down'];
+                if (my is int) _myUpDown = my; else if (my is String) _myUpDown = int.tryParse(my);
+              });
             }
             final act = (data['action']?.toString() ?? '').toLowerCase();
             if (act == 'remove') snackMsg = '「いいね」を解除しました';
@@ -174,25 +189,164 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
   Future<void> _onTapThumbDown() async {
     try {
+      final pid = widget.item.postId;
+      if (pid == null || pid <= 0) return;
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      // メール認証を要求（既存ポリシーを踏襲）
       final email = (info.email).trim();
       if (email.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(warningCertificationMail)),
+          const SnackBar(content: Text('健全なコミュニティ維持のため、低評価にはメール認証が必要です。「設定」の「アカウント設定」を行なってください。')),
         );
         return;
       }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(warningCertificationMail)),
-        );
+      // 既に低評価済みならダイアログなしで解除。未低評価の場合のみ理由入力を求める
+      Map<String, String>? reasonData;
+      if (_myUpDown == 0) {
+        reasonData = null; // 解除のため理由不要
+      } else {
+        reasonData = await _promptThumbDownReason();
+        if (reasonData == null) return; // キャンセル
       }
-      return;
+      if (_disliking) return;
+      setState(() => _disliking = true);
+      final reason = reasonData?['reason'] ?? '';
+      final reasonText = reasonData?['reason_text'] ?? '';
+
+      final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_thumb_post.php');
+      final resp = await http
+          .post(
+            uri,
+            headers: const {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json, text/plain, */*',
+            },
+            body: {
+              'post_id': pid.toString(),
+              'user_id': info.userId.toString(),
+              'action': 'regist',
+              'up_down': '0',
+              'reason': reason,
+              'reason_text': reasonText,
+            },
+          )
+          .timeout(kHttpTimeout);
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        String snackMsg = '低評価を送信しました';
+        try {
+          final data = jsonDecode(resp.body);
+          final status = (data is Map) ? (data['status']?.toString() ?? '') : '';
+          if (status == 'success' && data is Map) {
+            int? cu; int? cd;
+            try {
+              final cUp = data['count_up'] ?? data['count'];
+              if (cUp is int) cu = cUp; else if (cUp is String) cu = int.tryParse(cUp);
+            } catch (_) {}
+            try {
+              final cDown = data['count_down'];
+              if (cDown is int) cd = cDown; else if (cDown is String) cd = int.tryParse(cDown);
+            } catch (_) {}
+            if (mounted) setState(() {
+              _likeCount = (cu != null && cu > 0) ? cu : null;
+              _downCount = (cd != null && cd > 0) ? cd : null;
+              final my = data['my_up_down'];
+              if (my is int) _myUpDown = my; else if (my is String) _myUpDown = int.tryParse(my);
+            });
+            final act = (data['action']?.toString() ?? '').toLowerCase();
+            if (act == 'remove') snackMsg = '低評価を解除しました';
+            else if (act == 'insert') snackMsg = '低評価を送信しました';
+          } else if (data is Map) {
+            final reason = (data['reason']?.toString() ?? '送信に失敗しました');
+            snackMsg = reason;
+          }
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(snackMsg)));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('送信に失敗しました（${resp.statusCode}）')));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('送信中にエラーが発生しました')));
+    } finally {
+      if (mounted) setState(() => _disliking = false);
     }
-    // 認証済みユーザは従来処理へ
-    await _openConfirmRequest();
+  }
+
+  Future<Map<String, String>?> _promptThumbDownReason() async {
+    final reasons = <String>[
+      '不適切な内容',
+      '誤った釣り場情報',
+      '虚偽の投稿',
+      '広告・宣伝',
+      'スパム・いたずら',
+      '釣り禁止エリアの可能性',
+      'その他',
+    ];
+    String? selected;
+    final controller = TextEditingController();
+    return showDialog<Map<String, String>?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final canSend = (selected != null && selected!.isNotEmpty);
+            return AlertDialog(
+              title: const Text('低評価の理由'),
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ...reasons.map((r) => RadioListTile<String>(
+                          title: Text(r),
+                          value: r,
+                          groupValue: selected,
+                          onChanged: (v) => setStateDialog(() => selected = v),
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                        )),
+                    const SizedBox(height: 8),
+                    const Text('補足説明（200桁まで）'),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: controller,
+                      maxLines: 3,
+                      maxLength: 200,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        hintText: '任意で入力してください',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed: canSend
+                      ? () {
+                          final text = controller.text.trim();
+                          Navigator.of(ctx).pop({
+                            'reason': selected!,
+                            'reason_text': text,
+                          });
+                        }
+                      : null,
+                  child: const Text('送信'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _loadBanner() {
@@ -499,10 +653,21 @@ class _PostDetailPageState extends State<PostDetailPage> {
         try {
           final data = jsonDecode(resp.body);
           if (data is Map && (data['status']?.toString() ?? '') == 'success') {
-            final c = data['count'];
-            int? cc;
-            if (c is int) cc = c; else if (c is String) cc = int.tryParse(c);
-            if (mounted) setState(() => _likeCount = (cc != null && cc > 0) ? cc : null);
+            int? cu; int? cd;
+            try {
+              final cUp = data['count_up'] ?? data['count'];
+              if (cUp is int) cu = cUp; else if (cUp is String) cu = int.tryParse(cUp);
+            } catch (_) {}
+            try {
+              final cDown = data['count_down'];
+              if (cDown is int) cd = cDown; else if (cDown is String) cd = int.tryParse(cDown);
+            } catch (_) {}
+            if (mounted) setState(() {
+              _likeCount = (cu != null && cu > 0) ? cu : null;
+              _downCount = (cd != null && cd > 0) ? cd : null;
+              final my = data['my_up_down'];
+              if (my is int) _myUpDown = my; else if (my is String) _myUpDown = int.tryParse(my);
+            });
           } else {
             final reason = (data is Map) ? (data['reason']?.toString() ?? '件数の取得に失敗しました') : '件数の取得に失敗しました';
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
@@ -803,8 +968,10 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
-                                      Icon(Icons.thumb_down, color: Colors.redAccent),
+                                    children: [
+                                      const Icon(Icons.thumb_down, color: Colors.redAccent),
+                                      const SizedBox(width: 8),
+                                      Text(_downCount != null ? _downCount.toString() : ''),
                                     ],
                                   ),
                                 ),

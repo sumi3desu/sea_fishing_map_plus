@@ -225,6 +225,14 @@ class _FishingResultGridState extends State<FishingResultGrid> {
               child: !_metaReady
                   ? const Center(child: CircularProgressIndicator())
                   : Builder(builder: (context) {
+                if (_items.isEmpty && !_loading) {
+                  return ListView(
+                    children: const [
+                      SizedBox(height: 120),
+                      Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
+                    ],
+                  );
+                }
                 final width = MediaQuery.of(context).size.width;
                 const double pad = 8;
                 const double gap = 4;

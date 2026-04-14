@@ -223,7 +223,7 @@ class _NewAccountPageState extends State<NewAccountPage> {
               child: Row(
                 children: [
                   IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
-                  const Expanded(child: Center(child: Text('アカウントの登録', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)))),
+                  const Expanded(child: Center(child: Text('アカウント設定', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)))),
                   const SizedBox(width: 48),
                 ],
               ),
@@ -247,7 +247,7 @@ class _NewAccountPageState extends State<NewAccountPage> {
                 child: const Padding(
                   padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
                   child: Text(
-                    'アカウントを登録すると、機種変更やアプリの再インストール時にテスト結果の引き継ぎができます。',
+                    'アカウントを登録すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができます。',
                     style: TextStyle(fontSize: 13, height: 1.5),
                   ),
                 ),
@@ -275,7 +275,7 @@ class _NewAccountPageState extends State<NewAccountPage> {
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'アカウントの登録を行うことで機種変更時にもテスト結果の引き継ぎができます。',
+                  'アカウントの登録を行うことで機種変更時にもお気に入り(釣り場)の引き継ぎができます。',
                   style: TextStyle(fontSize: 13.0, color: Colors.black87, height: 1.4),
                 ),
               ),

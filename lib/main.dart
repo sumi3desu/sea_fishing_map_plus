@@ -32,6 +32,8 @@ import 'sql_db.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'db_rebuild_screen.dart';
 import 'input_post_page.dart';
+import 'services/revenuecat_service.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 
 /// 初回データのダウンロードをユーザーに確認してから実行する共通関数
 Future<void> confirmAndDownloadInitialData({
@@ -93,6 +95,7 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+  // RevenueCat 初期化は画面構築後に実行（SnackBar表示のためMainPageで実施）
 
   // ユーザ情報初期化（UUID発行＋サーバ問い合わせ）
   final userInfo = await getOrInitUserInfo();
@@ -570,6 +573,28 @@ class _MainPageState extends State<MainPage> {
     } catch (_) {}
     // 初回起動時に同意ダイアログを検討して表示
     _maybeShowConsentDialog();
+
+    
+    // RevenueCat 初期化（UI構築後に実行し、エラーをSnackBarで通知）
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final info = await getOrInitUserInfo();
+        final appUserId = info.userId.toString();
+        // 非同期で実行（釣果などの初期読み込みと競合させない）
+        // エラーはcatchしてSnackbar表示
+        // ignore: unawaited_futures
+        RevenueCatService.configure(appUserId: appUserId).catchError((e) {
+          if (!mounted) return;
+          final msg = 'RevenueCat初期化エラー: ' + e.toString();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        });
+      } catch (e) {
+        if (!mounted) return;
+        final msg = 'RevenueCat初期化エラー: ' + e.toString();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    });
+    
     // 起動時にユーザ情報(特に role)を最新化して保存（各画面の表示整合性のため）
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshUserRole());
     // すでに同意済みで初回データが未準備なら、確認なしで自動実行
@@ -1175,3 +1200,7 @@ class _DetailTopAction extends StatelessWidget {
     );
   }
 }
+
+/*
+// RevenueCatService に移行したため、initRevenueCat は廃止
+*/

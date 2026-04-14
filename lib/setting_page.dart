@@ -18,6 +18,10 @@ import 'html_view_page.dart';
 import 'appconfig.dart';
 import 'constants.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'providers/premium_state_notifier.dart' as prem;
+import 'premium_page.dart';
+import 'services/revenuecat_service.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 class SettingPage extends StatefulWidget {
   SettingPage({super.key});
@@ -34,6 +38,7 @@ class _SettingPageState extends State<SettingPage> {
   static const double _leadingGap = 12;
   static const double _statusIndent = _leadingIconSize + _leadingGap; // 34px
   String _nickname = '';
+  bool _didInitPremium = false;
 
   void waitGetMapKind() async {
     Common.instance.mapKind = await Common.instance.loadMapKind();
@@ -118,6 +123,91 @@ class _SettingPageState extends State<SettingPage> {
         child: child,
       ),
     );
+  }
+
+  Widget _premiumStatusCard(r.WidgetRef ref) {
+    final st = ref.watch(prem.premiumStateProvider);
+    Widget content;
+    if (st.isLoading) {
+      content = const ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+        title: Text('現在の状態: 読み込み中'),
+      );
+    } else if (!st.isPremium) {
+      content = const ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+        title: Text('現在の状態: 未購入'),
+      );
+    } else {
+      content = FutureBuilder<String>(
+        future: _resolveActiveProductTitle(),
+        builder: (context, snap) {
+          final t = snap.data ?? '購入済み';
+          return ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: Text('現在の状態: $t'),
+          );
+        },
+      );
+    }
+    return _sectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          content,
+          if ((st.errorMessage ?? '').isNotEmpty)
+            const SizedBox(height: 4),
+          if ((st.errorMessage ?? '').isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('エラー: ${st.errorMessage}', style: const TextStyle(color: Colors.red)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<String> _resolveActiveProductTitle() async {
+    try {
+      // RevenueCat 構成が完了していない場合は安全にフォールバック
+      if (!RevenueCatService.isConfigured) {
+        await RevenueCatService.waitUntilConfigured(timeout: const Duration(seconds: 5));
+        if (!RevenueCatService.isConfigured) return '購入済み';
+      }
+      final info = await Purchases.getCustomerInfo();
+      final ent = info.entitlements.active.values.isNotEmpty
+          ? info.entitlements.active.values.first
+          : null;
+      final pid = ent?.productIdentifier ?? '';
+      if (pid.isEmpty) return '購入済み';
+      // Offeringsからタイトル解決
+      try {
+        final offerings = await Purchases.getOfferings();
+        final pkgs = <Package>[];
+        if (offerings.current != null) pkgs.addAll(offerings.current!.availablePackages);
+        for (final o in offerings.all.values) {
+          for (final p in o.availablePackages) {
+            if (!pkgs.any((e) => e.identifier == p.identifier)) pkgs.add(p);
+          }
+        }
+        for (final p in pkgs) {
+          if (p.storeProduct.identifier == pid) {
+            final title = p.storeProduct.title;
+            return title.isNotEmpty ? title : '購入済み';
+          }
+        }
+      } catch (_) {}
+      // フォールバック（IDから推測）
+      final lpid = pid.toLowerCase();
+      if (lpid.contains('month')) return '購入済み（月額）';
+      if (lpid.contains('year')) return '購入済み（年額）';
+      return '購入済み（$pid）';
+    } catch (_) {
+      return '購入済み';
+    }
   }
   // 報告フォームをWebViewで開く（uid/app/platformを付与）
   Future<void> _openReportForm() async {
@@ -271,6 +361,67 @@ class _SettingPageState extends State<SettingPage> {
     );
   }
 
+  Widget _premiumNavCard() {
+    return _sectionCard(
+      child: _actionRow(
+        icon: Icons.workspace_premium_outlined,
+        label: 'プレミアム設定',
+        onTap: () {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumPage()));
+        },
+        showChevron: true,
+      ),
+    );
+  }
+
+  Widget _premiumCombinedCard(r.WidgetRef ref) {
+    // 統合カード（上: 現在の状態, 下: プレミアム設定, Dividerで区切る）
+    final st = ref.watch(prem.premiumStateProvider);
+    Widget statusRow;
+    if (st.isLoading) {
+      statusRow = const ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+        title: Text('プレミアム状態: 読み込み中'),
+      );
+    } else if (!st.isPremium) {
+      statusRow = const ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+        title: Text('プレミアム状態: 未購入'),
+      );
+    } else {
+      statusRow = FutureBuilder<String>(
+        future: _resolveActiveProductTitle(),
+        builder: (context, snap) {
+          final t = snap.data ?? '購入済み';
+          return ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: Text('プレミアム状態: $t'),
+          );
+        },
+      );
+    }
+    return _sectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          statusRow,
+          const Divider(height: 1),
+          _actionRow(
+            icon: Icons.workspace_premium_outlined,
+            label: 'プレミアム設定',
+            onTap: () {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PremiumPage()));
+            },
+            showChevron: true,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
 
   String maskEmail(String email) {
@@ -367,6 +518,17 @@ class _SettingPageState extends State<SettingPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // 初回にプレミアム状態を取得（設定画面表示時）
+        r.Consumer(builder: (context, ref, _) {
+          if (!_didInitPremium) {
+            _didInitPremium = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              try { await ref.read(prem.premiumStateProvider.notifier).initialize(); } catch (_) {}
+            });
+          }
+          return const SizedBox.shrink();
+        }),
+
         _sectionTitle(context, 'アカウント'),
         const SizedBox(height: 12),
         r.Consumer(builder: (context, ref, _) {
@@ -413,8 +575,8 @@ class _SettingPageState extends State<SettingPage> {
                       final isRegistered = r.ProviderScope.containerOf(context).read(isEmailRegisteredProvider);
                       // read() は同期値。ボタン押下時の画面遷移のみに使用
                       final currentEmail = asyncUser.valueOrNull?.email ?? '';
-                      final accountLabel = isRegistered ? 'アカウントの編集' : 'アカウントの登録';
-                      final accountIcon = isRegistered ? Icons.manage_accounts : Icons.person_add_alt_1;
+                      final accountLabel = 'アカウント設定';
+                      final accountIcon = Icons.manage_accounts;
                       return _actionRow(
                         icon: accountIcon,
                         label: accountLabel,
@@ -439,6 +601,11 @@ class _SettingPageState extends State<SettingPage> {
             ),
           );
         }),
+
+        const SizedBox(height: 24),
+          _sectionTitle(context, 'プレミアム'),
+          const SizedBox(height: 12),
+          r.Consumer(builder: (context, ref, _) => _premiumCombinedCard(ref)),
 
         const SizedBox(height: 24),
         _sectionTitle(context, 'プロフィール'),
