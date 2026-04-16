@@ -4,9 +4,14 @@ import 'appconfig.dart';
 
 class HtmlViewPage extends StatefulWidget {
   final String title; // 画面タイトル
-  final String url;  // 外部から渡すURL（POST時もactionに使用）
+  final String url; // 外部から渡すURL（POST時もactionに使用）
   final Map<String, String>? postParams; // POSTで送る場合のフォームデータ（指定時は自動submit）
-  const HtmlViewPage({super.key, required this.title, required this.url, this.postParams});
+  const HtmlViewPage({
+    super.key,
+    required this.title,
+    required this.url,
+    this.postParams,
+  });
 
   @override
   _HtmlViewPageState createState() => _HtmlViewPageState();
@@ -21,19 +26,20 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
   void initState() {
     super.initState();
     _isMounted = true;
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (url) {
-            _currentUrl = url;
-          },
-          onUrlChange: (change) {
-            _currentUrl = change.url;
-          },
-        ),
-      )
-      ..clearCache(); // キャッシュをクリア
+    _controller =
+        WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..setNavigationDelegate(
+            NavigationDelegate(
+              onPageStarted: (url) {
+                _currentUrl = url;
+              },
+              onUrlChange: (change) {
+                _currentUrl = change.url;
+              },
+            ),
+          )
+          ..clearCache(); // キャッシュをクリア
 
     // asset://assets/... の場合はアセットを読み込む
     if (widget.url.startsWith('asset://assets/')) {
@@ -43,7 +49,9 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
     } else if (widget.postParams != null && widget.postParams!.isNotEmpty) {
       // POST パラメータが指定された場合は、自己送信フォームで POST するHTMLを生成して読み込む
       final sb = StringBuffer();
-      sb.writeln('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/></head>');
+      sb.writeln(
+        '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"/></head>',
+      );
       sb.writeln('<body onload="document.forms[0].submit()">');
       sb.writeln('<form method="POST" action="${widget.url}">');
       widget.postParams!.forEach((k, v) {
@@ -67,7 +75,8 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
 
   Future<void> _handleBack() async {
     try {
-      final isComplete = (_currentUrl != null && _currentUrl!.contains('submit_report.php'));
+      final isComplete =
+          (_currentUrl != null && _currentUrl!.contains('submit_report.php'));
       if (isComplete) {
         if (_isMounted) Navigator.of(context).maybePop();
         return;
@@ -95,7 +104,9 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
     return WillPopScope(
       onWillPop: () async {
         try {
-          final isComplete = (_currentUrl != null && _currentUrl!.contains('submit_report.php'));
+          final isComplete =
+              (_currentUrl != null &&
+                  _currentUrl!.contains('submit_report.php'));
           if (isComplete) return true; // pop screen
           if (await _controller.canGoBack()) {
             await _controller.goBack();
@@ -109,10 +120,7 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
           title: Text(widget.title),
           backgroundColor: AppConfig.instance.appBarBackgroundColor,
           foregroundColor: AppConfig.instance.appBarForegroundColor,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _handleBack,
-          ),
+          leading: BackButton(onPressed: _handleBack),
         ),
         body: WebViewWidget(controller: _controller),
       ),

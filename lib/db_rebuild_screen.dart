@@ -9,6 +9,8 @@ import 'package:sqflite/sqflite.dart';
 
 import 'main.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 import 'sio_database.dart';
 import 'sync_service.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
@@ -30,11 +32,7 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   Map<String, int> _remote = {};
   String? _error;
   // 釣り場データを構成するテーブル群
-  static const List<String> _fishingTables = [
-    'teibou',
-    'kubun',
-    'todoufuken',
-  ];
+  static const List<String> _fishingTables = ['teibou', 'kubun', 'todoufuken'];
 
   // ローカルの件数（情報がない判定に使用）
   final Map<String, int> _rowCounts = {};
@@ -43,62 +41,104 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   void initState() {
     super.initState();
     _refreshVersions();
-    _bannerAd = BannerAd(
-      size: AdSize.banner,
-      adUnitId: 'ca-app-pub-3940256099942544/2934735716',
-      listener: BannerAdListener(onAdLoaded: (_) => setState(() {}), onAdFailedToLoad: (ad, err) { ad.dispose(); }),
-      request: const AdRequest(),
-    )..load();
+    final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+    if (!isPremium) {
+      _bannerAd = BannerAd(
+        size: AdSize.banner,
+        adUnitId: 'ca-app-pub-3940256099942544/2934735716',
+        listener: BannerAdListener(
+          onAdLoaded: (_) => setState(() {}),
+          onAdFailedToLoad: (ad, err) {
+            ad.dispose();
+          },
+        ),
+        request: const AdRequest(),
+      )..load();
+    }
   }
 
   @override
   void dispose() {
     super.dispose();
   }
+
   Future<void> _loadFishing({required bool force}) async {
     if (!mounted) return;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      final ok = await SioSyncService().syncFishingData(userId: info.userId, force: force);
+      final ok = await SioSyncService().syncFishingData(
+        userId: info.userId,
+        force: force,
+      );
       if (!mounted) return;
       if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('釣り場データを更新しました')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('釣り場データを更新しました')));
         // 一覧側へ更新を通知
-        try { SioDatabase().notifyListeners(); } catch (_) {}
+        try {
+          SioDatabase().notifyListeners();
+        } catch (_) {}
       } else {
         final err = SioSyncService().lastError;
-        final msg = (!kReleaseMode && (err != null && err.isNotEmpty))
-            ? '釣り場データの更新に失敗しました（$err）'
-            : '釣り場データの更新に失敗しました';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        final msg =
+            (!kReleaseMode && (err != null && err.isNotEmpty))
+                ? '釣り場データの更新に失敗しました（$err）'
+                : '釣り場データの更新に失敗しました';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('釣り場データの更新中にエラーが発生しました')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('釣り場データの更新中にエラーが発生しました')));
     } finally {
       await _refreshVersions();
-      if (mounted) setState(() { _loading = false; });
+      if (mounted)
+        setState(() {
+          _loading = false;
+        });
     }
   }
-  
+
   Future<void> _refreshVersions() async {
-    setState(() { _fetching = true; _error = null; });
+    setState(() {
+      _fetching = true;
+      _error = null;
+    });
     final startAt = DateTime.now();
     try {
       final loaded = await loadUserInfo();
       final info = loaded ?? await getOrInitUserInfo();
       // ローカルバージョン取得
       final db = await SioDatabase().database;
-      final localRows = await db.query('version', where: 'user_id = ?', whereArgs: [info.userId]);
-      final local = <String, int>{ for (final r in localRows) (r['name'] as String): (r['version'] as int) };
+      final localRows = await db.query(
+        'version',
+        where: 'user_id = ?',
+        whereArgs: [info.userId],
+      );
+      final local = <String, int>{
+        for (final r in localRows) (r['name'] as String): (r['version'] as int),
+      };
       // ローカル件数取得
       for (final t in _fishingTables) {
-        final cnt = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $t')) ?? 0;
+        final cnt =
+            Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM $t'),
+            ) ??
+            0;
         _rowCounts[t] = cnt;
       }
       // リモートバージョン取得
-      final remoteMap = await SioSyncService().fetchRemoteVersionMap(userId: info.userId);
+      final remoteMap = await SioSyncService().fetchRemoteVersionMap(
+        userId: info.userId,
+      );
       if (remoteMap.isEmpty) {
         if (!mounted) return;
         setState(() {
@@ -108,13 +148,20 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
         });
         // 画面上部の表示に加えて簡易通知
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('最新データの確認に失敗しました。通信環境をご確認のうえ、再度お試しください。')),
+          const SnackBar(
+            content: Text('最新データの確認に失敗しました。通信環境をご確認のうえ、再度お試しください。'),
+          ),
         );
         return;
       }
-      setState(() { _local = local; _remote = remoteMap; });
+      setState(() {
+        _local = local;
+        _remote = remoteMap;
+      });
     } catch (e) {
-      setState(() { _error = '最新データの確認に失敗しました'; });
+      setState(() {
+        _error = '最新データの確認に失敗しました';
+      });
     } finally {
       // 最低2秒は「確認中」を維持してチラつきを抑制
       final minDuration = const Duration(seconds: 2);
@@ -122,7 +169,10 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
       if (elapsed < minDuration) {
         await Future.delayed(minDuration - elapsed);
       }
-      if (mounted) setState(() { _fetching = false; });
+      if (mounted)
+        setState(() {
+          _fetching = false;
+        });
     }
   }
 
@@ -135,66 +185,94 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            if (_bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
+            Consumer(
+              builder: (context, ref, _) {
+                final isPremium =
+                    ref.watch(prem.premiumStateProvider).isPremium;
+                if (isPremium || _bannerAd == null)
+                  return const SizedBox.shrink();
+                return Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                );
+              },
+            ),
             Container(
               height: kToolbarHeight,
               color: Colors.black,
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
-                  const Expanded(child: Center(child: Text('最新データの更新', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)))),
+                  BackButton(
+                    color: Colors.white,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        '最新データの更新',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 48),
                 ],
               ),
             ),
             Expanded(
               child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _infoCard(),
-            const SizedBox(height: 12),
-            _fishingTile(),
-            const SizedBox(height: 16),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.7,
-                    child: ElevatedButton(
-                      onPressed: (_loading || _fetching) ? null : _refreshVersions,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_fetching)
-                              const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            else
-                              const Icon(Icons.refresh),
-                            const SizedBox(width: 8),
-                            Text(_fetching ? '確認中…' : '最新データを確認'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _infoCard(),
+                    const SizedBox(height: 12),
+                    _fishingTile(),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: MediaQuery.of(context).size.width * 0.7,
+                            child: ElevatedButton(
+                              onPressed:
+                                  (_loading || _fetching)
+                                      ? null
+                                      : _refreshVersions,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 2,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_fetching)
+                                      const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    else
+                                      const Icon(Icons.refresh),
+                                    const SizedBox(width: 8),
+                                    Text(_fetching ? '確認中…' : '最新データを確認'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
 
-                  /*SizedBox(
+                          /*SizedBox(
                     width: MediaQuery.of(context).size.width * 0.7,
                     child: ElevatedButton.icon(
                       onPressed: () => Navigator.of(context).maybePop(),
@@ -202,11 +280,11 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
                       label: const Text('戻る'),
                     ),
                   ),*/
-                ],
-              ),
-            )
-          ],
-        ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -260,8 +338,10 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
     }
     // バージョン差異
     final locals = _fishingTables.map((t) => _local[t] ?? -1).toList();
-    final anyUpdate = List.generate(_fishingTables.length, (i) => i)
-        .any((i) => locals[i] != -1 && remoteVals[i] != -1 && locals[i] < remoteVals[i]);
+    final anyUpdate = List.generate(_fishingTables.length, (i) => i).any(
+      (i) =>
+          locals[i] != -1 && remoteVals[i] != -1 && locals[i] < remoteVals[i],
+    );
     if (anyUpdate) {
       return (text: '更新あり', color: Colors.orange);
     }
@@ -283,68 +363,86 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('釣り場データ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    '釣り場データ',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   // 状態表示（このカードのバージョン表示の上）
-                  Builder(builder: (_) {
-                    final st = _fishingStatus();
-                    return Row(
-                      children: [
-                        Icon(
-                          st.color == Colors.green
-                              ? Icons.check_circle
-                              : (st.color == Colors.orange
-                                  ? Icons.info_outline
-                                  : Icons.warning_amber_rounded),
-                          color: st.color,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          st.text,
-                          style: TextStyle(color: st.color, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    );
-                  }),
+                  Builder(
+                    builder: (_) {
+                      final st = _fishingStatus();
+                      return Row(
+                        children: [
+                          Icon(
+                            st.color == Colors.green
+                                ? Icons.check_circle
+                                : (st.color == Colors.orange
+                                    ? Icons.info_outline
+                                    : Icons.warning_amber_rounded),
+                            color: st.color,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            st.text,
+                            style: TextStyle(
+                              color: st.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   // バージョン番号の表示はユーザーには不要なため非表示
                 ],
               ),
             ),
-            Builder(builder: (_) {
-              String label = '更新';
-              VoidCallback? onTap;
-              if (_loading || _fetching) {
-                onTap = null;
-              } else {
-                final remoteVals = _fishingTables.map((t) => _remote[t] ?? -1).toList();
-                if (remoteVals.every((v) => v == -1)) {
-                  label = '再試行';
-                  onTap = _refreshVersions;
+            Builder(
+              builder: (_) {
+                String label = '更新';
+                VoidCallback? onTap;
+                if (_loading || _fetching) {
+                  onTap = null;
                 } else {
-                  final missingAny = _fishingTables.any((t) => (_rowCounts[t] ?? 0) == 0);
-                  if (missingAny) {
-                    label = '今すぐ準備';
-                    onTap = () => _loadFishing(force: true);
+                  final remoteVals =
+                      _fishingTables.map((t) => _remote[t] ?? -1).toList();
+                  if (remoteVals.every((v) => v == -1)) {
+                    label = '再試行';
+                    onTap = _refreshVersions;
                   } else {
-                    final locals = _fishingTables.map((t) => _local[t] ?? -1).toList();
-                    final anyUpdate = List.generate(_fishingTables.length, (i) => i)
-                        .any((i) => locals[i] != -1 && remoteVals[i] != -1 && locals[i] < remoteVals[i]);
-                    if (anyUpdate) {
-                      label = '更新する';
-                      onTap = () => _loadFishing(force: false);
-                    } else {
-                      label = '再取得';
+                    final missingAny = _fishingTables.any(
+                      (t) => (_rowCounts[t] ?? 0) == 0,
+                    );
+                    if (missingAny) {
+                      label = '今すぐ準備';
                       onTap = () => _loadFishing(force: true);
+                    } else {
+                      final locals =
+                          _fishingTables.map((t) => _local[t] ?? -1).toList();
+                      final anyUpdate = List.generate(
+                        _fishingTables.length,
+                        (i) => i,
+                      ).any(
+                        (i) =>
+                            locals[i] != -1 &&
+                            remoteVals[i] != -1 &&
+                            locals[i] < remoteVals[i],
+                      );
+                      if (anyUpdate) {
+                        label = '更新する';
+                        onTap = () => _loadFishing(force: false);
+                      } else {
+                        label = '再取得';
+                        onTap = () => _loadFishing(force: true);
+                      }
                     }
                   }
                 }
-              }
-              return ElevatedButton(
-                onPressed: onTap,
-                child: Text(label),
-              );
-            }),
+                return ElevatedButton(onPressed: onTap, child: Text(label));
+              },
+            ),
           ],
         ),
       ),

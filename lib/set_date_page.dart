@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 import 'common.dart';
 
-class SetDatePage extends StatefulWidget {
+class SetDatePage extends ConsumerStatefulWidget {
   final bool showBanner;
   final bool showHeader;
-  SetDatePage({Key? key, this.showBanner = true, this.showHeader = true}) : super(key: key);
+  SetDatePage({Key? key, this.showBanner = true, this.showHeader = true})
+    : super(key: key);
 
   @override
   SetDatePageState createState() => SetDatePageState();
 }
 
-class SetDatePageState extends State<SetDatePage> {
+class SetDatePageState extends ConsumerState<SetDatePage> {
   BannerAd? _bannerAd;
   // 基準日（初期状態の選択日）
   DateTime _baseDate = Common.instance.tideDate;
@@ -29,7 +32,8 @@ class SetDatePageState extends State<SetDatePage> {
     _pageController = PageController(initialPage: _initialPage);
     _initMonthData();
     if (widget.showBanner) {
-      _loadBanner();
+      final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+      if (!isPremium) _loadBanner();
     }
   }
 
@@ -71,20 +75,21 @@ class SetDatePageState extends State<SetDatePage> {
     });
   }
 */
-// 例：月切り替え時
-Future<void> _onPageChanged(int index) async {
-  int monthOffset = index - _initialPage;
-  DateTime newMonth = _addMonths(_baseDate, monthOffset);
+  // 例：月切り替え時
+  Future<void> _onPageChanged(int index) async {
+    int monthOffset = index - _initialPage;
+    DateTime newMonth = _addMonths(_baseDate, monthOffset);
 
-  // 1) データ取得完了まで待つ
-  await Common.instance.getTide(false, newMonth);
+    // 1) データ取得完了まで待つ
+    await Common.instance.getTide(false, newMonth);
 
-  // 2) 完了したら画面更新
-  setState(() {
-    _currentPage    = index;
-    _displayedMonth = newMonth;
-  });
-}
+    // 2) 完了したら画面更新
+    setState(() {
+      _currentPage = index;
+      _displayedMonth = newMonth;
+    });
+  }
+
   /// 矢印ボタンから前の月に移動
   void _goToPreviousMonth() {
     _pageController.previousPage(
@@ -243,7 +248,7 @@ Future<void> _onPageChanged(int index) async {
   }
 
   /// 日付の更新処理（オプション）
-/*  対策1. 
+  /*  対策1. 
   void refreshDate() async {
     setState(() {
       _baseDate = Common.instance.tideDate;
@@ -255,20 +260,20 @@ Future<void> _onPageChanged(int index) async {
     });
   }*/
 
-Future<void> refreshDate() async {
-  DateTime newBase  = Common.instance.tideDate;
-  DateTime newMonth = DateTime(newBase.year, newBase.month, 1);
+  Future<void> refreshDate() async {
+    DateTime newBase = Common.instance.tideDate;
+    DateTime newMonth = DateTime(newBase.year, newBase.month, 1);
 
-  // データ更新を待ってから
-  await Common.instance.getTide(false, newMonth);
+    // データ更新を待ってから
+    await Common.instance.getTide(false, newMonth);
 
-  setState(() {
-    _baseDate      = newBase;
-    _displayedMonth= newMonth;
-    _currentPage   = _initialPage;
-    _pageController.jumpToPage(_initialPage);
-  });
-}
+    setState(() {
+      _baseDate = newBase;
+      _displayedMonth = newMonth;
+      _currentPage = _initialPage;
+      _pageController.jumpToPage(_initialPage);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -284,20 +289,30 @@ Future<void> refreshDate() async {
               bottom: false,
               child: Column(
                 children: [
-                  if (widget.showBanner && _bannerAd != null)
-                    Container(
-                      alignment: Alignment.center,
-                      width: _bannerAd!.size.width.toDouble(),
-                      height: _bannerAd!.size.height.toDouble(),
-                      child: AdWidget(ad: _bannerAd!),
-                    ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final isPremium =
+                          ref.watch(prem.premiumStateProvider).isPremium;
+                      if (!widget.showBanner ||
+                          isPremium ||
+                          _bannerAd == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return Container(
+                        alignment: Alignment.center,
+                        width: _bannerAd!.size.width.toDouble(),
+                        height: _bannerAd!.size.height.toDouble(),
+                        child: AdWidget(ad: _bannerAd!),
+                      );
+                    },
+                  ),
                   Container(
                     height: kToolbarHeight,
                     color: Colors.black,
                     child: Row(
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        BackButton(
+                          color: Colors.white,
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                         Expanded(
@@ -307,7 +322,10 @@ Future<void> refreshDate() async {
                               children: const [
                                 Icon(Icons.date_range, color: Colors.white),
                                 SizedBox(width: 8),
-                                Text('日付', style: TextStyle(color: Colors.white)),
+                                Text(
+                                  '日付',
+                                  style: TextStyle(color: Colors.white),
+                                ),
                               ],
                             ),
                           ),
@@ -319,7 +337,10 @@ Future<void> refreshDate() async {
                               Common.instance.tideDate = DateTime.now();
                               _baseDate = Common.instance.tideDate;
                               _displayedMonth = _baseDate;
-                              await Common.instance.getTide(false, _displayedMonth);
+                              await Common.instance.getTide(
+                                false,
+                                _displayedMonth,
+                              );
                               if (!mounted) return;
                               setState(() {
                                 _pageController.jumpToPage(_initialPage);
@@ -336,7 +357,10 @@ Future<void> refreshDate() async {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                             ),
                           ),
                         ),

@@ -59,15 +59,22 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   Future<List<_PostGridItem>> _fetch({required int page}) async {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts');
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
+      );
       final body = <String, String>{
         'get_kind': '1', // 釣果
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
+        'ambiguous_plevel': ambiguous_plevel.toString(),
         'ts': ts.toString(),
       };
       final resp = await http
-          .post(uri, body: body, headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'})
+          .post(
+            uri,
+            body: body,
+            headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+          )
           .timeout(kHttpTimeout);
       if (resp.statusCode != 200) return [];
       final data = jsonDecode(resp.body);
@@ -79,7 +86,15 @@ class _FishingResultGridState extends State<FishingResultGrid> {
       } else {
         return [];
       }
-      final list = rows.map((e) => _PostGridItem.fromJson(e as Map<String, dynamic>, AppConfig.instance.baseUrl)).toList();
+      final list =
+          rows
+              .map(
+                (e) => _PostGridItem.fromJson(
+                  e as Map<String, dynamic>,
+                  AppConfig.instance.baseUrl,
+                ),
+              )
+              .toList();
       // 画像ありのみ
       return list.where((e) => (e.thumbUrl ?? e.imageUrl) != null).toList();
     } catch (_) {
@@ -131,7 +146,8 @@ class _FishingResultGridState extends State<FishingResultGrid> {
       for (final r in rows) {
         final idVal = r['todoufuken_id'];
         final nameVal = r['todoufuken_name'];
-        final id = (idVal is int) ? idVal : int.tryParse(idVal?.toString() ?? '');
+        final id =
+            (idVal is int) ? idVal : int.tryParse(idVal?.toString() ?? '');
         final name = nameVal?.toString();
         if (id != null && name != null && name.isNotEmpty) {
           _prefNameById[id] = name;
@@ -159,7 +175,10 @@ class _FishingResultGridState extends State<FishingResultGrid> {
         var role = (info.role ?? '').toLowerCase();
         if (role != 'admin') {
           try {
-            final refreshed = await getUserInfoFromServer(uuid: info.uuid, email: null);
+            final refreshed = await getUserInfoFromServer(
+              uuid: info.uuid,
+              email: null,
+            );
             role = (refreshed.role ?? role).toLowerCase();
             // 保存しておく（他画面でも反映）
             final updated = UserInfo(
@@ -204,7 +223,13 @@ class _FishingResultGridState extends State<FishingResultGrid> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('🐟', style: TextStyle(fontSize: 20, color: AppConfig.instance.appBarForegroundColor)),
+                  Text(
+                    '🐟',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: AppConfig.instance.appBarForegroundColor,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     '釣果',
@@ -222,84 +247,97 @@ class _FishingResultGridState extends State<FishingResultGrid> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadFirst,
-              child: !_metaReady
-                  ? const Center(child: CircularProgressIndicator())
-                  : Builder(builder: (context) {
-                if (_items.isEmpty && !_loading) {
-                  return ListView(
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
-                    ],
-                  );
-                }
-                final width = MediaQuery.of(context).size.width;
-                const double pad = 8;
-                const double gap = 4;
-                final double cell = (width - pad * 2 - gap * 2) / 3.0;
-                // グループ分割（パターン2..4のみを使用。同一パターンは連続回避）
-                final groups = <_MosaicGroup>[];
-                int i = 0;
-                int prev = 0;
-                int? forceNext; // 2/3 の後は 4 を強制
-                final rng = math.Random(_items.length + _page);
-                while (i < _items.length) {
-                  final remain = _items.length - i;
-                  int pattern;
-                  // 最初のグループはパターン2（大1枚＋右に小2枚の縦並び）。残数不足なら4にフォールバック。
-                  if (i == 0) {
-                    pattern = (remain >= 3) ? 2 : 4;
-                  } else if (forceNext != null) {
-                    pattern = forceNext!;
-                    forceNext = null;
-                  } else {
-                    // 2,3は3件必要。4は1..3件。
-                    final viable = <int>[];
-                    if (remain >= 3) {
-                      viable.addAll([2, 3, 4]);
-                    } else {
-                      viable.addAll([4]);
-                    }
-                    // 直前パターン除外
-                    final candidates = viable.where((p) => p != prev).toList();
-                    if (candidates.isEmpty) {
-                      // どうしても連続回避できない場合は成立するものを選択
-                      pattern = 4;
-                    } else {
-                      pattern = candidates[rng.nextInt(candidates.length)];
-                      // 2/3は残数が3件必要。残数不足なら4にフォールバック
-                      if ((pattern == 2 || pattern == 3) && remain < 3) {
-                        pattern = 4;
-                      }
-                    }
-                  }
-                  final need = math.min(3, remain);
-                  final slice = _items.sublist(i, i + need);
-                  groups.add(_MosaicGroup(pattern: pattern, items: slice));
-                  i += need;
-                  if ((pattern == 2 || pattern == 3) && i < _items.length) {
-                    forceNext = 4; // 次は横3個
-                    prev = 4; // 連続回避の基準も4に設定
-                  } else {
-                    prev = pattern;
-                  }
-                }
-                return ListView.builder(
-                  controller: _sc,
-                  padding: const EdgeInsets.all(pad),
-                  itemCount: groups.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (context, gi) {
-                    if (gi >= groups.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final g = groups[gi];
-                    return _buildGroup(g, cell, gap);
-                  },
-                );
-              }),
+              child:
+                  !_metaReady
+                      ? const Center(child: CircularProgressIndicator())
+                      : Builder(
+                        builder: (context) {
+                          if (_items.isEmpty && !_loading) {
+                            return ListView(
+                              children: const [
+                                SizedBox(height: 120),
+                                Center(
+                                  child: Text('釣果が取得できませんでした。下に引っ張って更新してください。'),
+                                ),
+                              ],
+                            );
+                          }
+                          final width = MediaQuery.of(context).size.width;
+                          const double pad = 8;
+                          const double gap = 4;
+                          final double cell = (width - pad * 2 - gap * 2) / 3.0;
+                          // グループ分割（パターン2..4のみを使用。同一パターンは連続回避）
+                          final groups = <_MosaicGroup>[];
+                          int i = 0;
+                          int prev = 0;
+                          int? forceNext; // 2/3 の後は 4 を強制
+                          final rng = math.Random(_items.length + _page);
+                          while (i < _items.length) {
+                            final remain = _items.length - i;
+                            int pattern;
+                            // 最初のグループはパターン2（大1枚＋右に小2枚の縦並び）。残数不足なら4にフォールバック。
+                            if (i == 0) {
+                              pattern = (remain >= 3) ? 2 : 4;
+                            } else if (forceNext != null) {
+                              pattern = forceNext!;
+                              forceNext = null;
+                            } else {
+                              // 2,3は3件必要。4は1..3件。
+                              final viable = <int>[];
+                              if (remain >= 3) {
+                                viable.addAll([2, 3, 4]);
+                              } else {
+                                viable.addAll([4]);
+                              }
+                              // 直前パターン除外
+                              final candidates =
+                                  viable.where((p) => p != prev).toList();
+                              if (candidates.isEmpty) {
+                                // どうしても連続回避できない場合は成立するものを選択
+                                pattern = 4;
+                              } else {
+                                pattern =
+                                    candidates[rng.nextInt(candidates.length)];
+                                // 2/3は残数が3件必要。残数不足なら4にフォールバック
+                                if ((pattern == 2 || pattern == 3) &&
+                                    remain < 3) {
+                                  pattern = 4;
+                                }
+                              }
+                            }
+                            final need = math.min(3, remain);
+                            final slice = _items.sublist(i, i + need);
+                            groups.add(
+                              _MosaicGroup(pattern: pattern, items: slice),
+                            );
+                            i += need;
+                            if ((pattern == 2 || pattern == 3) &&
+                                i < _items.length) {
+                              forceNext = 4; // 次は横3個
+                              prev = 4; // 連続回避の基準も4に設定
+                            } else {
+                              prev = pattern;
+                            }
+                          }
+                          return ListView.builder(
+                            controller: _sc,
+                            padding: const EdgeInsets.all(pad),
+                            itemCount: groups.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (context, gi) {
+                              if (gi >= groups.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                );
+                              }
+                              final g = groups[gi];
+                              return _buildGroup(g, cell, gap);
+                            },
+                          );
+                        },
+                      ),
             ),
           ),
         ],
@@ -341,12 +379,14 @@ class _PostGridItem {
     if (rel.startsWith('http')) return rel;
     return baseUrl + 'post_images/' + rel;
   }
+
   String? get thumbUrl {
     if (thumbPath == null) return null;
     final rel = thumbPath!;
     if (rel.startsWith('http')) return rel;
     return baseUrl + 'post_images/' + rel;
   }
+
   factory _PostGridItem.fromJson(Map<String, dynamic> j, String baseUrl) {
     int? toInt(dynamic v) => v is int ? v : int.tryParse(v?.toString() ?? '');
     String? s(dynamic v) => v?.toString();
@@ -400,7 +440,9 @@ extension _MosaicBuilders on _FishingResultGridState {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map[postId.toString()] = ts;
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -413,7 +455,9 @@ extension _MosaicBuilders on _FishingResultGridState {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map.remove(postId.toString());
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -430,7 +474,14 @@ extension _MosaicBuilders on _FishingResultGridState {
     }
     return url;
   }
-  Widget _buildTile(_PostGridItem it, double left, double top, double w, double h) {
+
+  Widget _buildTile(
+    _PostGridItem it,
+    double left,
+    double top,
+    double w,
+    double h,
+  ) {
     final String? rawUrl = it.thumbUrl ?? it.imageUrl;
     final url = (rawUrl != null) ? _withTs(rawUrl, it.postId) : null;
     String topLabel = '';
@@ -438,12 +489,14 @@ extension _MosaicBuilders on _FishingResultGridState {
       final s = it.spotId!.toString();
       if (s.length >= 2) {
         final pid = int.tryParse(s.substring(0, 2));
-        if (pid != null && _prefNameById.containsKey(pid)) topLabel = _prefNameById[pid]!;
+        if (pid != null && _prefNameById.containsKey(pid))
+          topLabel = _prefNameById[pid]!;
       }
     }
     final bottomLabel = it.nickName ?? '';
     final bool canShowSpotName = (ambiguous_plevel == 0) || _isAdmin;
-    final String? spotName = (it.spotId != null) ? _spotNameById[it.spotId] : null;
+    final String? spotName =
+        (it.spotId != null) ? _spotNameById[it.spotId] : null;
     final String combinedTopLabel = () {
       String s = '';
       if (topLabel.isNotEmpty) s = topLabel;
@@ -470,25 +523,27 @@ extension _MosaicBuilders on _FishingResultGridState {
             // もし失敗した場合は従来の詳細表示にフォールバック
           }
           final String? detailUrlRaw = it.imageUrl ?? it.thumbUrl;
-          final String? detailUrl = (detailUrlRaw != null) ? _withTs(detailUrlRaw, it.postId) : null;
+          final String? detailUrl =
+              (detailUrlRaw != null) ? _withTs(detailUrlRaw, it.postId) : null;
           final updated = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => PostDetailPage(
-                item: PostDetailItem(
-                  userId: it.userId,
-                  postId: it.postId,
-                  postKind: it.postKind,
-                  exist: it.exist,
-                  title: it.title,
-                  detail: it.detail,
-                  imageUrl: detailUrl,
-                  nickName: it.nickName,
-                  createAt: it.createAt,
-                  spotId: it.spotId,
-                  showNearbyButton: true,
-                ),
-              ),
+              builder:
+                  (_) => PostDetailPage(
+                    item: PostDetailItem(
+                      userId: it.userId,
+                      postId: it.postId,
+                      postKind: it.postKind,
+                      exist: it.exist,
+                      title: it.title,
+                      detail: it.detail,
+                      imageUrl: detailUrl,
+                      nickName: it.nickName,
+                      createAt: it.createAt,
+                      spotId: it.spotId,
+                      showNearbyButton: true,
+                    ),
+                  ),
             ),
           );
           if (!mounted) return;
@@ -501,7 +556,12 @@ extension _MosaicBuilders on _FishingResultGridState {
           } else if (updated is Map) {
             final u = (updated['updated'] == true);
             final cleared = (updated['clearedImage'] == true);
-            final pid = updated['postId'] is int ? updated['postId'] as int : (updated['postId'] is String ? int.tryParse(updated['postId']) : null);
+            final pid =
+                updated['postId'] is int
+                    ? updated['postId'] as int
+                    : (updated['postId'] is String
+                        ? int.tryParse(updated['postId'])
+                        : null);
             if (u && cleared && pid != null) {
               // 画像が消された場合はグリッドからも項目を外す
               setState(() {
@@ -512,7 +572,9 @@ extension _MosaicBuilders on _FishingResultGridState {
               _removeImageTs(pid);
             } else if (u && pid != null) {
               final ts = DateTime.now().millisecondsSinceEpoch.toString();
-              setState(() { _imgTsByPost[pid] = ts; });
+              setState(() {
+                _imgTsByPost[pid] = ts;
+              });
               _saveImageTs(pid, ts);
             }
           }
@@ -522,7 +584,9 @@ extension _MosaicBuilders on _FishingResultGridState {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              url != null ? Image.network(url, fit: BoxFit.cover) : const ColoredBox(color: Colors.black12),
+              url != null
+                  ? Image.network(url, fit: BoxFit.cover)
+                  : const ColoredBox(color: Colors.black12),
               // 上部ラベル行（都道府県 + 釣り場名を半角スペース区切りで1つのラベルに）
               if (combinedTopLabel.isNotEmpty)
                 Positioned(
@@ -532,11 +596,20 @@ extension _MosaicBuilders on _FishingResultGridState {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 6),
-                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 2,
+                        horizontal: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Text(
                         combinedTopLabel,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -549,9 +622,18 @@ extension _MosaicBuilders on _FishingResultGridState {
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 6,
+                    ),
                     color: Colors.black45,
-                    child: Text(bottomLabel, style: const TextStyle(color: Colors.white, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                    child: Text(
+                      bottomLabel,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
             ],
@@ -568,16 +650,42 @@ extension _MosaicBuilders on _FishingResultGridState {
       case 2:
         height = cell * 2 + gap;
         tiles.add(_buildTile(g.items[0], 0, 0, cell * 2 + gap, height));
-        tiles.add(_buildTile(g.items.length > 1 ? g.items[1] : g.items[0], cell * 2 + gap * 2, 0, cell, cell));
+        tiles.add(
+          _buildTile(
+            g.items.length > 1 ? g.items[1] : g.items[0],
+            cell * 2 + gap * 2,
+            0,
+            cell,
+            cell,
+          ),
+        );
         if (g.items.length > 2) {
-          tiles.add(_buildTile(g.items[2], cell * 2 + gap * 2, cell + gap, cell, cell));
+          tiles.add(
+            _buildTile(g.items[2], cell * 2 + gap * 2, cell + gap, cell, cell),
+          );
         }
         break;
       case 3:
         height = cell * 2 + gap;
         tiles.add(_buildTile(g.items[0], 0, 0, cell, cell));
-        tiles.add(_buildTile(g.items.length > 1 ? g.items[1] : g.items[0], 0, cell + gap, cell, cell));
-        tiles.add(_buildTile(g.items.length > 2 ? g.items[2] : g.items[0], cell + gap, 0, cell * 2 + gap, height));
+        tiles.add(
+          _buildTile(
+            g.items.length > 1 ? g.items[1] : g.items[0],
+            0,
+            cell + gap,
+            cell,
+            cell,
+          ),
+        );
+        tiles.add(
+          _buildTile(
+            g.items.length > 2 ? g.items[2] : g.items[0],
+            cell + gap,
+            0,
+            cell * 2 + gap,
+            height,
+          ),
+        );
         break;
       default:
         height = cell;

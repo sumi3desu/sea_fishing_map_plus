@@ -13,15 +13,17 @@ import 'avatar_crop_page.dart';
 import 'package:flutter/cupertino.dart';
 import 'background_crop_page.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 
-class ProfileEditPage extends StatefulWidget {
+class ProfileEditPage extends ConsumerStatefulWidget {
   const ProfileEditPage({super.key});
 
   @override
-  State<ProfileEditPage> createState() => _ProfileEditPageState();
+  ConsumerState<ProfileEditPage> createState() => _ProfileEditPageState();
 }
 
-class _ProfileEditPageState extends State<ProfileEditPage> {
+class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
   final TextEditingController _nickController = TextEditingController();
   bool _saving = false;
   bool _isEditing = false;
@@ -39,7 +41,10 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   void initState() {
     super.initState();
     _load();
-    _loadBanner();
+    final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+    if (!isPremium) {
+      _loadBanner();
+    }
   }
 
   Future<void> _load() async {
@@ -93,7 +98,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     try {
       final info = await loadUserInfo();
       if (info == null || info.userId <= 0) return;
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_profile_images.php');
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_profile_images.php',
+      );
       final resp = await http
           .post(uri, body: {'user_id': info.userId.toString()})
           .timeout(kHttpTimeout);
@@ -119,7 +126,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Future<void> _pickFromGallery() async {
     try {
-      final x = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1024, maxHeight: 1024, imageQuality: 88);
+      final x = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 88,
+      );
       if (x != null) {
         if (!mounted) return;
         final croppedPath = await Navigator.push<String?>(
@@ -138,7 +150,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Future<void> _pickFromCamera() async {
     try {
-      final x = await _picker.pickImage(source: ImageSource.camera, maxWidth: 1024, maxHeight: 1024, imageQuality: 88);
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 88,
+      );
       if (x != null) {
         if (!mounted) return;
         final croppedPath = await Navigator.push<String?>(
@@ -160,29 +177,30 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     if (isIOS) {
       await showCupertinoModalPopup(
         context: context,
-        builder: (ctx) => CupertinoActionSheet(
-          title: const Text('登録方法（プロフィール画像）'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _pickFromCamera();
-              },
-              child: const Text('写真を撮る'),
+        builder:
+            (ctx) => CupertinoActionSheet(
+              title: const Text('登録方法（プロフィール画像）'),
+              actions: [
+                CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _pickFromCamera();
+                  },
+                  child: const Text('写真を撮る'),
+                ),
+                CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _pickFromGallery();
+                  },
+                  child: const Text('ギャラリーから写真を選択する'),
+                ),
+              ],
+              cancelButton: CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('キャンセル'),
+              ),
             ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _pickFromGallery();
-              },
-              child: const Text('ギャラリーから写真を選択する'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('キャンセル'),
-          ),
-        ),
       );
     } else {
       await showModalBottomSheet(
@@ -191,9 +209,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           return SafeArea(
             child: Wrap(
               children: [
-                const ListTile(
-                  title: Text('登録方法（プロフィール画像）'),
-                ),
+                const ListTile(title: Text('登録方法（プロフィール画像）')),
                 ListTile(
                   leading: const Icon(Icons.photo_camera),
                   title: const Text('写真を撮る'),
@@ -225,7 +241,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Future<void> _pickBgFromGallery() async {
     try {
-      final x = await _picker.pickImage(source: ImageSource.gallery, maxWidth: 4096, maxHeight: 4096, imageQuality: 92);
+      final x = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 4096,
+        maxHeight: 4096,
+        imageQuality: 92,
+      );
       if (x != null) {
         if (!mounted) return;
         final croppedPath = await Navigator.push<String?>(
@@ -244,7 +265,12 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
 
   Future<void> _pickBgFromCamera() async {
     try {
-      final x = await _picker.pickImage(source: ImageSource.camera, maxWidth: 4096, maxHeight: 4096, imageQuality: 92);
+      final x = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 4096,
+        maxHeight: 4096,
+        imageQuality: 92,
+      );
       if (x != null) {
         if (!mounted) return;
         final croppedPath = await Navigator.push<String?>(
@@ -261,13 +287,17 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     } catch (_) {}
   }
 
-  Future<void> _uploadProfileFile(String localPath, {required String kind}) async {
+  Future<void> _uploadProfileFile(
+    String localPath, {
+    required String kind,
+  }) async {
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       final uri = Uri.parse('${AppConfig.instance.baseUrl}enter_profile.php');
-      final req = http.MultipartRequest('POST', uri)
-        ..fields['user_id'] = info.userId.toString()
-        ..fields['type'] = kind;
+      final req =
+          http.MultipartRequest('POST', uri)
+            ..fields['user_id'] = info.userId.toString()
+            ..fields['type'] = kind;
       final file = await http.MultipartFile.fromPath('file', localPath);
       req.files.add(file);
       final resp = await req.send();
@@ -283,31 +313,32 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
     if (isIOS) {
       await showCupertinoModalPopup(
         context: context,
-        builder: (ctx) => CupertinoActionSheet(
-          title: const Text('登録方法(背景画像)'),
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _pickBgFromCamera();
-              },
-              child: const Text('写真を撮る'),
+        builder:
+            (ctx) => CupertinoActionSheet(
+              title: const Text('登録方法(背景画像)'),
+              actions: [
+                CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _pickBgFromCamera();
+                  },
+                  child: const Text('写真を撮る'),
+                ),
+                CupertinoActionSheetAction(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _pickBgFromGallery();
+                  },
+                  child: const Text('ギャラリーから写真を選択する'),
+                ),
+              ],
+              cancelButton: CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(ctx),
+                isDefaultAction: false,
+                isDestructiveAction: false,
+                child: const Text('キャンセル'),
+              ),
             ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _pickBgFromGallery();
-              },
-              child: const Text('ギャラリーから写真を選択する'),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(ctx),
-            isDefaultAction: false,
-            isDestructiveAction: false,
-            child: const Text('キャンセル'),
-          ),
-        ),
       );
     } else {
       await showModalBottomSheet(
@@ -316,9 +347,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           return SafeArea(
             child: Wrap(
               children: [
-                const ListTile(
-                  title: Text('登録方法(背景画像)'),
-                ),
+                const ListTile(title: Text('登録方法(背景画像)')),
                 ListTile(
                   leading: const Icon(Icons.photo_camera),
                   title: const Text('写真を撮る'),
@@ -366,14 +395,21 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   Future<bool> _confirmDiscard() async {
     return await showDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('変更を破棄しますか？'),
-            content: const Text('保存されていない変更があります。破棄してよろしいですか？'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('続ける')),
-              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('破棄')), 
-            ],
-          ),
+          builder:
+              (ctx) => AlertDialog(
+                title: const Text('変更を破棄しますか？'),
+                content: const Text('保存されていない変更があります。破棄してよろしいですか？'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('続ける'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('破棄'),
+                  ),
+                ],
+              ),
         ) ??
         false;
   }
@@ -450,7 +486,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       String? remoteAvatarUrl;
       try {
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
-        final uri = Uri.parse('${AppConfig.instance.baseUrl}get_profile_images.php');
+        final uri = Uri.parse(
+          '${AppConfig.instance.baseUrl}get_profile_images.php',
+        );
         final resp = await http
             .post(uri, body: {'user_id': info.userId.toString()})
             .timeout(kHttpTimeout);
@@ -487,9 +525,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       Navigator.pop(context, nn);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('保存中にエラーが発生しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('保存中にエラーが発生しました')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -513,13 +551,20 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
         ),
         body: Column(
           children: [
-            if (_bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
+            Consumer(
+              builder: (context, ref, _) {
+                final isPremium =
+                    ref.watch(prem.premiumStateProvider).isPremium;
+                if (isPremium || _bannerAd == null)
+                  return const SizedBox.shrink();
+                return Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                );
+              },
+            ),
             // タイトル行（AppBar の代替）
             Container(
               height: kToolbarHeight,
@@ -529,20 +574,21 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                   // 左側: 編集中は「キャンセル」、それ以外は戻るボタン
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
-                    child: _isEditing
-                        ? TextButton.icon(
-                            onPressed: _saving ? null : _cancelEdit,
-                            icon: const Icon(Icons.close),
-                            label: const Text('キャンセル'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppConfig.instance.appBarForegroundColor,
+                    child:
+                        _isEditing
+                            ? TextButton.icon(
+                              onPressed: _saving ? null : _cancelEdit,
+                              icon: const Icon(Icons.close),
+                              label: const Text('キャンセル'),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    AppConfig.instance.appBarForegroundColor,
+                              ),
+                            )
+                            : BackButton(
+                              color: AppConfig.instance.appBarForegroundColor,
+                              onPressed: () => Navigator.pop(context),
                             ),
-                          )
-                        : IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.arrow_back),
-                            color: AppConfig.instance.appBarForegroundColor,
-                          ),
                   ),
                   // 中央タイトル
                   Expanded(
@@ -559,29 +605,35 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
                   // 右側アクション: 編集 or 保存
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: _isEditing
-                        ? TextButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: _saving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.check),
-                            label: Text(_saving ? '保存中…' : '保存'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppConfig.instance.appBarForegroundColor,
+                    child:
+                        _isEditing
+                            ? TextButton.icon(
+                              onPressed: _saving ? null : _save,
+                              icon:
+                                  _saving
+                                      ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.check),
+                              label: Text(_saving ? '保存中…' : '保存'),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    AppConfig.instance.appBarForegroundColor,
+                              ),
+                            )
+                            : TextButton.icon(
+                              onPressed: _enterEdit,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('編集'),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    AppConfig.instance.appBarForegroundColor,
+                              ),
                             ),
-                          )
-                        : TextButton.icon(
-                            onPressed: _enterEdit,
-                            icon: const Icon(Icons.edit),
-                            label: const Text('編集'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppConfig.instance.appBarForegroundColor,
-                            ),
-                          ),
                   ),
                 ],
               ),
@@ -590,146 +642,215 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 背景画像プレビュー（黄金比: 高さ = 幅 / φ）
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final w = MediaQuery.of(context).size.width;
-                const phi = 1.61803398875;
-                final h = w / phi; // 黄金比
-                final ImageProvider? bgProvider = _pickedBgImage != null
-                    ? FileImage(File(_pickedBgImage!.path))
-                    : (_bgRemoteUrl != null && _bgRemoteUrl!.isNotEmpty)
-                        ? NetworkImage(_bgRemoteUrl!)
-                        : (_bgLocalPath != null && _bgLocalPath!.isNotEmpty)
-                            ? FileImage(File(_bgLocalPath!))
-                            : null;
-                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Stack(
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          height: h,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade300,
-                            image: bgProvider != null
-                                ? DecorationImage(image: bgProvider, fit: BoxFit.cover)
-                                : null,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: bgProvider == null
-                              ? Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.image, color: Colors.black54),
-                                      SizedBox(width: 6),
-                                      Text('背景画像（横幅いっぱい）', style: TextStyle(color: Colors.black54)),
-                                    ],
+                    // 背景画像プレビュー（黄金比: 高さ = 幅 / φ）
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final w = MediaQuery.of(context).size.width;
+                        const phi = 1.61803398875;
+                        final h = w / phi; // 黄金比
+                        final ImageProvider? bgProvider =
+                            _pickedBgImage != null
+                                ? FileImage(File(_pickedBgImage!.path))
+                                : (_bgRemoteUrl != null &&
+                                    _bgRemoteUrl!.isNotEmpty)
+                                ? NetworkImage(_bgRemoteUrl!)
+                                : (_bgLocalPath != null &&
+                                    _bgLocalPath!.isNotEmpty)
+                                ? FileImage(File(_bgLocalPath!))
+                                : null;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Stack(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  height: h,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade300,
+                                    image:
+                                        bgProvider != null
+                                            ? DecorationImage(
+                                              image: bgProvider,
+                                              fit: BoxFit.cover,
+                                            )
+                                            : null,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                )
-                              : null,
-                        ),
-                        // 背景画像編集ボタン（背景左上、半透明50%）
-                        if (_isEditing)
-                          Positioned(
-                            left: 12,
-                            top: 8,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black.withOpacity(0.3),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onPressed: _showBgActionSheet,
-                              icon: const Icon(Icons.edit),
-                              label: const Text('背景画像編集', style: TextStyle(fontSize: 12)),
+                                  child:
+                                      bgProvider == null
+                                          ? Center(
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: const [
+                                                Icon(
+                                                  Icons.image,
+                                                  color: Colors.black54,
+                                                ),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  '背景画像（横幅いっぱい）',
+                                                  style: TextStyle(
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                          : null,
+                                ),
+                                // 背景画像編集ボタン（背景左上、半透明50%）
+                                if (_isEditing)
+                                  Positioned(
+                                    left: 12,
+                                    top: 8,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.black
+                                            .withOpacity(0.3),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: _showBgActionSheet,
+                                      icon: const Icon(Icons.edit),
+                                      label: const Text(
+                                        '背景画像編集',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                                // プロフィール円画像を背景上にオーバーレイ（縁の中心が背景高さの1/2になるよう位置決め）
+                                Positioned(
+                                  left: 12,
+                                  top:
+                                      h / 2 -
+                                      36, // 外側円(radius:36)の中心がちょうど中点になるように調整
+                                  child: CircleAvatar(
+                                    radius: 36,
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.white,
+                                    child: CircleAvatar(
+                                      radius: 34,
+                                      backgroundColor: Colors.grey.shade300,
+                                      backgroundImage:
+                                          _pickedImage != null
+                                              ? FileImage(
+                                                    File(_pickedImage!.path),
+                                                  )
+                                                  as ImageProvider
+                                              : (_remotePhotoUrl != null &&
+                                                  _remotePhotoUrl!.isNotEmpty)
+                                              ? (_remotePhotoUrl!.startsWith(
+                                                    'http',
+                                                  )
+                                                  ? NetworkImage(
+                                                    _remotePhotoUrl!,
+                                                  )
+                                                  : (_remotePhotoUrl!
+                                                          .startsWith('file://')
+                                                      ? FileImage(
+                                                        File(
+                                                          Uri.parse(
+                                                            _remotePhotoUrl!,
+                                                          ).toFilePath(),
+                                                        ),
+                                                      )
+                                                      : FileImage(
+                                                        File(_remotePhotoUrl!),
+                                                      )))
+                                              : null,
+                                      child:
+                                          (_pickedImage == null &&
+                                                  (_remotePhotoUrl == null ||
+                                                      _remotePhotoUrl!.isEmpty))
+                                              ? const Icon(
+                                                Icons.person,
+                                                color: Colors.white,
+                                                size: 34,
+                                              )
+                                              : null,
+                                    ),
+                                  ),
+                                ),
+                                // プロフィール画像編集ボタン（円の直下、半透明50%）
+                                if (_isEditing)
+                                  Positioned(
+                                    left: 12,
+                                    top: h / 2 - 36 + 72 + 8, // 円の下に少し余白
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.black
+                                            .withOpacity(0.3),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: _showAvatarActionSheet,
+                                      icon: const Icon(Icons.edit),
+                                      label: const Text(
+                                        'プロフィール画像編集',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
-                        // プロフィール円画像を背景上にオーバーレイ（縁の中心が背景高さの1/2になるよう位置決め）
-                        Positioned(
-                          left: 12,
-                          top: h / 2 - 36, // 外側円(radius:36)の中心がちょうど中点になるように調整
-                          child: CircleAvatar(
-                            radius: 36,
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.white,
-                            child: CircleAvatar(
-                              radius: 34,
-                              backgroundColor: Colors.grey.shade300,
-                              backgroundImage: _pickedImage != null
-                                  ? FileImage(File(_pickedImage!.path)) as ImageProvider
-                                  : (_remotePhotoUrl != null && _remotePhotoUrl!.isNotEmpty)
-                                      ? (_remotePhotoUrl!.startsWith('http')
-                                          ? NetworkImage(_remotePhotoUrl!)
-                                          : (_remotePhotoUrl!.startsWith('file://')
-                                              ? FileImage(File(Uri.parse(_remotePhotoUrl!).toFilePath()))
-                                              : FileImage(File(_remotePhotoUrl!))))
-                                      : null,
-                              child: (_pickedImage == null && (_remotePhotoUrl == null || _remotePhotoUrl!.isEmpty))
-                                  ? const Icon(Icons.person, color: Colors.white, size: 34)
-                                  : null,
-                            ),
-                          ),
-                        ),
-                        // プロフィール画像編集ボタン（円の直下、半透明50%）
-                        if (_isEditing)
-                          Positioned(
-                            left: 12,
-                            top: h / 2 - 36 + 72 + 8, // 円の下に少し余白
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black.withOpacity(0.3),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onPressed: _showAvatarActionSheet,
-                              icon: const Icon(Icons.edit),
-                              label: const Text('プロフィール画像編集', style: TextStyle(fontSize: 12)),
-                            ),
-                          ),
-                      ],
+                            const SizedBox(height: 16),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
+                    const Text(
+                      'ニックネーム',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _nickController,
+                      maxLength: 12,
+                      enabled: _isEditing,
+                      readOnly: !_isEditing,
+                      onChanged: (_) => _dirty = true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                        hintText: '12文字以内',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 注意書き（ニックネームの直下に配置）
+                    const Text(
+                      '本名など個人情報は入力しないでください（投稿時に表示されます）',
+                      style: TextStyle(fontSize: 12.5, color: Colors.black87),
+                    ),
+                    const Spacer(),
                   ],
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text('ニックネーム', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nickController,
-              maxLength: 12,
-              enabled: _isEditing,
-              readOnly: !_isEditing,
-              onChanged: (_) => _dirty = true,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                counterText: '',
-                hintText: '12文字以内',
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            // 注意書き（ニックネームの直下に配置）
-            const Text(
-              '本名など個人情報は入力しないでください（投稿時に表示されます）',
-              style: TextStyle(fontSize: 12.5, color: Colors.black87),
-            ),
-            const Spacer(),
           ],
         ),
       ),
-            ),
-          ],
-        ),
-    ));
+    );
   }
 }

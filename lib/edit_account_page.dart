@@ -9,6 +9,7 @@ import 'error_message.dart';
 import 'certification_mail.dart';
 import 'main.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 
 class EditAccountPage extends ConsumerStatefulWidget {
   final String currentEmail;
@@ -39,6 +40,8 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
   }
 
   void _loadBanner() {
+    final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+    if (isPremium) return;
     _bannerAd = BannerAd(
       size: AdSize.banner,
       adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST用広告ID
@@ -66,7 +69,9 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
       return;
     }
     if (!Common.instance.isValidEmail(newEmail)) {
-      setState(() => _error = ErrorMessage.instance.pleaseInputValidMailAddress);
+      setState(
+        () => _error = ErrorMessage.instance.pleaseInputValidMailAddress,
+      );
       return;
     }
 
@@ -80,11 +85,12 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => CertificationMail(
-              email: newEmail,
-              action: 'edit_mail',
-              authenticationNumber: code,
-            ),
+            builder:
+                (_) => CertificationMail(
+                  email: newEmail,
+                  action: 'edit_mail',
+                  authenticationNumber: code,
+                ),
           ),
         );
       } else {
@@ -100,18 +106,25 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
   Future<void> _deleteEmail() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('アカウント登録を解除しますか？'),
-        content: const Text(
-          'メールアドレスの登録を解除します。\n'
-          'メールアドレスの登録を解除しても直ちにはお気に入り(釣り場)は削除されません。\n'
-          '但し機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('解除')),
-        ],
-      ),
+      builder:
+          (_) => AlertDialog(
+            title: const Text('アカウント登録を解除しますか？'),
+            content: const Text(
+              'メールアドレスの登録を解除します。\n'
+              'メールアドレスの登録を解除しても直ちにはお気に入り(釣り場)は削除されません。\n'
+              '但し機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('解除'),
+              ),
+            ],
+          ),
     );
     if (ok != true) return;
 
@@ -141,7 +154,9 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
           // 設定画面へ反映
           ref.invalidate(userInfoProvider);
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('アカウント登録を解除しました')));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('アカウント登録を解除しました')));
           Navigator.pop(context);
         } else {
           setState(() => _error = data['reason']?.toString() ?? '削除に失敗しました');
@@ -179,23 +194,28 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
       ),
       body: Column(
         children: [
-          if (_bannerAd != null)
-            Container(
-              alignment: Alignment.center,
-              width: _bannerAd!.size.width.toDouble(),
-              height: _bannerAd!.size.height.toDouble(),
-              child: AdWidget(ad: _bannerAd!),
-            ),
+          Builder(
+            builder: (context) {
+              final isPremium = ref.watch(prem.premiumStateProvider).isPremium;
+              if (isPremium || _bannerAd == null)
+                return const SizedBox.shrink();
+              return Container(
+                alignment: Alignment.center,
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              );
+            },
+          ),
           // タイトル行（AppBar の代替）
           Container(
             height: kToolbarHeight,
             color: AppConfig.instance.appBarBackgroundColor,
             child: Row(
               children: [
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
+                BackButton(
                   color: AppConfig.instance.appBarForegroundColor,
+                  onPressed: () => Navigator.pop(context),
                 ),
                 Expanded(
                   child: Text(
@@ -218,99 +238,114 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              // 上部インフォカード（iボタンの代替表示）
-              _sectionCard(
-                child: const Text(
-                  'メールアドレスの変更やアカウントを削除することができます',
-                  style: TextStyle(fontSize: 13, height: 1.5),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _sectionTitle(context, 'メールアドレス変更'),
-              const SizedBox(height: 12),
-              _sectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('現在のメールアドレス', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(widget.currentEmail.isEmpty ? '未登録' : widget.currentEmail),
+                  // 上部インフォカード（iボタンの代替表示）
+                  _sectionCard(
+                    child: const Text(
+                      'メールアドレスの変更やアカウントを削除することができます',
+                      style: TextStyle(fontSize: 13, height: 1.5),
                     ),
-                    const SizedBox(height: 20),
-                    const Text('新しいメールアドレス', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _newEmailController,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'example@example.com',
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _sending ? null : _sendVerification,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConfig.instance.buttonBackgroundColor,
-                          foregroundColor: AppConfig.instance.buttonForegroundColor,
-                          minimumSize: const Size.fromHeight(44),
+                  ),
+                  const SizedBox(height: 16),
+                  _sectionTitle(context, 'メールアドレス変更'),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '現在のメールアドレス',
+                          style: TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        child: Text(_sending ? '送信中…' : '確認コードを送信'),
-                      ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            widget.currentEmail.isEmpty
+                                ? '未登録'
+                                : widget.currentEmail,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          '新しいメールアドレス',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _newEmailController,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'example@example.com',
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _sending ? null : _sendVerification,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  AppConfig.instance.buttonBackgroundColor,
+                              foregroundColor:
+                                  AppConfig.instance.buttonForegroundColor,
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                            child: Text(_sending ? '送信中…' : '確認コードを送信'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
 
-              const SizedBox(height: 32),
-              _sectionTitle(context, 'アカウント登録解除'),
-              const SizedBox(height: 12),
-              _sectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _sending ? null : _deleteEmail,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(44),
+                  const SizedBox(height: 32),
+                  _sectionTitle(context, 'アカウント登録解除'),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _sending ? null : _deleteEmail,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(44),
+                            ),
+                            child: Text(_sending ? '処理中…' : 'アカウント登録を解除'),
+                          ),
                         ),
-                        child: Text(_sending ? '処理中…' : 'アカウント登録を解除'),
-                      ),
+                        const SizedBox(height: 8),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(
+                            '登録を解除すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                            ),
+                            textAlign: TextAlign.left,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        '登録を解除すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができなくなります。',
-                        style: TextStyle(fontSize: 12.5, color: Colors.black87),
-                        textAlign: TextAlign.left,
-                      ),
-                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 16),
+                    Text(_error!, style: const TextStyle(color: Colors.red)),
                   ],
-                ),
+                ],
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-              ],
-            ],
+            ),
           ),
-        ),
-          ),
-      ],
+        ],
       ),
     );
   }
@@ -323,9 +358,9 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
         Text(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ],
     );

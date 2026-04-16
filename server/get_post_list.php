@@ -28,6 +28,8 @@ try {
     $page    = isset($_POST['page']) ? (int)$_POST['page'] : (isset($_GET['page']) ? (int)$_GET['page'] : 0);
     $pageSz  = isset($_POST['page_size']) ? (int)$_POST['page_size'] : (isset($_GET['page_size']) ? (int)$_GET['page_size'] : 0);
     if ($pageSz <= 0) $pageSz = 0; // 未指定時は従来のlimitを使用
+    // 0: 指定スポットのみ / 1: 釣果は近隣10スポット。未指定は従来互換で1。
+    $ambiguousPlevel = isset($_POST['ambiguous_plevel']) ? (int)$_POST['ambiguous_plevel'] : (isset($_GET['ambiguous_plevel']) ? (int)$_GET['ambiguous_plevel'] : 1);
 
     // WHERE 句の組み立て
     $where = [];
@@ -50,6 +52,7 @@ try {
         }
     } else {
         // 不正値は釣果として扱う
+        $k = 1;
         $where[] = 'post_kind = 1';
     }
 
@@ -57,8 +60,9 @@ try {
     $useNear = false;
     $nearIds = [];
     if ($spotId > 0) {
-        // get_kind=1 のときは近隣10スポット（スポット不明時はフォールバック）
-        if (isset($k) && $k === 1) {
+        // get_kind=1 かつ ambiguous_plevel != 0 のときだけ近隣10スポット。
+        // ambiguous_plevel=0 や釣果以外は指定スポットのみ取得する。
+        if (isset($k) && $k === 1 && $ambiguousPlevel !== 0) {
             try {
                 // 基点座標
                 $stmt0 = $pdo->prepare('SELECT latitude, longitude FROM teibou WHERE port_id = :sid LIMIT 1');

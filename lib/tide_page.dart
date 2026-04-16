@@ -44,7 +44,8 @@ class TidePageState extends State<TidePage> {
   static const int initialPage = 1000;
   int _catchRefreshTick = 0;
   int _envRefreshTick = 0;
-  final GlobalKey<_FishingInfoPaneState> _fishingPaneKey = GlobalKey<_FishingInfoPaneState>();
+  final GlobalKey<_FishingInfoPaneState> _fishingPaneKey =
+      GlobalKey<_FishingInfoPaneState>();
 
   //static bool cacheMoon = false;
 
@@ -102,7 +103,6 @@ class TidePageState extends State<TidePage> {
     }
   }
 
-
   Future<void> _initData() async {
     // 初回の潮汐データ取得（_baseDate を使う）
     await Common.instance.getTide(true, _baseDate);
@@ -121,12 +121,16 @@ class TidePageState extends State<TidePage> {
 
   // 外部から釣果リストのみの再読み込みを要求するためのAPI
   void forceReloadCatchList() {
-    setState(() { _catchRefreshTick++; });
+    setState(() {
+      _catchRefreshTick++;
+    });
   }
 
   // 外部から投稿一覧シート全体の再読み込みを要求
   void forceReloadPostList() {
-    try { _fishingPaneKey.currentState?.reloadPostList(); } catch (_) {}
+    try {
+      _fishingPaneKey.currentState?.reloadPostList();
+    } catch (_) {}
   }
 
   @override
@@ -145,7 +149,10 @@ class TidePageState extends State<TidePage> {
         builder: (context, constraints) {
           final totalHeight = constraints.maxHeight;
           const double tabBarHeight = kTextTabBarHeight; // 48
-          final double contentHeight = (totalHeight - tabBarHeight).clamp(0, totalHeight);
+          final double contentHeight = (totalHeight - tabBarHeight).clamp(
+            0,
+            totalHeight,
+          );
 
           return DefaultTabController(
             length: 2,
@@ -164,8 +171,26 @@ class TidePageState extends State<TidePage> {
                       labelColor: Colors.black,
                       unselectedLabelColor: Colors.black54,
                       tabs: [
-                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.map), SizedBox(width: 6), Text('地図')])),
-                        Tab(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.waves), SizedBox(width: 6), Text('潮汐')])),
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.map),
+                              SizedBox(width: 6),
+                              Text('地図'),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.waves),
+                              SizedBox(width: 6),
+                              Text('潮汐'),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -175,7 +200,10 @@ class TidePageState extends State<TidePage> {
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
                       // 地図（全面表示）
-                      _FishingInfoPane(key: _fishingPaneKey, height: contentHeight),
+                      _FishingInfoPane(
+                        key: _fishingPaneKey,
+                        height: contentHeight,
+                      ),
                       // 潮汐（スワイプ可能）
                       _TideTab(height: contentHeight),
                     ],
@@ -206,13 +234,16 @@ class _TideTabState extends State<_TideTab> {
     _baseDate = Common.instance.tideDate;
     _controller = PageController(initialPage: 1000);
   }
+
   @override
   Widget build(BuildContext context) {
     // 日付変更画面などからの外部更新（shouldJumpPage）にのみ反応して基準日付を更新
     final shouldJump = Provider.of<Common>(context).shouldJumpPage;
     if (shouldJump) {
       final cur = Common.instance.tideDate;
-      if (cur.year != _baseDate.year || cur.month != _baseDate.month || cur.day != _baseDate.day) {
+      if (cur.year != _baseDate.year ||
+          cur.month != _baseDate.month ||
+          cur.day != _baseDate.day) {
         _baseDate = cur;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -260,7 +291,12 @@ class _CatchTab extends StatelessWidget {
           ),
         ),
         // スクロール対象
-        Expanded(child: _CatchPostList(key: ValueKey('catch-$refreshTick'), refreshTick: refreshTick)),
+        Expanded(
+          child: _CatchPostList(
+            key: ValueKey('catch-$refreshTick'),
+            refreshTick: refreshTick,
+          ),
+        ),
       ],
     );
   }
@@ -289,8 +325,8 @@ class _CatchPostListState extends State<_CatchPostList> {
     _sc.dispose();
     super.dispose();
   }
-  
-/*
+
+  /*
   @override
   void dispose() {
     _sc.dispose();
@@ -303,11 +339,14 @@ class _CatchPostListState extends State<_CatchPostList> {
       final prefs = await SharedPreferences.getInstance();
       final spotId = prefs.getInt('selected_teibou_id');
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts');
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
+      );
       final body = <String, String>{
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
+        'ambiguous_plevel': ambiguous_plevel.toString(),
         // キャッシュ回避のためのタイムスタンプ
         'ts': DateTime.now().millisecondsSinceEpoch.toString(),
       };
@@ -323,10 +362,14 @@ class _CatchPostListState extends State<_CatchPostList> {
       final data = jsonDecode(resp.body);
       if (data is Map && data['status'] == 'success') {
         final List rows = (data['rows'] as List?) ?? [];
-        return rows.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return rows
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       if (data is List) {
-        return data.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return data
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -336,7 +379,11 @@ class _CatchPostListState extends State<_CatchPostList> {
 
   Future<void> _loadFirst() async {
     if (!mounted || _loading) return;
-    setState(() { _loading = true; _page = 1; _hasMore = true; });
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _hasMore = true;
+    });
     var rows = await _fetch(kind: 1, page: 1);
     rows = await _applyAmbiguityFilter(rows);
     if (!mounted) return;
@@ -394,7 +441,6 @@ class _CatchPostListState extends State<_CatchPostList> {
       });
       if (mounted) setState(() {});
     } catch (_) {}
-    
   }
 
   Future<void> _saveImageTs(int postId, String ts) async {
@@ -403,7 +449,9 @@ class _CatchPostListState extends State<_CatchPostList> {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map[postId.toString()] = ts;
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -416,7 +464,9 @@ class _CatchPostListState extends State<_CatchPostList> {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map.remove(postId.toString());
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -468,53 +518,93 @@ class _CatchPostListState extends State<_CatchPostList> {
     return RefreshIndicator(
       onRefresh: _loadFirst,
       child: ListView.separated(
-          controller: _sc,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: _items.length + (_hasMore ? 1 : 0),
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            if (i >= _items.length) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final it = _items[i];
-            final String? raw = it.thumbUrl ?? it.imageUrl;
-            final imgUrl = (raw != null) ? _withTs(raw, it.postId) : null;
-            return InkWell(
-              onTap: () async {
-                final String? detailRaw = it.imageUrl ?? it.thumbUrl;
-                final String? detailUrl = (detailRaw != null) ? _withTs(detailRaw, it.postId) : null;
-                final res = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PostDetailPage(
-                      item: PostDetailItem(
-                        userId: it.userId,
-                        postId: it.postId,
-                        postKind: it.postKind,
-                        exist: it.exist,
-                        title: it.title,
-                        detail: it.detail,
-                        imageUrl: detailUrl,
-                        nickName: it.nickName,
-                        createAt: it.createAt,
+        controller: _sc,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _items.length + (_hasMore ? 1 : 0),
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, i) {
+          if (i >= _items.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final it = _items[i];
+          final String? raw = it.thumbUrl ?? it.imageUrl;
+          final imgUrl = (raw != null) ? _withTs(raw, it.postId) : null;
+          return InkWell(
+            onTap: () async {
+              final String? detailRaw = it.imageUrl ?? it.thumbUrl;
+              final String? detailUrl =
+                  (detailRaw != null) ? _withTs(detailRaw, it.postId) : null;
+              final res = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (_) => PostDetailPage(
+                        item: PostDetailItem(
+                          userId: it.userId,
+                          postId: it.postId,
+                          postKind: it.postKind,
+                          exist: it.exist,
+                          title: it.title,
+                          detail: it.detail,
+                          imageUrl: detailUrl,
+                          nickName: it.nickName,
+                          createAt: it.createAt,
+                        ),
                       ),
-                    ),
-                  ),
-                );
-                if (!mounted) return;
-                if (res == true && it.postId != null) {
+                ),
+              );
+              if (!mounted) return;
+              if (res == true && it.postId != null) {
+                final ts = DateTime.now().millisecondsSinceEpoch.toString();
+                setState(() {
+                  _imgTsByPost[it.postId!] = ts;
+                });
+                await _saveImageTs(it.postId!, ts);
+              } else if (res is Map) {
+                final updated = (res['updated'] == true);
+                final cleared = (res['clearedImage'] == true);
+                final pid =
+                    res['postId'] is int
+                        ? res['postId'] as int
+                        : (res['postId'] is String
+                            ? int.tryParse(res['postId'])
+                            : null);
+                if (updated && cleared && pid != null) {
+                  // 投稿は残しつつ、画像だけ消した状態に更新（サムネは非表示）
+                  final idx = _items.indexWhere((e) => e.postId == pid);
+                  if (idx >= 0) {
+                    final old = _items[idx];
+                    final updatedItem = _PostItem(
+                      postId: old.postId,
+                      userId: old.userId,
+                      spotId: old.spotId,
+                      postKind: old.postKind,
+                      exist: old.exist,
+                      title: old.title,
+                      detail: old.detail,
+                      imagePath: null,
+                      thumbPath: null,
+                      nickName: old.nickName,
+                      createAt: old.createAt,
+                    );
+                    setState(() {
+                      _items[idx] = updatedItem;
+                    });
+                  }
+                  // キャッシュバスターも削除
+                  setState(() {
+                    _imgTsByPost.remove(pid);
+                  });
+                  await _removeImageTs(pid);
+                } else if (updated && pid != null) {
                   final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                  setState(() { _imgTsByPost[it.postId!] = ts; });
-                  await _saveImageTs(it.postId!, ts);
-                } else if (res is Map) {
-                  final updated = (res['updated'] == true);
-                  final cleared = (res['clearedImage'] == true);
-                  final pid = res['postId'] is int ? res['postId'] as int : (res['postId'] is String ? int.tryParse(res['postId']) : null);
-                  if (updated && cleared && pid != null) {
-                    // 投稿は残しつつ、画像だけ消した状態に更新（サムネは非表示）
+                  // 画像パスが返っていれば項目を更新（画像なし→ありに変わったケース）
+                  final ip = (res['image_path']?.toString() ?? '').trim();
+                  final tp = (res['thumb_path']?.toString() ?? '').trim();
+                  if (ip.isNotEmpty || tp.isNotEmpty) {
                     final idx = _items.indexWhere((e) => e.postId == pid);
                     if (idx >= 0) {
                       final old = _items[idx];
@@ -526,101 +616,89 @@ class _CatchPostListState extends State<_CatchPostList> {
                         exist: old.exist,
                         title: old.title,
                         detail: old.detail,
-                        imagePath: null,
-                        thumbPath: null,
+                        imagePath: ip.isNotEmpty ? ip : old.imagePath,
+                        thumbPath: tp.isNotEmpty ? tp : old.thumbPath,
                         nickName: old.nickName,
                         createAt: old.createAt,
                       );
-                      setState(() { _items[idx] = updatedItem; });
+                      setState(() {
+                        _items[idx] = updatedItem;
+                      });
                     }
-                    // キャッシュバスターも削除
-                    setState(() { _imgTsByPost.remove(pid); });
-                    await _removeImageTs(pid);
-                  } else if (updated && pid != null) {
-                    final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                    // 画像パスが返っていれば項目を更新（画像なし→ありに変わったケース）
-                    final ip = (res['image_path']?.toString() ?? '').trim();
-                    final tp = (res['thumb_path']?.toString() ?? '').trim();
-                    if (ip.isNotEmpty || tp.isNotEmpty) {
-                      final idx = _items.indexWhere((e) => e.postId == pid);
-                      if (idx >= 0) {
-                        final old = _items[idx];
-                        final updatedItem = _PostItem(
-                          postId: old.postId,
-                          userId: old.userId,
-                          spotId: old.spotId,
-                          postKind: old.postKind,
-                          exist: old.exist,
-                          title: old.title,
-                          detail: old.detail,
-                          imagePath: ip.isNotEmpty ? ip : old.imagePath,
-                          thumbPath: tp.isNotEmpty ? tp : old.thumbPath,
-                          nickName: old.nickName,
-                          createAt: old.createAt,
-                        );
-                        setState(() { _items[idx] = updatedItem; });
-                      }
-                    }
-                    setState(() { _imgTsByPost[pid] = ts; });
-                    await _saveImageTs(pid, ts);
                   }
+                  setState(() {
+                    _imgTsByPost[pid] = ts;
+                  });
+                  await _saveImageTs(pid, ts);
                 }
-              },
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // サムネ枠（空でも固定幅）
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: SizedBox(
-                        width: thumb,
-                        height: thumb,
-                        child: (imgUrl != null)
-                            ? Image.network(imgUrl, fit: BoxFit.cover)
-                            : const SizedBox.shrink(),
-                      ),
+              }
+            },
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // サムネ枠（空でも固定幅）
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: thumb,
+                      height: thumb,
+                      child:
+                          (imgUrl != null)
+                              ? Image.network(imgUrl, fit: BoxFit.cover)
+                              : const SizedBox.shrink(),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        it.title?.isNotEmpty == true ? it.title! : '',
-                        style: const TextStyle(fontSize: 15),
-                        maxLines: 2,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      it.title?.isNotEmpty == true ? it.title! : '',
+                      style: const TextStyle(fontSize: 15),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        (it.nickName ?? '').isNotEmpty ? it.nickName! : '',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black87,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          (it.nickName ?? '').isNotEmpty ? it.nickName! : '',
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
-                          overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatDate(it.createAt) ?? '',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.black54,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _formatDate(it.createAt) ?? '',
-                          style: const TextStyle(fontSize: 11, color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
 class _EnvPostList extends StatefulWidget {
-  const _EnvPostList({super.key, required this.filterKind, required this.refreshTick});
+  const _EnvPostList({
+    super.key,
+    required this.filterKind,
+    required this.refreshTick,
+  });
   final int filterKind; // 0=環境すべて, 2/3/4/5/6/9=種別
   final int refreshTick;
   @override
@@ -648,7 +726,8 @@ class _EnvPostListState extends State<_EnvPostList> {
   @override
   void didUpdateWidget(covariant _EnvPostList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.filterKind != widget.filterKind || oldWidget.refreshTick != widget.refreshTick) {
+    if (oldWidget.filterKind != widget.filterKind ||
+        oldWidget.refreshTick != widget.refreshTick) {
       if (mounted) {
         setState(() {
           _items.clear();
@@ -676,7 +755,7 @@ class _EnvPostListState extends State<_EnvPostList> {
     const double rowHeight = 72;
     // 件数集計
     int yes = 0; // あり
-    int no = 0;  // なし
+    int no = 0; // なし
     for (final it in _items) {
       if (it.exist == 1) {
         yes += 1;
@@ -714,11 +793,25 @@ class _EnvPostListState extends State<_EnvPostList> {
                     return Stack(
                       children: [
                         // 背景（薄いグレー）
-                        Container(width: w, height: 16, color: Colors.grey.shade300),
+                        Container(
+                          width: w,
+                          height: 16,
+                          color: Colors.grey.shade300,
+                        ),
                         // あり（左）
-                        Positioned(left: 0, top: 0, bottom: 0, child: Container(width: yesW, color: yesColor)),
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(width: yesW, color: yesColor),
+                        ),
                         // なし（右）
-                        Positioned(left: yesW, top: 0, bottom: 0, child: Container(width: noW, color: noColor)),
+                        Positioned(
+                          left: yesW,
+                          top: 0,
+                          bottom: 0,
+                          child: Container(width: noW, color: noColor),
+                        ),
                       ],
                     );
                   },
@@ -731,13 +824,25 @@ class _EnvPostListState extends State<_EnvPostList> {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('あり ${yes}件', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                      child: Text(
+                        'あり ${yes}件',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
                     ),
                   ),
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: Text('なし ${no}件', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                      child: Text(
+                        'なし ${no}件',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black87,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -754,11 +859,14 @@ class _EnvPostListState extends State<_EnvPostList> {
       final prefs = await SharedPreferences.getInstance();
       final spotId = prefs.getInt('selected_teibou_id');
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts');
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
+      );
       final body = <String, String>{
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
+        'ambiguous_plevel': ambiguous_plevel.toString(),
         // キャッシュ回避のためのタイムスタンプ
         'ts': DateTime.now().millisecondsSinceEpoch.toString(),
       };
@@ -774,10 +882,14 @@ class _EnvPostListState extends State<_EnvPostList> {
       final data = jsonDecode(resp.body);
       if (data is Map && data['status'] == 'success') {
         final List rows = (data['rows'] as List?) ?? [];
-        return rows.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return rows
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       if (data is List) {
-        return data.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return data
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -787,7 +899,11 @@ class _EnvPostListState extends State<_EnvPostList> {
 
   Future<void> _loadFirst() async {
     if (!mounted || _loading) return;
-    setState(() { _loading = true; _page = 1; _hasMore = true; });
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _hasMore = true;
+    });
     final rows = await _fetch(kind: widget.filterKind, page: 1);
     if (!mounted) return;
     setState(() {
@@ -838,7 +954,9 @@ class _EnvPostListState extends State<_EnvPostList> {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map[postId.toString()] = ts;
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -851,7 +969,9 @@ class _EnvPostListState extends State<_EnvPostList> {
       Map<String, dynamic> map = {};
       final raw = prefs.getString(_kTsStorageKey);
       if (raw != null && raw.isNotEmpty) {
-        try { map = jsonDecode(raw) as Map<String, dynamic>; } catch (_) {}
+        try {
+          map = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) {}
       }
       map.remove(postId.toString());
       await prefs.setString(_kTsStorageKey, jsonEncode(map));
@@ -927,38 +1047,80 @@ class _EnvPostListState extends State<_EnvPostList> {
                 final imgUrl = (raw != null) ? _withTs(raw, it.postId) : null;
                 // 有無表示は行わない（釣果と同様のレイアウト）
                 return InkWell(
-                    onTap: () async {
-                      final String? detailRaw = it.imageUrl ?? it.thumbUrl;
-                      final String? detailUrl = (detailRaw != null) ? _withTs(detailRaw, it.postId) : null;
-                      final res = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PostDetailPage(
-                            item: PostDetailItem(
-                              userId: it.userId,
-                              postId: it.postId,
-                              postKind: it.postKind,
-                              exist: it.exist,
-                              title: it.title,
-                              detail: it.detail,
-                              imageUrl: detailUrl,
-                              nickName: it.nickName,
-                              createAt: it.createAt,
+                  onTap: () async {
+                    final String? detailRaw = it.imageUrl ?? it.thumbUrl;
+                    final String? detailUrl =
+                        (detailRaw != null)
+                            ? _withTs(detailRaw, it.postId)
+                            : null;
+                    final res = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => PostDetailPage(
+                              item: PostDetailItem(
+                                userId: it.userId,
+                                postId: it.postId,
+                                postKind: it.postKind,
+                                exist: it.exist,
+                                title: it.title,
+                                detail: it.detail,
+                                imageUrl: detailUrl,
+                                nickName: it.nickName,
+                                createAt: it.createAt,
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                      if (!mounted) return;
-                      if (res == true && it.postId != null) {
-                        final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                        setState(() { _imgTsByPost[it.postId!] = ts; });
-                        await _saveImageTs(it.postId!, ts);
-                      } else if (res is Map) {
-                        final updated = (res['updated'] == true);
-                        final cleared = (res['clearedImage'] == true);
-                        final pid = res['postId'] is int ? res['postId'] as int : (res['postId'] is String ? int.tryParse(res['postId']) : null);
-                        if (updated && cleared && pid != null) {
-                          // 画像は外すが投稿行は残す
+                      ),
+                    );
+                    if (!mounted) return;
+                    if (res == true && it.postId != null) {
+                      final ts =
+                          DateTime.now().millisecondsSinceEpoch.toString();
+                      setState(() {
+                        _imgTsByPost[it.postId!] = ts;
+                      });
+                      await _saveImageTs(it.postId!, ts);
+                    } else if (res is Map) {
+                      final updated = (res['updated'] == true);
+                      final cleared = (res['clearedImage'] == true);
+                      final pid =
+                          res['postId'] is int
+                              ? res['postId'] as int
+                              : (res['postId'] is String
+                                  ? int.tryParse(res['postId'])
+                                  : null);
+                      if (updated && cleared && pid != null) {
+                        // 画像は外すが投稿行は残す
+                        final idx = _items.indexWhere((e) => e.postId == pid);
+                        if (idx >= 0) {
+                          final old = _items[idx];
+                          final updatedItem = _PostItem(
+                            postId: old.postId,
+                            userId: old.userId,
+                            spotId: old.spotId,
+                            postKind: old.postKind,
+                            exist: old.exist,
+                            title: old.title,
+                            detail: old.detail,
+                            imagePath: null,
+                            thumbPath: null,
+                            nickName: old.nickName,
+                            createAt: old.createAt,
+                          );
+                          setState(() {
+                            _items[idx] = updatedItem;
+                          });
+                        }
+                        setState(() {
+                          _imgTsByPost.remove(pid);
+                        });
+                        await _removeImageTs(pid);
+                      } else if (updated && pid != null) {
+                        final ts =
+                            DateTime.now().millisecondsSinceEpoch.toString();
+                        final ip = (res['image_path']?.toString() ?? '').trim();
+                        final tp = (res['thumb_path']?.toString() ?? '').trim();
+                        if (ip.isNotEmpty || tp.isNotEmpty) {
                           final idx = _items.indexWhere((e) => e.postId == pid);
                           if (idx >= 0) {
                             final old = _items[idx];
@@ -970,47 +1132,29 @@ class _EnvPostListState extends State<_EnvPostList> {
                               exist: old.exist,
                               title: old.title,
                               detail: old.detail,
-                              imagePath: null,
-                              thumbPath: null,
+                              imagePath: ip.isNotEmpty ? ip : old.imagePath,
+                              thumbPath: tp.isNotEmpty ? tp : old.thumbPath,
                               nickName: old.nickName,
                               createAt: old.createAt,
                             );
-                            setState(() { _items[idx] = updatedItem; });
+                            setState(() {
+                              _items[idx] = updatedItem;
+                            });
                           }
-                          setState(() { _imgTsByPost.remove(pid); });
-                          await _removeImageTs(pid);
-                        } else if (updated && pid != null) {
-                          final ts = DateTime.now().millisecondsSinceEpoch.toString();
-                          final ip = (res['image_path']?.toString() ?? '').trim();
-                          final tp = (res['thumb_path']?.toString() ?? '').trim();
-                          if (ip.isNotEmpty || tp.isNotEmpty) {
-                            final idx = _items.indexWhere((e) => e.postId == pid);
-                            if (idx >= 0) {
-                              final old = _items[idx];
-                              final updatedItem = _PostItem(
-                                postId: old.postId,
-                                userId: old.userId,
-                                spotId: old.spotId,
-                                postKind: old.postKind,
-                                exist: old.exist,
-                                title: old.title,
-                                detail: old.detail,
-                                imagePath: ip.isNotEmpty ? ip : old.imagePath,
-                                thumbPath: tp.isNotEmpty ? tp : old.thumbPath,
-                                nickName: old.nickName,
-                                createAt: old.createAt,
-                              );
-                              setState(() { _items[idx] = updatedItem; });
-                            }
-                          }
-                          setState(() { _imgTsByPost[pid] = ts; });
-                          await _saveImageTs(pid, ts);
                         }
+                        setState(() {
+                          _imgTsByPost[pid] = ts;
+                        });
+                        await _saveImageTs(pid, ts);
                       }
-                    },
+                    }
+                  },
                   child: Container(
                     color: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -1019,11 +1163,12 @@ class _EnvPostListState extends State<_EnvPostList> {
                           child: SizedBox(
                             width: thumbW,
                             height: thumbW,
-                        child: (imgUrl != null)
-                            ? Image.network(imgUrl, fit: BoxFit.cover)
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
+                            child:
+                                (imgUrl != null)
+                                    ? Image.network(imgUrl, fit: BoxFit.cover)
+                                    : const SizedBox.shrink(),
+                          ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -1039,14 +1184,22 @@ class _EnvPostListState extends State<_EnvPostList> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              (it.nickName ?? '').isNotEmpty ? it.nickName! : '',
-                              style: const TextStyle(fontSize: 12, color: Colors.black87),
+                              (it.nickName ?? '').isNotEmpty
+                                  ? it.nickName!
+                                  : '',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black87,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 2),
                             Text(
                               _formatDate(it.createAt) ?? '',
-                              style: const TextStyle(fontSize: 11, color: Colors.black54),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                              ),
                             ),
                           ],
                         ),
@@ -1156,13 +1309,21 @@ class _EnvTabbedList extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('規制、駐車場、トイレなどの状況などです',
-                    style: TextStyle(fontSize: 13, color: Colors.black87)),
+                child: Text(
+                  '規制、駐車場、トイレなどの状況などです',
+                  style: TextStyle(fontSize: 13, color: Colors.black87),
+                ),
               ),
             ),
           ),
         ),
-        Expanded(child: _EnvPostList(key: ValueKey('env-$refreshTick'), filterKind: 0, refreshTick: refreshTick)),
+        Expanded(
+          child: _EnvPostList(
+            key: ValueKey('env-$refreshTick'),
+            filterKind: 0,
+            refreshTick: refreshTick,
+          ),
+        ),
       ],
     );
   }
@@ -1212,33 +1373,36 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   late final _TideNavObserver _tideNavObserver;
   gm.GoogleMapController? _gmController;
   // 長押しによる「釣り場登録」用ポイント
-  LatLng? _applyPoint;           // FlutterMap 用
-  gm.LatLng? _gmApplyPoint;      // GoogleMap 用
-  bool _applyMode = false;       // 「釣り場申請」ボタン押下後の指定モード
+  LatLng? _applyPoint; // FlutterMap 用
+  gm.LatLng? _gmApplyPoint; // GoogleMap 用
+  bool _applyMode = false; // 「釣り場申請」ボタン押下後の指定モード
   bool _isSatellite = false; // Google Maps 用 衛星表示トグル
 
   void reloadPostList() {
-    if (mounted) setState(() { _sheetReloadTick++; });
+    if (mounted)
+      setState(() {
+        _sheetReloadTick++;
+      });
   }
 
   void _showModeInfoDialog() {
     final isApply = _applyMode;
-    final String msg = isApply
-        ? '地図上で登録したい場所を長押ししてください。\nピンが表示されたら「釣り場登録」をタップしてください。\n申請中のピンを申請者本人がタップすると入力項目の修正ができます。\n\n「釣り場登録中...」ボタンをタップすると「閲覧モード」に遷移します。'
-        : '地図上の釣り場をタップして選びながら、釣果や環境の投稿を閲覧するモードです。\n\n長押しするとその近辺の釣り場がピン表示されます。\n\n「釣り場登録」ボタンをタップすると釣り場を登録する「釣り場登録モード」に遷移します。';
+    final String msg =
+        isApply
+            ? '地図上で登録したい場所を長押ししてください。\nピンが表示されたら「釣り場登録」をタップしてください。\n申請中のピンを申請者本人がタップすると入力項目の修正ができます。\n\n「釣り場登録中...」ボタンをタップすると「閲覧モード」に遷移します。'
+            : '地図上の釣り場をタップして選びながら、釣果や環境の投稿を閲覧するモードです。\n\n長押しするとその近辺の釣り場がピン表示されます。\n\n「釣り場登録」ボタンをタップすると釣り場を登録する「釣り場登録モード」に遷移します。';
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (_) => AlertDialog(
-        content: Text(msg),
-      ),
+      builder: (_) => AlertDialog(content: Text(msg)),
     );
   }
 
   Future<String> _currentSpotDisplay() async {
-    final spotName = Common.instance.selectedTeibouName.isNotEmpty
-        ? Common.instance.selectedTeibouName
-        : Common.instance.tidePoint;
+    final spotName =
+        Common.instance.selectedTeibouName.isNotEmpty
+            ? Common.instance.selectedTeibouName
+            : Common.instance.tidePoint;
     String display = spotName;
     try {
       final rows = await SioDatabase().getAllTeibouWithPrefecture();
@@ -1248,8 +1412,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final sid = prefs.getInt('selected_teibou_id');
         if (sid != null && sid > 0) {
           for (final r in rows) {
-            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            if (rid == sid) { row = r; break; }
+            final rid =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) {
+              row = r;
+              break;
+            }
           }
         }
       } catch (_) {}
@@ -1257,9 +1427,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         (r) => ((r?['port_name'] ?? '').toString() == spotName),
         orElse: () => null,
       );
-      final int? flag = row == null
-          ? null
-          : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+      final int? flag =
+          row == null
+              ? null
+              : (row['flag'] is int
+                  ? row['flag'] as int
+                  : int.tryParse(row['flag']?.toString() ?? ''));
       if (flag == -1) display = '$spotName (申請中)';
     } catch (_) {}
     return display;
@@ -1273,13 +1446,19 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       const double d2r = 3.141592653589793 / 180.0;
       final rlat = llat * d2r;
       for (final r in rows) {
-        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+        final int? flag =
+            r['flag'] is int
+                ? r['flag'] as int
+                : int.tryParse(r['flag']?.toString() ?? '');
         if (flag == -2) continue; // 非承認は除外
         final dlat = _toDouble(r['latitude']);
         final dlng = _toDouble(r['longitude']);
         if (dlat == null || dlng == null) continue;
         final d = _haversine(llat, llng, dlat, dlng, cosLat: rlat);
-        if (d < best) { best = d; bestRow = r; }
+        if (d < best) {
+          best = d;
+          bestRow = r;
+        }
       }
       if (bestRow == null) return;
       final nlat = _toDouble(bestRow['latitude']) ?? llat;
@@ -1288,15 +1467,36 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       // 選択状態は更新（最寄りを選択）し、地図の表示位置・スケールは変更せず近辺ピンのみ再構成
       try {
         String? np;
-        if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
-        final int? prefId = bestRow['todoufuken_id'] is int
-            ? bestRow['todoufuken_id'] as int
-            : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
-        final int? portId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
-        await Common.instance.saveSelectedTeibou(name, np ?? (Common.instance.tidePoint), id: portId, lat: nlat, lng: nlng, prefId: prefId);
+        if (!_pointsLoading && _pointCoords.isNotEmpty) {
+          np = _nearestPointName(nlat, nlng);
+        }
+        final int? prefId =
+            bestRow['todoufuken_id'] is int
+                ? bestRow['todoufuken_id'] as int
+                : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ??
+                    int.tryParse(
+                      bestRow['pref_id_from_port']?.toString() ?? '',
+                    );
+        final int? portId =
+            bestRow['port_id'] is int
+                ? bestRow['port_id'] as int
+                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+        await Common.instance.saveSelectedTeibou(
+          name,
+          np ?? (Common.instance.tidePoint),
+          id: portId,
+          lat: nlat,
+          lng: nlng,
+          prefId: prefId,
+        );
       } catch (_) {}
       // 地図の表示位置は変更せず、ピンのみ再構成（最寄りを赤ピン）
-      await _loadMarkers(centerName: name, lat: nlat, lng: nlng, radiusKm: 30.0);
+      await _loadMarkers(
+        centerName: name,
+        lat: nlat,
+        lng: nlng,
+        radiusKm: 30.0,
+      );
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -1306,7 +1506,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     super.initState();
     _sheetController = DraggableScrollableController();
     _tidePageController = PageController(initialPage: 1000);
-    _tideNavObserver = _TideNavObserver(() { if (mounted) setState(() {}); });
+    _tideNavObserver = _TideNavObserver(() {
+      if (mounted) setState(() {});
+    });
     _prepare();
     _loadPointCoords();
     // Common の変更（堤防選択など）を監視して地図を更新
@@ -1331,7 +1533,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       _ensureSheetVisible(ifHiddenOnly: true);
     }
     // シートの内容（投稿一覧）を再取得するために再構築
-    if (mounted) setState(() { _sheetReloadTick++; });
+    if (mounted)
+      setState(() {
+        _sheetReloadTick++;
+      });
   }
 
   Future<void> _prepare() async {
@@ -1351,8 +1556,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           final sid = prefs.getInt('selected_teibou_id');
           if (sid != null && sid > 0) {
             for (final r in rows) {
-              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-              if (rid == sid) { hit = r; break; }
+              final rid =
+                  r['port_id'] is int
+                      ? r['port_id'] as int
+                      : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) {
+                hit = r;
+                break;
+              }
             }
           }
         } catch (_) {}
@@ -1374,10 +1585,19 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 Common.instance.selectedTeibouNearestPoint,
                 lat: useLat,
                 lng: useLng,
-                id: hit['port_id'] is int ? hit['port_id'] as int : int.tryParse(hit['port_id']?.toString() ?? ''),
-                prefId: hit['todoufuken_id'] is int
-                    ? hit['todoufuken_id'] as int
-                    : int.tryParse(hit['todoufuken_id']?.toString() ?? '') ?? int.tryParse(hit['pref_id_from_port']?.toString() ?? ''),
+                id:
+                    hit['port_id'] is int
+                        ? hit['port_id'] as int
+                        : int.tryParse(hit['port_id']?.toString() ?? ''),
+                prefId:
+                    hit['todoufuken_id'] is int
+                        ? hit['todoufuken_id'] as int
+                        : int.tryParse(
+                              hit['todoufuken_id']?.toString() ?? '',
+                            ) ??
+                            int.tryParse(
+                              hit['pref_id_from_port']?.toString() ?? '',
+                            ),
               );
             } catch (_) {}
           }
@@ -1391,38 +1611,77 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         _lastLat = useLat;
         _lastLng = useLng;
         _lastName = useName;
-        await _loadMarkers(centerName: useName, lat: useLat, lng: useLng, radiusKm: 30.0);
+        await _loadMarkers(
+          centerName: useName,
+          lat: useLat,
+          lng: useLng,
+          radiusKm: 30.0,
+        );
         // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
           final z = _zoomForRadius(30.0) + 1.0;
           final adjusted = _computeCenteredForSheet(_center!, z);
-          setState(() { _center = adjusted; });
-          try { _mapController.move(adjusted, z); } catch (_) {}
-          try { if (baseMap == 2) { _gmController?.moveCamera(gm.CameraUpdate.newLatLngZoom(gm.LatLng(adjusted.latitude, adjusted.longitude), z)); } } catch (_) {}
+          setState(() {
+            _center = adjusted;
+          });
+          try {
+            _mapController.move(adjusted, z);
+          } catch (_) {}
+          try {
+            if (baseMap == 2) {
+              _gmController?.moveCamera(
+                gm.CameraUpdate.newLatLngZoom(
+                  gm.LatLng(adjusted.latitude, adjusted.longitude),
+                  z,
+                ),
+              );
+            }
+          } catch (_) {}
         }
       }
     } else {
       // フォールバック: 現在の潮汐ポイントの緯度経度があればそれを使用
       final fallbackLat = Common.instance.gSioInfo.lat;
       final fallbackLng = Common.instance.gSioInfo.lang;
-      final fallbackName = Common.instance.gSioInfo.portName.isNotEmpty
-          ? Common.instance.gSioInfo.portName
-          : (Common.instance.selectedTeibouName.isNotEmpty
-              ? Common.instance.selectedTeibouName
-              : '');
+      final fallbackName =
+          Common.instance.gSioInfo.portName.isNotEmpty
+              ? Common.instance.gSioInfo.portName
+              : (Common.instance.selectedTeibouName.isNotEmpty
+                  ? Common.instance.selectedTeibouName
+                  : '');
       if ((fallbackLat != 0.0 || fallbackLng != 0.0)) {
-        if (_lastLat != fallbackLat || _lastLng != fallbackLng || _lastName != fallbackName) {
+        if (_lastLat != fallbackLat ||
+            _lastLng != fallbackLng ||
+            _lastName != fallbackName) {
           _center = LatLng(fallbackLat, fallbackLng);
           _lastLat = fallbackLat;
           _lastLng = fallbackLng;
           _lastName = fallbackName;
-          await _loadMarkers(centerName: fallbackName, lat: fallbackLat, lng: fallbackLng, radiusKm: 30.0);
+          await _loadMarkers(
+            centerName: fallbackName,
+            lat: fallbackLat,
+            lng: fallbackLng,
+            radiusKm: 30.0,
+          );
           if (mounted && _center != null) {
             final z = _zoomForRadius(30.0) + 1.0;
             final adjusted = _computeCenteredForSheet(_center!, z);
-            setState(() { _center = adjusted; });
-            try { _mapController.move(adjusted, z); } catch (_) {}
-            try { if (baseMap == 2) { _gmController?.moveCamera(gm.CameraUpdate.newLatLngZoom(gm.LatLng(adjusted.latitude, adjusted.longitude), z)); } } catch (_) {}
+            setState(() {
+              _center = adjusted;
+            });
+            try {
+              _mapController.move(adjusted, z);
+            } catch (_) {}
+            try {
+              if (baseMap == 2) {
+                _gmController?.moveCamera(
+                  gm.CameraUpdate.newLatLngZoom(
+                    gm.LatLng(adjusted.latitude, adjusted.longitude),
+                    z,
+                  ),
+                );
+              }
+            } catch (_) {}
           }
         }
       } else {
@@ -1444,12 +1703,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       }
       if (permission == LocationPermission.deniedForever) return;
 
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       if (mounted) setState(() => _myPos = LatLng(pos.latitude, pos.longitude));
 
       _posSub?.cancel();
       _posSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
       ).listen((p) {
         if (!mounted) return;
         setState(() => _myPos = LatLng(p.latitude, p.longitude));
@@ -1465,7 +1729,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     });
   }
 
-  Future<void> _loadMarkers({required String centerName, required double lat, required double lng, required double radiusKm}) async {
+  Future<void> _loadMarkers({
+    required String centerName,
+    required double lat,
+    required double lng,
+    required double radiusKm,
+  }) async {
     _markers.clear();
     _appleAnnotations.clear();
     _gmMarkers.clear();
@@ -1486,8 +1755,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final sid = prefs.getInt('selected_teibou_id');
       if (sid != null && sid > 0) {
         for (final r in rows) {
-          final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-          if (rid == sid) { centerRow = r; break; }
+          final rid =
+              r['port_id'] is int
+                  ? r['port_id'] as int
+                  : int.tryParse(r['port_id']?.toString() ?? '');
+          if (rid == sid) {
+            centerRow = r;
+            break;
+          }
         }
       }
     } catch (_) {}
@@ -1498,7 +1773,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final dlat0 = _toDouble(r['latitude']);
         final dlng0 = _toDouble(r['longitude']);
         if (dlat0 == null || dlng0 == null) continue;
-        if ((dlat0 - lat).abs() < eps && (dlng0 - lng).abs() < eps) { centerRow = r; break; }
+        if ((dlat0 - lat).abs() < eps && (dlng0 - lng).abs() < eps) {
+          centerRow = r;
+          break;
+        }
       }
     }
     // 3) 名前一致のうち、中心に最も近い行
@@ -1512,13 +1790,22 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final dlng0 = _toDouble(r['longitude']);
         if (dlat0 == null || dlng0 == null) continue;
         final d = _distanceKm(lat, lng, dlat0, dlng0);
-        if (d < best) { best = d; bestRow = r; }
+        if (d < best) {
+          best = d;
+          bestRow = r;
+        }
       }
       centerRow = bestRow;
     }
     if (centerRow != null) {
-      centerPortId = centerRow['port_id'] is int ? centerRow['port_id'] as int : int.tryParse(centerRow['port_id']?.toString() ?? '');
-      final int? flag = centerRow['flag'] is int ? centerRow['flag'] as int : int.tryParse(centerRow['flag']?.toString() ?? '');
+      centerPortId =
+          centerRow['port_id'] is int
+              ? centerRow['port_id'] as int
+              : int.tryParse(centerRow['port_id']?.toString() ?? '');
+      final int? flag =
+          centerRow['flag'] is int
+              ? centerRow['flag'] as int
+              : int.tryParse(centerRow['flag']?.toString() ?? '');
       centerPending = (flag == -1);
       centerRejected = (flag == -2);
       final dlat1 = _toDouble(centerRow['latitude']);
@@ -1536,8 +1823,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         Map<String, dynamic>? rr;
         if (sid != null && sid > 0) {
           for (final r in rows) {
-            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            if (rid == sid) { rr = r; break; }
+            final rid =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) {
+              rr = r;
+              break;
+            }
           }
         }
         rr ??= rows.cast<Map<String, dynamic>?>().firstWhere(
@@ -1545,10 +1838,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           orElse: () => null,
         );
         if (rr != null) {
-          final int? f = rr['flag'] is int ? rr['flag'] as int : int.tryParse(rr['flag']?.toString() ?? '');
+          final int? f =
+              rr['flag'] is int
+                  ? rr['flag'] as int
+                  : int.tryParse(rr['flag']?.toString() ?? '');
           centerPending = (f == -1);
           centerRejected = (f == -2);
-          centerPortId ??= rr['port_id'] is int ? rr['port_id'] as int : int.tryParse(rr['port_id']?.toString() ?? '');
+          centerPortId ??=
+              rr['port_id'] is int
+                  ? rr['port_id'] as int
+                  : int.tryParse(rr['port_id']?.toString() ?? '');
           if (!centerRejected) {
             final dlat1 = _toDouble(rr['latitude']);
             final dlng1 = _toDouble(rr['longitude']);
@@ -1567,36 +1866,62 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       const double d2r = 3.141592653589793 / 180.0;
       final rlat = lat * d2r;
       for (final r in rows) {
-        final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+        final int? flag =
+            r['flag'] is int
+                ? r['flag'] as int
+                : int.tryParse(r['flag']?.toString() ?? '');
         if (flag == -2) continue;
         final dlat0 = _toDouble(r['latitude']);
         final dlng0 = _toDouble(r['longitude']);
         if (dlat0 == null || dlng0 == null) continue;
         final a = _haversine(lat, lng, dlat0, dlng0, cosLat: rlat);
-        if (a < best) { best = a; bestRow = r; }
+        if (a < best) {
+          best = a;
+          bestRow = r;
+        }
       }
       if (bestRow != null) {
         final nlat = _toDouble(bestRow['latitude']) ?? lat;
         final nlng = _toDouble(bestRow['longitude']) ?? lng;
         cn = (bestRow['port_name'] ?? '').toString();
         center = LatLng(nlat, nlng);
-        centerPortId = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
-        final int? f2 = bestRow['flag'] is int ? bestRow['flag'] as int : int.tryParse(bestRow['flag']?.toString() ?? '');
+        centerPortId =
+            bestRow['port_id'] is int
+                ? bestRow['port_id'] as int
+                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+        final int? f2 =
+            bestRow['flag'] is int
+                ? bestRow['flag'] as int
+                : int.tryParse(bestRow['flag']?.toString() ?? '');
         centerPending = (f2 == -1);
         centerRejected = false;
         try {
           String? np;
-          if (!_pointsLoading && _pointCoords.isNotEmpty) { np = _nearestPointName(nlat, nlng); }
-          final int? prefId = bestRow['todoufuken_id'] is int
-              ? bestRow['todoufuken_id'] as int
-              : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ?? int.tryParse(bestRow['pref_id_from_port']?.toString() ?? '');
-          await Common.instance.saveSelectedTeibou(cn, np ?? (Common.instance.tidePoint), id: centerPortId, lat: nlat, lng: nlng, prefId: prefId);
+          if (!_pointsLoading && _pointCoords.isNotEmpty) {
+            np = _nearestPointName(nlat, nlng);
+          }
+          final int? prefId =
+              bestRow['todoufuken_id'] is int
+                  ? bestRow['todoufuken_id'] as int
+                  : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ??
+                      int.tryParse(
+                        bestRow['pref_id_from_port']?.toString() ?? '',
+                      );
+          await Common.instance.saveSelectedTeibou(
+            cn,
+            np ?? (Common.instance.tidePoint),
+            id: centerPortId,
+            lat: nlat,
+            lng: nlng,
+            prefId: prefId,
+          );
           Common.instance.shouldJumpPage = true;
           Common.instance.notify();
         } catch (_) {}
       }
     }
-    final bool isCenterFav = centerPortId != null && _favoriteIds.contains(centerPortId);
+    final bool isCenterFav =
+        centerPortId != null && _favoriteIds.contains(centerPortId);
     // AppleMap 中心注釈
     if (!centerRejected) {
       _appleAnnotations.add(
@@ -1612,19 +1937,25 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final dlat = _toDouble(r['latitude']);
       final dlng = _toDouble(r['longitude']);
       final name = (r['port_name'] ?? '').toString();
-      final int? flag = r['flag'] is int ? r['flag'] as int : int.tryParse(r['flag']?.toString() ?? '');
+      final int? flag =
+          r['flag'] is int
+              ? r['flag'] as int
+              : int.tryParse(r['flag']?.toString() ?? '');
       final bool isPending = flag == -1;
       // 非承認は非表示
       if (flag == -2) {
         continue;
       }
       final displayName = isPending ? '$name (申請中)' : name;
-      final int? prefId = r['todoufuken_id'] is int
-          ? r['todoufuken_id'] as int
-          : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '');
-      final int? portId = r['port_id'] is int
-          ? r['port_id'] as int
-          : int.tryParse(r['port_id']?.toString() ?? '');
+      final int? prefId =
+          r['todoufuken_id'] is int
+              ? r['todoufuken_id'] as int
+              : int.tryParse(r['todoufuken_id']?.toString() ?? '') ??
+                  int.tryParse(r['pref_id_from_port']?.toString() ?? '');
+      final int? portId =
+          r['port_id'] is int
+              ? r['port_id'] as int
+              : int.tryParse(r['port_id']?.toString() ?? '');
       if (dlat == null || dlng == null) continue;
       final d = _distanceKm(lat, lng, dlat, dlng);
       if (d <= radiusKm && !(dlat == lat && dlng == lng)) {
@@ -1640,28 +1971,41 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 // 申請中ピンを編集（申請者本人 or 管理者）
                 if (_applyMode && isPending) {
                   try {
-                    final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                    final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-                    final int? owner = r['user_id'] is int ? r['user_id'] as int : int.tryParse(r['user_id']?.toString() ?? '');
+                    final info =
+                        await loadUserInfo() ?? await getOrInitUserInfo();
+                    final bool isAdmin =
+                        ((info.role ?? '').toLowerCase() == 'admin');
+                    final int? owner =
+                        r['user_id'] is int
+                            ? r['user_id'] as int
+                            : int.tryParse(r['user_id']?.toString() ?? '');
                     if (isAdmin || (owner != null && owner == info.userId)) {
                       final prefName = (r['todoufuken_name'] ?? '').toString();
                       if (!mounted) return;
                       final res = await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => SpotApplyFormPage(
-                            lat: dlat,
-                            lng: dlng,
-                            editMode: true,
-                            initialKind: (r['kubun'] ?? '').toString(),
-                            initialName: name,
-                            initialYomi: (r['j_yomi'] ?? r['furigana'] ?? '').toString(),
-                            initialAddress: (r['address'] ?? '').toString(),
-                            initialPrefName: prefName,
-                            initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
-                            initialPortId: portId,
-                            canModerate: isAdmin,
-                          ),
+                          builder:
+                              (_) => SpotApplyFormPage(
+                                lat: dlat,
+                                lng: dlng,
+                                editMode: true,
+                                initialKind: (r['kubun'] ?? '').toString(),
+                                initialName: name,
+                                initialYomi:
+                                    (r['j_yomi'] ?? r['furigana'] ?? '')
+                                        .toString(),
+                                initialAddress: (r['address'] ?? '').toString(),
+                                initialPrefName: prefName,
+                                initialPrivate:
+                                    (r['private'] is int)
+                                        ? r['private'] as int
+                                        : int.tryParse(
+                                          r['private']?.toString() ?? '0',
+                                        ),
+                                initialPortId: portId,
+                                canModerate: isAdmin,
+                              ),
                         ),
                       );
                       if (res == true && mounted) {
@@ -1669,7 +2013,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           _applyMode = false;
                           _applyPoint = null;
                           _gmApplyPoint = null;
-                          try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                          try {
+                            _gmMarkers.removeWhere(
+                              (m) => m.markerId.value == 'apply',
+                            );
+                          } catch (_) {}
                         });
                       }
                       return;
@@ -1697,9 +2045,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 Common.instance.notify();
                 // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
                 // マーカーを再構築
-                await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm);
+                await _loadMarkers(
+                  centerName: name,
+                  lat: dlat,
+                  lng: dlng,
+                  radiusKm: radiusKm,
+                );
                 // 投稿一覧リロード。シートが非表示なら再表示、表示中はサイズ維持
-                if (mounted) setState(() { _sheetReloadTick++; });
+                if (mounted)
+                  setState(() {
+                    _sheetReloadTick++;
+                  });
                 if (_safeSheetSize() <= 0.01) {
                   _recreateSheet(show: true);
                 } else {
@@ -1711,22 +2067,38 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 children: [
                   // ラベル上、ピン下
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(4),
-                      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 2,
+                          offset: Offset(1, 1),
+                        ),
+                      ],
                     ),
                     child: Text(
                       displayName,
-                      style: TextStyle(fontSize: 10, color: Colors.black, fontWeight: isFav ? FontWeight.bold : FontWeight.normal),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.black,
+                        fontWeight: isFav ? FontWeight.bold : FontWeight.normal,
+                      ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
                   ),
                   Icon(
                     Icons.location_pin,
-                    color: (flag != null && flag != 0) ? Colors.green : Colors.blueAccent,
+                    color:
+                        (flag != null && flag != 0)
+                            ? Colors.green
+                            : Colors.blueAccent,
                     size: isFav ? 42 : 28,
                   ),
                 ],
@@ -1763,48 +2135,69 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       return '';
                   }
                 }
+
                 String _shortAddress(String s) {
                   final t = s.trim();
                   if (t.isEmpty) return t;
                   final parts = t.split(RegExp(r'\s+'));
-                  return parts.length >= 2 ? '${parts[0]} ${parts[1]}' : parts[0];
+                  return parts.length >= 2
+                      ? '${parts[0]} ${parts[1]}'
+                      : parts[0];
                 }
+
                 final addr = _shortAddress((r['address'] ?? '').toString());
                 final st = _flagText(flag);
-                final latlng = '緯度: ${dlat.toStringAsFixed(5)}, 経度: ${dlng.toStringAsFixed(5)}';
+                final latlng =
+                    '緯度: ${dlat.toStringAsFixed(5)}, 経度: ${dlng.toStringAsFixed(5)}';
                 final addrLine = '住所: ' + (addr.isNotEmpty ? addr : '不明');
                 final stLine = '状態: ' + (st.isNotEmpty ? st : '不明');
                 return '$latlng\n$addrLine\n$stLine';
               }(),
             ),
-            icon: (flag != null && flag != 0)
-                ? gm.BitmapDescriptor.defaultMarkerWithHue(gm.BitmapDescriptor.hueGreen)
-                : gm.BitmapDescriptor.defaultMarker,
+            icon:
+                (flag != null && flag != 0)
+                    ? gm.BitmapDescriptor.defaultMarkerWithHue(
+                      gm.BitmapDescriptor.hueGreen,
+                    )
+                    : gm.BitmapDescriptor.defaultMarker,
             onTap: () async {
               if (_applyMode && isPending) {
                 try {
-                  final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                  final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-                  final int? owner = r['user_id'] is int ? r['user_id'] as int : int.tryParse(r['user_id']?.toString() ?? '');
+                  final info =
+                      await loadUserInfo() ?? await getOrInitUserInfo();
+                  final bool isAdmin =
+                      ((info.role ?? '').toLowerCase() == 'admin');
+                  final int? owner =
+                      r['user_id'] is int
+                          ? r['user_id'] as int
+                          : int.tryParse(r['user_id']?.toString() ?? '');
                   if (isAdmin || (owner != null && owner == info.userId)) {
                     final prefName = (r['todoufuken_name'] ?? '').toString();
                     if (!mounted) return;
                     final res = await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => SpotApplyFormPage(
-                          lat: dlat,
-                          lng: dlng,
-                          editMode: true,
-                          initialKind: (r['kubun'] ?? '').toString(),
-                          initialName: name,
-                          initialYomi: (r['j_yomi'] ?? r['furigana'] ?? '').toString(),
-                          initialAddress: (r['address'] ?? '').toString(),
-                          initialPrefName: prefName,
-                          initialPrivate: (r['private'] is int) ? r['private'] as int : int.tryParse(r['private']?.toString() ?? '0'),
-                          initialPortId: portId,
-                          canModerate: isAdmin,
-                        ),
+                        builder:
+                            (_) => SpotApplyFormPage(
+                              lat: dlat,
+                              lng: dlng,
+                              editMode: true,
+                              initialKind: (r['kubun'] ?? '').toString(),
+                              initialName: name,
+                              initialYomi:
+                                  (r['j_yomi'] ?? r['furigana'] ?? '')
+                                      .toString(),
+                              initialAddress: (r['address'] ?? '').toString(),
+                              initialPrefName: prefName,
+                              initialPrivate:
+                                  (r['private'] is int)
+                                      ? r['private'] as int
+                                      : int.tryParse(
+                                        r['private']?.toString() ?? '0',
+                                      ),
+                              initialPortId: portId,
+                              canModerate: isAdmin,
+                            ),
                       ),
                     );
                     if (res == true && mounted) {
@@ -1812,9 +2205,20 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         _applyMode = false;
                         _applyPoint = null;
                         _gmApplyPoint = null;
-                        try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                        try {
+                          _gmMarkers.removeWhere(
+                            (m) => m.markerId.value == 'apply',
+                          );
+                        } catch (_) {}
                       });
-                      try { await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm); } catch (_) {}
+                      try {
+                        await _loadMarkers(
+                          centerName: name,
+                          lat: dlat,
+                          lng: dlng,
+                          radiusKm: radiusKm,
+                        );
+                      } catch (_) {}
                       if (mounted) setState(() {});
                     }
                     return;
@@ -1842,8 +2246,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               Common.instance.notify();
               // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
               // マーカー再構築
-              await _loadMarkers(centerName: name, lat: dlat, lng: dlng, radiusKm: radiusKm);
-              if (mounted) setState(() { _sheetReloadTick++; });
+              await _loadMarkers(
+                centerName: name,
+                lat: dlat,
+                lng: dlng,
+                radiusKm: radiusKm,
+              );
+              if (mounted)
+                setState(() {
+                  _sheetReloadTick++;
+                });
               if (_safeSheetSize() <= 0.01) {
                 _recreateSheet(show: true);
               } else {
@@ -1857,23 +2269,199 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
 
     // 中心マーカーを最後に追加（最前面に表示）
-    if (!centerRejected) _markers.add(
-      fm.Marker(
-        width: 200,
-        height: isCenterFav ? 84 : 64,
-        point: center,
-        child: GestureDetector(
+    if (!centerRejected)
+      _markers.add(
+        fm.Marker(
+          width: 200,
+          height: isCenterFav ? 84 : 64,
+          point: center,
+          child: GestureDetector(
+            onTap: () async {
+              if (_applyMode && centerPending) {
+                try {
+                  final info =
+                      await loadUserInfo() ?? await getOrInitUserInfo();
+                  final bool isAdmin =
+                      ((info.role ?? '').toLowerCase() == 'admin');
+                  // 対応する行を検索（port_id 最優先）
+                  Map<String, dynamic>? cr;
+                  if (centerPortId != null) {
+                    for (final r in rows) {
+                      final rid =
+                          r['port_id'] is int
+                              ? r['port_id'] as int
+                              : int.tryParse(r['port_id']?.toString() ?? '');
+                      if (rid == centerPortId) {
+                        cr = r;
+                        break;
+                      }
+                    }
+                  }
+                  if (cr == null) {
+                    for (final r in rows) {
+                      final n = (r['port_name'] ?? '').toString();
+                      final dlat0 = _toDouble(r['latitude']);
+                      final dlng0 = _toDouble(r['longitude']);
+                      if (dlat0 == null || dlng0 == null) continue;
+                      if ((n == centerName) ||
+                          ((dlat0 - lat).abs() < 1e-8 &&
+                              (dlng0 - lng).abs() < 1e-8)) {
+                        cr = r;
+                        break;
+                      }
+                    }
+                  }
+                  final int? owner =
+                      cr == null
+                          ? null
+                          : (cr['user_id'] is int
+                              ? cr['user_id'] as int
+                              : int.tryParse(cr['user_id']?.toString() ?? ''));
+                  if (isAdmin || (owner != null && owner == info.userId)) {
+                    final prefName =
+                        cr == null
+                            ? ''
+                            : (cr['todoufuken_name'] ?? '').toString();
+                    if (!mounted) return;
+                    final res = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => SpotApplyFormPage(
+                              lat: center.latitude,
+                              lng: center.longitude,
+                              editMode: true,
+                              initialKind:
+                                  cr == null
+                                      ? ''
+                                      : (cr['kubun'] ?? '').toString(),
+                              initialName: centerName,
+                              initialYomi:
+                                  cr == null
+                                      ? ''
+                                      : (cr['j_yomi'] ?? cr['furigana'] ?? '')
+                                          .toString(),
+                              initialAddress:
+                                  cr == null
+                                      ? ''
+                                      : (cr['address'] ?? '').toString(),
+                              initialPrefName: prefName,
+                              initialPrivate:
+                                  cr == null
+                                      ? 0
+                                      : ((cr['private'] is int)
+                                          ? cr['private'] as int
+                                          : int.tryParse(
+                                                cr['private']?.toString() ??
+                                                    '0',
+                                              ) ??
+                                              0),
+                              initialPortId:
+                                  cr == null
+                                      ? null
+                                      : (cr['port_id'] is int
+                                          ? cr['port_id'] as int
+                                          : int.tryParse(
+                                            cr['port_id']?.toString() ?? '',
+                                          )),
+                              canModerate: isAdmin,
+                            ),
+                      ),
+                    );
+                    if (res == true && mounted) {
+                      setState(() {
+                        _applyMode = false;
+                        _applyPoint = null;
+                        _gmApplyPoint = null;
+                        try {
+                          _gmMarkers.removeWhere(
+                            (m) => m.markerId.value == 'apply',
+                          );
+                        } catch (_) {}
+                      });
+                      try {
+                        await _loadMarkers(
+                          centerName: centerName,
+                          lat: center.latitude,
+                          lng: center.longitude,
+                          radiusKm: 30.0,
+                        );
+                      } catch (_) {}
+                      if (mounted) setState(() {});
+                    }
+                    return;
+                  }
+                } catch (_) {}
+              }
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: _showCurrentSpotInfoDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 2),
+                      ],
+                    ),
+                    child: Text(
+                      centerPending ? '$cn (申請中)' : cn,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.location_pin,
+                  color: Colors.red,
+                  size: isCenterFav ? 48 : 32,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+    // GoogleMap 中心マーカー（zIndexを高めに）
+    if (!centerRejected)
+      _gmMarkers.add(
+        gm.Marker(
+          markerId: const gm.MarkerId('c'),
+          position: gm.LatLng(center.latitude, center.longitude),
+          infoWindow: gm.InfoWindow(
+            title: centerPending ? '$cn (申請中)' : cn,
+            snippet: '中心',
+          ),
           onTap: () async {
             if (_applyMode && centerPending) {
               try {
                 final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-                // 対応する行を検索（port_id 最優先）
+                final bool isAdmin =
+                    ((info.role ?? '').toLowerCase() == 'admin');
+                // port_id 最優先で検索
                 Map<String, dynamic>? cr;
                 if (centerPortId != null) {
                   for (final r in rows) {
-                    final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                    if (rid == centerPortId) { cr = r; break; }
+                    final rid =
+                        r['port_id'] is int
+                            ? r['port_id'] as int
+                            : int.tryParse(r['port_id']?.toString() ?? '');
+                    if (rid == centerPortId) {
+                      cr = r;
+                      break;
+                    }
                   }
                 }
                 if (cr == null) {
@@ -1882,139 +2470,90 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     final dlat0 = _toDouble(r['latitude']);
                     final dlng0 = _toDouble(r['longitude']);
                     if (dlat0 == null || dlng0 == null) continue;
-                    if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
+                    if ((n == centerName) ||
+                        ((dlat0 - lat).abs() < 1e-8 &&
+                            (dlng0 - lng).abs() < 1e-8)) {
+                      cr = r;
+                      break;
+                    }
                   }
                 }
-                final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
+                final int? owner =
+                    cr == null
+                        ? null
+                        : (cr['user_id'] is int
+                            ? cr['user_id'] as int
+                            : int.tryParse(cr['user_id']?.toString() ?? ''));
                 if (isAdmin || (owner != null && owner == info.userId)) {
-                  final prefName = cr == null ? '' : (cr['todoufuken_name'] ?? '').toString();
+                  final prefName =
+                      cr == null
+                          ? ''
+                          : (cr['todoufuken_name'] ?? '').toString();
                   if (!mounted) return;
                   final res = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SpotApplyFormPage(
-                        lat: center.latitude,
-                        lng: center.longitude,
-                        editMode: true,
-                        initialKind: cr == null ? '' : (cr['kubun'] ?? '').toString(),
-                        initialName: centerName,
-                        initialYomi: cr == null ? '' : (cr['j_yomi'] ?? cr['furigana'] ?? '').toString(),
-                        initialAddress: cr == null ? '' : (cr['address'] ?? '').toString(),
-                        initialPrefName: prefName,
-                        initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
-                        initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
-                        canModerate: isAdmin,
-                      ),
+                      builder:
+                          (_) => SpotApplyFormPage(
+                            lat: center.latitude,
+                            lng: center.longitude,
+                            editMode: true,
+                            initialKind:
+                                cr == null
+                                    ? ''
+                                    : (cr['kubun'] ?? '').toString(),
+                            initialName: centerName,
+                            initialYomi:
+                                cr == null
+                                    ? ''
+                                    : (cr['j_yomi'] ?? cr['furigana'] ?? '')
+                                        .toString(),
+                            initialAddress:
+                                cr == null
+                                    ? ''
+                                    : (cr['address'] ?? '').toString(),
+                            initialPrefName: prefName,
+                            initialPrivate:
+                                cr == null
+                                    ? 0
+                                    : ((cr['private'] is int)
+                                        ? cr['private'] as int
+                                        : int.tryParse(
+                                              cr['private']?.toString() ?? '0',
+                                            ) ??
+                                            0),
+                            initialPortId:
+                                cr == null
+                                    ? null
+                                    : (cr['port_id'] is int
+                                        ? cr['port_id'] as int
+                                        : int.tryParse(
+                                          cr['port_id']?.toString() ?? '',
+                                        )),
+                            canModerate: isAdmin,
+                          ),
                     ),
                   );
-                    if (res == true && mounted) {
-                      setState(() {
-                        _applyMode = false;
-                        _applyPoint = null;
-                        _gmApplyPoint = null;
-                        try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
-                      });
-                      try { await _loadMarkers(centerName: centerName, lat: center.latitude, lng: center.longitude, radiusKm: 30.0); } catch (_) {}
-                      if (mounted) setState(() {});
-                    }
+                  if (res == true && mounted) {
+                    setState(() {
+                      _applyMode = false;
+                      _applyPoint = null;
+                      _gmApplyPoint = null;
+                      try {
+                        _gmMarkers.removeWhere(
+                          (m) => m.markerId.value == 'apply',
+                        );
+                      } catch (_) {}
+                    });
+                  }
                   return;
                 }
               } catch (_) {}
             }
           },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: _showCurrentSpotInfoDialog,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
-                  ),
-                  child: Text(
-                    centerPending ? '$cn (申請中)' : cn,
-                    style: const TextStyle(fontSize: 15, color: Colors.black87, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
-                ),
-              ),
-              Icon(Icons.location_pin, color: Colors.red, size: isCenterFav ? 48 : 32),
-            ],
-          ),
+          zIndex: 1000,
         ),
-      ),
-    );
-
-    // GoogleMap 中心マーカー（zIndexを高めに）
-    if (!centerRejected) _gmMarkers.add(
-      gm.Marker(
-        markerId: const gm.MarkerId('c'),
-        position: gm.LatLng(center.latitude, center.longitude),
-        infoWindow: gm.InfoWindow(title: centerPending ? '$cn (申請中)' : cn, snippet: '中心'),
-        onTap: () async {
-          if (_applyMode && centerPending) {
-            try {
-              final info = await loadUserInfo() ?? await getOrInitUserInfo();
-              final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-              // port_id 最優先で検索
-              Map<String, dynamic>? cr;
-              if (centerPortId != null) {
-                for (final r in rows) {
-                  final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                  if (rid == centerPortId) { cr = r; break; }
-                }
-              }
-              if (cr == null) {
-                for (final r in rows) {
-                  final n = (r['port_name'] ?? '').toString();
-                  final dlat0 = _toDouble(r['latitude']);
-                  final dlng0 = _toDouble(r['longitude']);
-                  if (dlat0 == null || dlng0 == null) continue;
-                  if ((n == centerName) || ((dlat0 - lat).abs() < 1e-8 && (dlng0 - lng).abs() < 1e-8)) { cr = r; break; }
-                }
-              }
-              final int? owner = cr == null ? null : (cr['user_id'] is int ? cr['user_id'] as int : int.tryParse(cr['user_id']?.toString() ?? ''));
-              if (isAdmin || (owner != null && owner == info.userId)) {
-                final prefName = cr == null ? '' : (cr['todoufuken_name'] ?? '').toString();
-                if (!mounted) return;
-                final res = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SpotApplyFormPage(
-                      lat: center.latitude,
-                      lng: center.longitude,
-                      editMode: true,
-                      initialKind: cr == null ? '' : (cr['kubun'] ?? '').toString(),
-                      initialName: centerName,
-                      initialYomi: cr == null ? '' : (cr['j_yomi'] ?? cr['furigana'] ?? '').toString(),
-                      initialAddress: cr == null ? '' : (cr['address'] ?? '').toString(),
-                      initialPrefName: prefName,
-                      initialPrivate: cr == null ? 0 : ((cr['private'] is int) ? cr['private'] as int : int.tryParse(cr['private']?.toString() ?? '0') ?? 0),
-                      initialPortId: cr == null ? null : (cr['port_id'] is int ? cr['port_id'] as int : int.tryParse(cr['port_id']?.toString() ?? '')),
-                      canModerate: isAdmin,
-                    ),
-                  ),
-                );
-                if (res == true && mounted) {
-                  setState(() {
-                    _applyMode = false;
-                    _applyPoint = null;
-                    _gmApplyPoint = null;
-                    try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
-                  });
-                }
-                return;
-              }
-            } catch (_) {}
-          }
-        },
-        zIndex: 1000,
-      ),
-    );
+      );
 
     // GoogleMap: 外接円（候補範囲） - 曖昧表示のときのみ
     if (_center != null && maxDkm > 0 && ambiguous_plevel == 2) {
@@ -2034,13 +2573,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     if (ambiguous_plevel == 2) {
       _gmPolylines.clear();
       for (final pl in _buildMeshPolylines()) {
-        final pts = pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
-        _gmPolylines.add(gm.Polyline(
-          polylineId: gm.PolylineId('mesh-${_gmPolylines.length}'),
-          points: pts,
-          color: Colors.black.withOpacity(0.2),
-          width: 1,
-        ));
+        final pts =
+            pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
+        _gmPolylines.add(
+          gm.Polyline(
+            polylineId: gm.PolylineId('mesh-${_gmPolylines.length}'),
+            points: pts,
+            color: Colors.black.withOpacity(0.2),
+            width: 1,
+          ),
+        );
       }
     }
     if (mounted) setState(() {});
@@ -2050,111 +2592,75 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Widget build(BuildContext context) {
     return SizedBox(
       height: widget.height,
-      child: _center == null
-          ? const ColoredBox(color: Colors.black)
-          : Stack(
-              children: [
-                if (Platform.isIOS && baseMap == 1)
-                  am.AppleMap(
-                    initialCameraPosition: am.CameraPosition(
-                      target: am.LatLng(_center!.latitude, _center!.longitude),
-                      zoom: 12,
-                    ),
-                    annotations: _appleAnnotations,
-                  )
-                else if (baseMap == 2)
-                  gm.GoogleMap(
-                    initialCameraPosition: gm.CameraPosition(
-                      target: gm.LatLng(_center!.latitude, _center!.longitude),
-                      zoom: 12,
-                    ),
-                    mapType: _isSatellite ? gm.MapType.hybrid : gm.MapType.normal,
-                    onMapCreated: (c) => _gmController = c,
-                    onLongPress: (pos) async {
-                      if (!_applyMode) {
-                        // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
-                        await _onViewLongPress(pos.latitude, pos.longitude);
-                        return;
-                      }
-                      // 長押しで申請用ピンを設置
-                      setState(() {
-                        _gmApplyPoint = pos;
-                        // 既存の 'apply' マーカーを除去してから追加
-                        _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
-                        _gmMarkers.add(
-                          gm.Marker(
-                            markerId: const gm.MarkerId('apply'),
-                            position: pos,
-                            infoWindow: gm.InfoWindow(
-                              title: '釣り場登録',
-                              onTap: () {
-                                _openApplyForm(pos.latitude, pos.longitude);
-                              },
-                            ),
-                            onTap: () {
-                              // タップでインフォウィンドウを表示
-                              try { _gmController?.showMarkerInfoWindow(const gm.MarkerId('apply')); } catch (_) {}
-                            },
-                          ),
-                        );
-                      });
-                      // 可能なら情報ウィンドウを即表示
-                      try { _gmController?.showMarkerInfoWindow(const gm.MarkerId('apply')); } catch (_) {}
-                      // 案内表示
-                      final messenger = ScaffoldMessenger.maybeOf(context);
-                      messenger?.showSnackBar(
-                        const SnackBar(
-                          content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
-                          duration: Duration(seconds: 3),
+      child:
+          _center == null
+              ? const ColoredBox(color: Colors.black)
+              : Stack(
+                children: [
+                  if (Platform.isIOS && baseMap == 1)
+                    am.AppleMap(
+                      initialCameraPosition: am.CameraPosition(
+                        target: am.LatLng(
+                          _center!.latitude,
+                          _center!.longitude,
                         ),
-                      );
-                    },
-                    onCameraMove: (pos) {
-                      if (!mounted) return;
-                      setState(() {
-                        _center = LatLng(pos.target.latitude, pos.target.longitude);
-                        _currentZoom = pos.zoom;
-                      });
-                      // メッシュはズーム・中心に応じて動的だが、簡易に再計算
-                      if (ambiguous_plevel == 2) {
-                        _gmPolylines.clear();
-                        for (final pl in _buildMeshPolylines()) {
-                          final pts = pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
-                          _gmPolylines.add(gm.Polyline(
-                            polylineId: gm.PolylineId('mesh-${_gmPolylines.length}-${DateTime.now().millisecondsSinceEpoch}'),
-                            points: pts,
-                            color: Colors.black.withOpacity(0.2),
-                            width: 1,
-                          ));
-                        }
-                        if (mounted) setState(() {});
-                      }
-                    },
-                    markers: _gmMarkers,
-                    polylines: _gmPolylines,
-                    circles: _gmCircles,
-                    myLocationEnabled: _myPos != null,
-                    myLocationButtonEnabled: true,
-                    compassEnabled: true,
-                    zoomControlsEnabled: false,
-                  )
-                else
-                  fm.FlutterMap(
-                    options: fm.MapOptions(
-                      initialCenter: _center!,
-                      // 半径30km相当より1段ズームイン（約2倍拡大）
-                      initialZoom: _zoomForRadius(30.0) + 1.0,
-                      interactionOptions: const fm.InteractionOptions(flags: fm.InteractiveFlag.all),
-                      onLongPress: (tapPosition, latlng) async {
+                        zoom: 12,
+                      ),
+                      annotations: _appleAnnotations,
+                    )
+                  else if (baseMap == 2)
+                    gm.GoogleMap(
+                      initialCameraPosition: gm.CameraPosition(
+                        target: gm.LatLng(
+                          _center!.latitude,
+                          _center!.longitude,
+                        ),
+                        zoom: 12,
+                      ),
+                      mapType:
+                          _isSatellite ? gm.MapType.hybrid : gm.MapType.normal,
+                      onMapCreated: (c) => _gmController = c,
+                      onLongPress: (pos) async {
                         if (!_applyMode) {
                           // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
-                          await _onViewLongPress(latlng.latitude, latlng.longitude);
+                          await _onViewLongPress(pos.latitude, pos.longitude);
                           return;
                         }
                         // 長押しで申請用ピンを設置
                         setState(() {
-                          _applyPoint = latlng;
+                          _gmApplyPoint = pos;
+                          // 既存の 'apply' マーカーを除去してから追加
+                          _gmMarkers.removeWhere(
+                            (m) => m.markerId.value == 'apply',
+                          );
+                          _gmMarkers.add(
+                            gm.Marker(
+                              markerId: const gm.MarkerId('apply'),
+                              position: pos,
+                              infoWindow: gm.InfoWindow(
+                                title: '釣り場登録',
+                                onTap: () {
+                                  _openApplyForm(pos.latitude, pos.longitude);
+                                },
+                              ),
+                              onTap: () {
+                                // タップでインフォウィンドウを表示
+                                try {
+                                  _gmController?.showMarkerInfoWindow(
+                                    const gm.MarkerId('apply'),
+                                  );
+                                } catch (_) {}
+                              },
+                            ),
+                          );
                         });
+                        // 可能なら情報ウィンドウを即表示
+                        try {
+                          _gmController?.showMarkerInfoWindow(
+                            const gm.MarkerId('apply'),
+                          );
+                        } catch (_) {}
+                        // 案内表示
                         final messenger = ScaffoldMessenger.maybeOf(context);
                         messenger?.showSnackBar(
                           const SnackBar(
@@ -2163,115 +2669,221 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           ),
                         );
                       },
-                      onPositionChanged: (pos, hasGesture) {
+                      onCameraMove: (pos) {
                         if (!mounted) return;
                         setState(() {
-                          if (pos.center != null) {
-                            _center = pos.center;
-                          }
-                          if (pos.zoom != null) {
-                            _currentZoom = pos.zoom!;
-                          }
+                          _center = LatLng(
+                            pos.target.latitude,
+                            pos.target.longitude,
+                          );
+                          _currentZoom = pos.zoom;
                         });
+                        // メッシュはズーム・中心に応じて動的だが、簡易に再計算
+                        if (ambiguous_plevel == 2) {
+                          _gmPolylines.clear();
+                          for (final pl in _buildMeshPolylines()) {
+                            final pts =
+                                pl.points
+                                    .map(
+                                      (p) => gm.LatLng(p.latitude, p.longitude),
+                                    )
+                                    .toList();
+                            _gmPolylines.add(
+                              gm.Polyline(
+                                polylineId: gm.PolylineId(
+                                  'mesh-${_gmPolylines.length}-${DateTime.now().millisecondsSinceEpoch}',
+                                ),
+                                points: pts,
+                                color: Colors.black.withOpacity(0.2),
+                                width: 1,
+                              ),
+                            );
+                          }
+                          if (mounted) setState(() {});
+                        }
                       },
+                      markers: _gmMarkers,
+                      polylines: _gmPolylines,
+                      circles: _gmCircles,
+                      myLocationEnabled: _myPos != null,
+                      myLocationButtonEnabled: true,
+                      compassEnabled: true,
+                      zoomControlsEnabled: false,
+                    )
+                  else
+                    fm.FlutterMap(
+                      options: fm.MapOptions(
+                        initialCenter: _center!,
+                        // 半径30km相当より1段ズームイン（約2倍拡大）
+                        initialZoom: _zoomForRadius(30.0) + 1.0,
+                        interactionOptions: const fm.InteractionOptions(
+                          flags: fm.InteractiveFlag.all,
+                        ),
+                        onLongPress: (tapPosition, latlng) async {
+                          if (!_applyMode) {
+                            // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
+                            await _onViewLongPress(
+                              latlng.latitude,
+                              latlng.longitude,
+                            );
+                            return;
+                          }
+                          // 長押しで申請用ピンを設置
+                          setState(() {
+                            _applyPoint = latlng;
+                          });
+                          final messenger = ScaffoldMessenger.maybeOf(context);
+                          messenger?.showSnackBar(
+                            const SnackBar(
+                              content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        },
+                        onPositionChanged: (pos, hasGesture) {
+                          if (!mounted) return;
+                          setState(() {
+                            if (pos.center != null) {
+                              _center = pos.center;
+                            }
+                            if (pos.zoom != null) {
+                              _currentZoom = pos.zoom!;
+                            }
+                          });
+                        },
+                      ),
+                      mapController: _mapController,
+                      children: [
+                        fm.TileLayer(
+                          urlTemplate:
+                              'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          subdomains: const ['a', 'b', 'c'],
+                          userAgentPackageName: 'jp.bouzer.siowadou',
+                          tileProvider: fm.NetworkTileProvider(),
+                        ),
+                        if (ambiguous_plevel == 2)
+                          fm.PolylineLayer(polylines: _buildMeshPolylines()),
+                        if (ambiguous_plevel == 2)
+                          fm.MarkerLayer(markers: _buildGridCenterMarkers()),
+                        fm.MarkerLayer(markers: _buildAllMarkers()),
+                        const fm.RichAttributionWidget(
+                          attributions: [
+                            fm.TextSourceAttribution(
+                              '© OpenStreetMap contributors',
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    mapController: _mapController,
-                    children: [
-                      fm.TileLayer(
-                        urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        subdomains: const ['a', 'b', 'c'],
-                        userAgentPackageName: 'jp.bouzer.siowadou',
-                        tileProvider: fm.NetworkTileProvider(),
-                      ),
-                      if (ambiguous_plevel == 2)
-                        fm.PolylineLayer(polylines: _buildMeshPolylines()),
-                      if (ambiguous_plevel == 2)
-                        fm.MarkerLayer(markers: _buildGridCenterMarkers()),
-                      fm.MarkerLayer(markers: _buildAllMarkers()),
-                      const fm.RichAttributionWidget(
-                        attributions: [
-                          fm.TextSourceAttribution('© OpenStreetMap contributors'),
-                        ],
-                      ),
-                    ],
+                  // 地図上部に白背景のパネルを配置（釣果 / お気に入り / 経路表示）
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: _buildTopOverlayPanel(context),
                   ),
-                // 地図上部に白背景のパネルを配置（釣果 / お気に入り / 経路表示）
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: _buildTopOverlayPanel(context),
-                ),
-                if (ambiguous_plevel == 2 && _center != null)
-                  // 画面中央に現在のグリッド識別子 (X, Y) を表示
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      ignoring: true,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(6),
-                            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                          ),
-                          child: Builder(
-                            builder: (_) {
-                              final g = Common.grid10kmXY(_center!.latitude, _center!.longitude);
-                              return Text(
-                                'X=${g.x}, Y=${g.y}',
-                                style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w600),
-                              );
-                            },
+                  if (ambiguous_plevel == 2 && _center != null)
+                    // 画面中央に現在のグリッド識別子 (X, Y) を表示
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: true,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.9),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 4),
+                              ],
+                            ),
+                            child: Builder(
+                              builder: (_) {
+                                final g = Common.grid10kmXY(
+                                  _center!.latitude,
+                                  _center!.longitude,
+                                );
+                                return Text(
+                                  'X=${g.x}, Y=${g.y}',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                // 釣り場名の上部オーバーレイは廃止（選択ピン上のラベルで代替）
-                // 左上（同じY位置）にモード表示バッジ
-                Positioned(
-                  top: 70,
-                  right: 8,
-                  child: GestureDetector(
-                    onTap: _showModeInfoDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2)],
+                  // 釣り場名の上部オーバーレイは廃止（選択ピン上のラベルで代替）
+                  // 左上（同じY位置）にモード表示バッジ
+                  Positioned(
+                    top: 70,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: _showModeInfoDialog,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black26, blurRadius: 2),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _applyMode
+                                  ? Icons.edit_location_alt
+                                  : Icons.remove_red_eye,
+                              size: 16,
+                              color: Colors.black87,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _applyMode ? '釣り場登録モード' : '閲覧モード',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: Colors.black54,
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(_applyMode ? Icons.edit_location_alt : Icons.remove_red_eye,
-                              size: 16, color: Colors.black87),
-                          const SizedBox(width: 6),
-                          Text(
-                            _applyMode ? '釣り場登録モード' : '閲覧モード',
-                            style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  // 下から引っ張り出すボトムシート（投稿一覧などを想定）
+                  Builder(
+                    key: _sheetActuatorKey,
+                    builder:
+                        (context) => DraggableScrollableActuator(
+                          child: KeyedSubtree(
+                            key: ValueKey('epoch-$_sheetEpoch'),
+                            child: _buildDraggableBottomSheet(),
                           ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.info_outline, size: 16, color: Colors.black54),
-                        ],
-                      ),
-                    ),
+                        ),
                   ),
-                ),
-                // 下から引っ張り出すボトムシート（投稿一覧などを想定）
-                Builder(
-                  key: _sheetActuatorKey,
-                  builder: (context) => DraggableScrollableActuator(
-                    child: KeyedSubtree(
-                      key: ValueKey('epoch-$_sheetEpoch'),
-                      child: _buildDraggableBottomSheet(),
-                    ),
-                  ),
-                ),
-                if (_showTideOverlay) Positioned.fill(child: _buildTideOverlay()),
-              ],
-            ),
+                  if (_showTideOverlay)
+                    Positioned.fill(child: _buildTideOverlay()),
+                ],
+              ),
     );
   }
 
@@ -2279,8 +2891,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return DraggableScrollableSheet(
       controller: _sheetController,
       initialChildSize: 0.25, // 初期は少しだけ見せる（広めに）
-      minChildSize: 0.0,      // 非表示まで下げられる
-      maxChildSize: 0.92,     // 上部に余白を残す
+      minChildSize: 0.0, // 非表示まで下げられる
+      maxChildSize: 0.92, // 上部に余白を残す
       snap: true,
       snapAnimationDuration: const Duration(milliseconds: 200),
       // 下方向(0.0)へのスナップは使わず、上方向の段階にだけスナップ
@@ -2297,7 +2909,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             elevation: 8,
             color: Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: _BottomSheetCatchList(key: ValueKey('sheet-${_sheetReloadTick}'), extController: controller),
+            child: _BottomSheetCatchList(
+              key: ValueKey('sheet-${_sheetReloadTick}'),
+              extController: controller,
+            ),
           ),
         );
       },
@@ -2327,9 +2942,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   void _recreateSheet({bool show = false}) {
     // コントローラを作り直して初期サイズに戻す
     _sheetController = DraggableScrollableController();
-    if (mounted) setState(() { _sheetEpoch++; });
+    if (mounted)
+      setState(() {
+        _sheetEpoch++;
+      });
     if (show) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSheetVisible());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureSheetVisible(),
+      );
     }
   }
 
@@ -2341,7 +2961,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   double _safeSheetSize() {
-    try { return _sheetController.size; } catch (_) { return 0.0; }
+    try {
+      return _sheetController.size;
+    } catch (_) {
+      return 0.0;
+    }
   }
 
   List<fm.Polyline> _buildMeshPolylines() {
@@ -2355,11 +2979,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 
     // ズームに応じた描画範囲（半径km）
     double radiusKm;
-    if (_currentZoom >= 14) radiusKm = 12;
-    else if (_currentZoom >= 13) radiusKm = 20;
-    else if (_currentZoom >= 12) radiusKm = 35;
-    else if (_currentZoom >= 11) radiusKm = 60;
-    else radiusKm = 100;
+    if (_currentZoom >= 14)
+      radiusKm = 12;
+    else if (_currentZoom >= 13)
+      radiusKm = 20;
+    else if (_currentZoom >= 12)
+      radiusKm = 35;
+    else if (_currentZoom >= 11)
+      radiusKm = 60;
+    else
+      radiusKm = 100;
     final double rangeM = radiusKm * 1000.0;
 
     // 表示領域（概算）
@@ -2384,7 +3013,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final latlng = _unprojectFromMercator(x, y);
         pts.add(latlng);
       }
-      lines.add(fm.Polyline(points: pts, color: Colors.black.withOpacity(0.20), strokeWidth: 1.0));
+      lines.add(
+        fm.Polyline(
+          points: pts,
+          color: Colors.black.withOpacity(0.20),
+          strokeWidth: 1.0,
+        ),
+      );
     }
 
     // 水平線 y = const
@@ -2396,7 +3031,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final latlng = _unprojectFromMercator(x, y);
         pts.add(latlng);
       }
-      lines.add(fm.Polyline(points: pts, color: Colors.black.withOpacity(0.20), strokeWidth: 1.0));
+      lines.add(
+        fm.Polyline(
+          points: pts,
+          color: Colors.black.withOpacity(0.20),
+          strokeWidth: 1.0,
+        ),
+      );
     }
 
     return lines;
@@ -2412,10 +3053,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final _M xy = _projectToMercator(_center!.latitude, _center!.longitude);
 
     double radiusKm;
-    if (_currentZoom >= 14) radiusKm = 12;
-    else if (_currentZoom >= 13) radiusKm = 20;
-    else if (_currentZoom >= 12) radiusKm = 35;
-    else radiusKm = 60;
+    if (_currentZoom >= 14)
+      radiusKm = 12;
+    else if (_currentZoom >= 13)
+      radiusKm = 20;
+    else if (_currentZoom >= 12)
+      radiusKm = 35;
+    else
+      radiusKm = 60;
     final double rangeM = radiusKm * 1000.0;
 
     final double xMin = xy.x - rangeM;
@@ -2453,7 +3098,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
@@ -2468,14 +3117,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   _M _projectToMercator(double lat, double lon) {
     const double R = 6378137.0;
     final double x = R * (lon * math.pi / 180.0);
-    final double y = R * math.log(math.tan(math.pi / 4.0 + (lat * math.pi / 180.0) / 2.0));
+    final double y =
+        R * math.log(math.tan(math.pi / 4.0 + (lat * math.pi / 180.0) / 2.0));
     return _M(x, y);
   }
 
   LatLng _unprojectFromMercator(double x, double y) {
     const double R = 6378137.0;
     final double lon = (x / R) * 180.0 / math.pi;
-    final double lat = (2.0 * math.atan(math.exp(y / R)) - math.pi / 2.0) * 180.0 / math.pi;
+    final double lat =
+        (2.0 * math.atan(math.exp(y / R)) - math.pi / 2.0) * 180.0 / math.pi;
     return LatLng(lat, lon);
   }
 
@@ -2486,48 +3137,60 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       top: false,
       bottom: true,
       child: Material(
-      color: Colors.white,
-      child: Column(
-        children: [
-          SizedBox(
-            height: headerH,
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(canPop ? Icons.arrow_back : Icons.close),
-                  onPressed: () {
-                    if (canPop) {
-                      _tideNavKey.currentState?.maybePop();
-                    } else {
-                      setState(() => _showTideOverlay = false);
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  canPop ? '日付' : '潮汐',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ],
+        color: Colors.white,
+        child: Column(
+          children: [
+            SizedBox(
+              height: headerH,
+              child: Row(
+                children: [
+                  if (canPop)
+                    BackButton(
+                      onPressed: () => _tideNavKey.currentState?.maybePop(),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(() => _showTideOverlay = false),
+                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    canPop ? '日付' : '潮汐',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: Navigator(
-              key: _tideNavKey,
-              observers: [_tideNavObserver],
-              onGenerateRoute: (settings) {
-                return MaterialPageRoute(builder: (_) => _TideHomePage(controller: _tidePageController, baseDate: _tideBaseDate));
-              },
+            Expanded(
+              child: Navigator(
+                key: _tideNavKey,
+                observers: [_tideNavObserver],
+                onGenerateRoute: (settings) {
+                  return MaterialPageRoute(
+                    builder:
+                        (_) => _TideHomePage(
+                          controller: _tidePageController,
+                          baseDate: _tideBaseDate,
+                        ),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 
-
   Widget _buildTopOverlayPanel(BuildContext context) {
-    Widget item({required Widget icon, required String label, required VoidCallback? onTap}) {
+    Widget item({
+      required Widget icon,
+      required String label,
+      required VoidCallback? onTap,
+    }) {
       return InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.zero,
@@ -2542,7 +3205,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -2566,7 +3233,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           ),
           // 釣り場申請：長押し案内
           item(
-            icon: Icon(Icons.add_location_alt, color: _applyMode ? Colors.deepPurple : Colors.black87),
+            icon: Icon(
+              Icons.add_location_alt,
+              color: _applyMode ? Colors.deepPurple : Colors.black87,
+            ),
             label: _applyMode ? '釣り場登録中...' : '釣り場登録',
             onTap: () {
               // 先に新しいモードを決定してから setState に渡す
@@ -2577,10 +3247,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   // 申請モード解除時は申請ピンを消す
                   _applyPoint = null;
                   _gmApplyPoint = null;
-                  try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+                  try {
+                    _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+                  } catch (_) {}
                 }
               });
-/*
+              /*
               if (newMode) {
                 final messenger = ScaffoldMessenger.maybeOf(context);
                 messenger?.showSnackBar(
@@ -2591,7 +3263,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 );
               }
 */
-
             },
           ),
           // 経路表示：車
@@ -2604,13 +3275,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           if (baseMap == 2)
             item(
               icon: Icon(
-                _isSatellite ? Icons.satellite_alt : Icons.satellite_alt_outlined,
+                _isSatellite
+                    ? Icons.satellite_alt
+                    : Icons.satellite_alt_outlined,
                 color: Colors.black87,
               ),
               label: '衛星表示',
-              onTap: () => setState(() {
-                _isSatellite = !_isSatellite;
-              }),
+              onTap:
+                  () => setState(() {
+                    _isSatellite = !_isSatellite;
+                  }),
             ),
         ],
       ),
@@ -2630,7 +3304,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           for (final r in rows) {
             final n = (r['port_name'] ?? '').toString();
             if (n == portName) {
-              portId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+              portId =
+                  r['port_id'] is int
+                      ? r['port_id'] as int
+                      : int.tryParse(r['port_id']?.toString() ?? '');
               break;
             }
           }
@@ -2667,23 +3344,60 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             )
             .timeout(kHttpTimeout);
         if (resp.statusCode != 200) {
-          messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除の同期に失敗しました（${resp.statusCode}）' : 'お気に入りの同期に失敗しました（${resp.statusCode}）'), duration: const Duration(seconds: 3)));
+          messenger?.showSnackBar(
+            SnackBar(
+              content: Text(
+                isFav
+                    ? 'お気に入り解除の同期に失敗しました（${resp.statusCode}）'
+                    : 'お気に入りの同期に失敗しました（${resp.statusCode}）',
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
         } else {
-          messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除: $portName' : 'お気に入り登録: $portName')));
+          messenger?.showSnackBar(
+            SnackBar(
+              content: Text(
+                isFav ? 'お気に入り解除: $portName' : 'お気に入り登録: $portName',
+              ),
+            ),
+          );
         }
       } catch (_) {
-        messenger?.showSnackBar(SnackBar(content: Text(isFav ? 'お気に入り解除の同期中にエラーが発生しました（ローカル保存済み）' : 'お気に入りの同期中にエラーが発生しました（ローカル保存済み）'), duration: const Duration(seconds: 3)));
+        messenger?.showSnackBar(
+          SnackBar(
+            content: Text(
+              isFav
+                  ? 'お気に入り解除の同期中にエラーが発生しました（ローカル保存済み）'
+                  : 'お気に入りの同期中にエラーが発生しました（ローカル保存済み）',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
       // 再読込して反映（マーカー拡大/太字を即座に反映）
       await _loadFavorites();
       try {
-        final name = (_lastName.isNotEmpty) ? _lastName : Common.instance.selectedTeibouName;
+        final name =
+            (_lastName.isNotEmpty)
+                ? _lastName
+                : Common.instance.selectedTeibouName;
         final lat = (_lastLat ?? Common.instance.selectedTeibouLat);
         final lng = (_lastLng ?? Common.instance.selectedTeibouLng);
         if ((lat != 0.0 || lng != 0.0) && name.isNotEmpty) {
-          await _loadMarkers(centerName: name, lat: lat, lng: lng, radiusKm: 30.0);
+          await _loadMarkers(
+            centerName: name,
+            lat: lat,
+            lng: lng,
+            radiusKm: 30.0,
+          );
         } else if (_center != null) {
-          await _loadMarkers(centerName: name, lat: _center!.latitude, lng: _center!.longitude, radiusKm: 30.0);
+          await _loadMarkers(
+            centerName: name,
+            lat: _center!.latitude,
+            lng: _center!.longitude,
+            radiusKm: 30.0,
+          );
         }
       } catch (_) {}
       if (mounted) setState(() {});
@@ -2709,7 +3423,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       } else if (Common.instance.mapKind == MapType.appleMaps.index) {
         await Common.instance.openAppleMaps(fl, fg);
       } else {
-        messenger?.showSnackBar(const SnackBar(content: Text('設定から地図アプリを選択してください')));
+        messenger?.showSnackBar(
+          const SnackBar(content: Text('設定から地図アプリを選択してください')),
+        );
       }
       return;
     }
@@ -2719,7 +3435,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     } else if (Common.instance.mapKind == MapType.appleMaps.index) {
       await Common.instance.openAppleMaps(lat, lng);
     } else {
-      messenger?.showSnackBar(const SnackBar(content: Text('設定から地図アプリを選択してください')));
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('設定から地図アプリを選択してください')),
+      );
     }
   }
 
@@ -2772,13 +3490,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return bestName;
   }
 
-  double _haversine(double lat1, double lon1, double lat2, double lon2, {double? cosLat}) {
+  double _haversine(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2, {
+    double? cosLat,
+  }) {
     const double deg2rad = 3.141592653589793 / 180.0;
     final dLat = (lat2 - lat1) * deg2rad;
     final dLon = (lon2 - lon1) * deg2rad;
     final sLat = math.sin(dLat / 2);
     final sLon = math.sin(dLon / 2);
-    final a = sLat * sLat + math.cos(lat1 * deg2rad) * math.cos(lat2 * deg2rad) * sLon * sLon;
+    final a =
+        sLat * sLat +
+        math.cos(lat1 * deg2rad) * math.cos(lat2 * deg2rad) * sLon * sLon;
     return a;
   }
 
@@ -2792,25 +3518,42 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           height: 64,
           point: _applyPoint!,
           child: GestureDetector(
-            onTap: () => _openApplyForm(_applyPoint!.latitude, _applyPoint!.longitude),
+            onTap:
+                () => _openApplyForm(
+                  _applyPoint!.latitude,
+                  _applyPoint!.longitude,
+                ),
             child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 2,
+                        offset: Offset(1, 1),
+                      ),
+                    ],
+                  ),
+                  child: const Text(
+                    '釣り場登録',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.black,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                child: const Text(
-                  '釣り場登録',
-                  style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const Icon(Icons.location_on, color: Colors.purple, size: 28),
-            ],
+                const Icon(Icons.location_on, color: Colors.purple, size: 28),
+              ],
             ),
           ),
         ),
@@ -2832,7 +3575,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               decoration: BoxDecoration(
                 color: Colors.orange,
                 shape: BoxShape.circle,
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(1, 1))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 4,
+                    offset: Offset(1, 1),
+                  ),
+                ],
                 border: Border.all(color: Colors.white, width: 2),
               ),
             ),
@@ -2855,7 +3604,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           _applyMode = false;
           _applyPoint = null;
           _gmApplyPoint = null;
-          try { _gmMarkers.removeWhere((m) => m.markerId.value == 'apply'); } catch (_) {}
+          try {
+            _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+          } catch (_) {}
         });
       }
     });
@@ -2874,8 +3625,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     const double d2r = math.pi / 180.0;
     final dLat = (lat2 - lat1) * d2r;
     final dLon = (lon2 - lon1) * d2r;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * d2r) * math.cos(lat2 * d2r) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * d2r) *
+            math.cos(lat2 * d2r) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return R * c;
   }
@@ -2893,16 +3648,26 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final v = kubun.trim();
     final lv = v.toLowerCase();
     switch (lv) {
-      case '1': return '地域港';
-      case '2': return '拠点港';
-      case '3': return '主要港';
-      case '4': return '特殊港';
-      case 'gyoko': return '漁港';
-      case 'iso': return '磯';
-      case 'kako': return '河口';
-      case 'surf': return 'サーフ';
-      case 'teibo': return '堤防';
-      case 'teibou': return '堤防';
+      case '1':
+        return '地域港';
+      case '2':
+        return '拠点港';
+      case '3':
+        return '主要港';
+      case '4':
+        return '特殊港';
+      case 'gyoko':
+        return '漁港';
+      case 'iso':
+        return '磯';
+      case 'kako':
+        return '河口';
+      case 'surf':
+        return 'サーフ';
+      case 'teibo':
+        return '堤防';
+      case 'teibou':
+        return '堤防';
       default:
         if (v == '特3') return '最重要港';
         return null;
@@ -2911,7 +3676,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 
   Future<void> _showCurrentSpotInfoDialog() async {
     try {
-      final spotName = Common.instance.selectedTeibouName.isNotEmpty ? Common.instance.selectedTeibouName : Common.instance.tidePoint;
+      final spotName =
+          Common.instance.selectedTeibouName.isNotEmpty
+              ? Common.instance.selectedTeibouName
+              : Common.instance.tidePoint;
       final rows = await SioDatabase().getAllTeibouWithPrefecture();
       Map<String, dynamic>? row;
       // 1) ID優先（保存済みの selected_teibou_id）
@@ -2920,8 +3688,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final sid = prefs.getInt('selected_teibou_id');
         if (sid != null && sid > 0) {
           for (final r in rows) {
-            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            if (rid == sid) { row = r; break; }
+            final rid =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) {
+              row = r;
+              break;
+            }
           }
         }
       } catch (_) {}
@@ -2929,12 +3703,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (row == null) {
         for (final r in rows) {
           final n = (r['port_name'] ?? '').toString();
-          if (n == spotName) { row = r; break; }
+          if (n == spotName) {
+            row = r;
+            break;
+          }
         }
       }
       // 見つからない場合は、現在の選択座標に最も近い行を採用
-      final double selLat = Common.instance.selectedTeibouLat != 0.0 ? Common.instance.selectedTeibouLat : (_center?.latitude ?? 0.0);
-      final double selLng = Common.instance.selectedTeibouLng != 0.0 ? Common.instance.selectedTeibouLng : (_center?.longitude ?? 0.0);
+      final double selLat =
+          Common.instance.selectedTeibouLat != 0.0
+              ? Common.instance.selectedTeibouLat
+              : (_center?.latitude ?? 0.0);
+      final double selLng =
+          Common.instance.selectedTeibouLng != 0.0
+              ? Common.instance.selectedTeibouLng
+              : (_center?.longitude ?? 0.0);
       if (row == null && (selLat != 0.0 || selLng != 0.0)) {
         double best = double.infinity;
         Map<String, dynamic>? bestRow;
@@ -2943,7 +3726,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           final dlng0 = _toDouble(r['longitude']);
           if (dlat0 == null || dlng0 == null) continue;
           final d = _distanceKm(selLat, selLng, dlat0, dlng0);
-          if (d < best) { best = d; bestRow = r; }
+          if (d < best) {
+            best = d;
+            bestRow = r;
+          }
         }
         if (bestRow != null) row = bestRow;
       }
@@ -2951,21 +3737,38 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (row != null) {
         prefName = (row['todoufuken_name'] ?? '').toString();
         if (prefName.isEmpty) {
-          final pid = row['todoufuken_id'] is int ? row['todoufuken_id'] as int : int.tryParse(row['todoufuken_id']?.toString() ?? '');
+          final pid =
+              row['todoufuken_id'] is int
+                  ? row['todoufuken_id'] as int
+                  : int.tryParse(row['todoufuken_id']?.toString() ?? '');
           if (pid != null && pid > 0) {
             final prefs = await SioDatabase().getTodoufukenAll();
             for (final p in prefs) {
-              final id = p['todoufuken_id'] is int ? p['todoufuken_id'] as int : int.tryParse(p['todoufuken_id']?.toString() ?? '');
-              if (id == pid) { prefName = (p['todoufuken_name'] ?? '').toString(); break; }
+              final id =
+                  p['todoufuken_id'] is int
+                      ? p['todoufuken_id'] as int
+                      : int.tryParse(p['todoufuken_id']?.toString() ?? '');
+              if (id == pid) {
+                prefName = (p['todoufuken_name'] ?? '').toString();
+                break;
+              }
             }
           }
         }
       }
-      final lat = Common.instance.selectedTeibouLat != 0.0 ? Common.instance.selectedTeibouLat : _center?.latitude ?? 0.0;
-      final lng = Common.instance.selectedTeibouLng != 0.0 ? Common.instance.selectedTeibouLng : _center?.longitude ?? 0.0;
+      final lat =
+          Common.instance.selectedTeibouLat != 0.0
+              ? Common.instance.selectedTeibouLat
+              : _center?.latitude ?? 0.0;
+      final lng =
+          Common.instance.selectedTeibouLng != 0.0
+              ? Common.instance.selectedTeibouLng
+              : _center?.longitude ?? 0.0;
       final kubun = (((row != null) ? row['kubun'] : '') ?? '').toString();
       final kubunLabel = _kubunLabelLocal(kubun) ?? '';
-      final yomi = (((row != null) ? (row['j_yomi'] ?? row['furigana']) : '') ?? '').toString();
+      final yomi =
+          (((row != null) ? (row['j_yomi'] ?? row['furigana']) : '') ?? '')
+              .toString();
       final address = (((row != null) ? row['address'] : '') ?? '').toString();
       String _shortAddress(String s) {
         final t = s.trim();
@@ -2973,10 +3776,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         final parts = t.split(RegExp(r'\s+'));
         return parts.length >= 2 ? '${parts[0]} ${parts[1]}' : parts[0];
       }
+
       final addressShort = _shortAddress(address);
-      final int? flag = (row != null)
-          ? (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''))
-          : null;
+      final int? flag =
+          (row != null)
+              ? (row['flag'] is int
+                  ? row['flag'] as int
+                  : int.tryParse(row['flag']?.toString() ?? ''))
+              : null;
       String _flagText(int? f) {
         switch (f) {
           case 0:
@@ -2991,9 +3798,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             return '';
         }
       }
+
       final statusText = _flagText(flag);
       final dynamic _uidRaw = (row != null) ? row['user_id'] : null;
-      final int? ownerId = (_uidRaw is int) ? _uidRaw : int.tryParse((_uidRaw?.toString() ?? ''));
+      final int? ownerId =
+          (_uidRaw is int)
+              ? _uidRaw
+              : int.tryParse((_uidRaw?.toString() ?? ''));
       String? nick;
       try {
         if (ownerId != null) {
@@ -3002,7 +3813,11 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             nick = me.nickName ?? '';
           } else {
             // サーバJOIN値（registrant_name）があれば優先
-            final rn = ((row != null) ? (row['registrant_name']?.toString() ?? '') : '').trim();
+            final rn =
+                ((row != null)
+                        ? (row['registrant_name']?.toString() ?? '')
+                        : '')
+                    .trim();
             if (rn.isNotEmpty) nick = rn; // 投稿と同様: 追加問い合わせは行わない
           }
         }
@@ -3012,34 +3827,44 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       showDialog(
         context: context,
         barrierDismissible: true,
-        builder: (_) => AlertDialog(
-          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _infoRow('都道府県', prefName),
-              const SizedBox(height: 6),
-              _infoRow(
-                '釣り場名',
-                (() {
-                  final base = yomi.isNotEmpty ? '$spotName（$yomi）' : spotName;
-                  return (flag == -1) ? '$base (申請中)' : base;
-                })(),
+        builder:
+            (_) => AlertDialog(
+              contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _infoRow('都道府県', prefName),
+                  const SizedBox(height: 6),
+                  _infoRow(
+                    '釣り場名',
+                    (() {
+                      final base =
+                          yomi.isNotEmpty ? '$spotName（$yomi）' : spotName;
+                      return (flag == -1) ? '$base (申請中)' : base;
+                    })(),
+                  ),
+                  const SizedBox(height: 6),
+                  _infoRow('種別', kubunLabel),
+                  const SizedBox(height: 6),
+                  _infoRow(
+                    '緯度経度',
+                    '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}',
+                  ),
+                  const SizedBox(height: 6),
+                  _infoRow('住所', addressShort),
+                  const SizedBox(height: 6),
+                  _infoRow('状態', statusText),
+                  const SizedBox(height: 6),
+                  _infoRow(
+                    '登録者',
+                    (ownerId != null)
+                        ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)'
+                        : '−',
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              _infoRow('種別', kubunLabel),
-              const SizedBox(height: 6),
-              _infoRow('緯度経度', '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}'),
-              const SizedBox(height: 6),
-              _infoRow('住所', addressShort),
-              const SizedBox(height: 6),
-              _infoRow('状態', statusText),
-              const SizedBox(height: 6),
-              _infoRow('登録者', (ownerId != null) ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)' : '−'),
-            ],
-          ),
-        ),
+            ),
       );
     } catch (_) {}
   }
@@ -3048,7 +3873,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 80, child: Text('$k:', style: const TextStyle(fontWeight: FontWeight.w600))),
+        SizedBox(
+          width: 80,
+          child: Text(
+            '$k:',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
         const SizedBox(width: 6),
         Expanded(child: Text(v.isNotEmpty ? v : '−')),
       ],
@@ -3076,7 +3907,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Future<void> _loadFavorites() async {
     try {
       final ids = await SioDatabase().getFavoriteTeibouIds();
-      if (mounted) setState(() { _favoriteIds = ids; });
+      if (mounted)
+        setState(() {
+          _favoriteIds = ids;
+        });
     } catch (_) {}
   }
 
@@ -3099,7 +3933,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     double pixelYToLat(double py) {
       final normY = (py / worldPx);
       final mercN = (1 - 2 * normY) * math.pi;
-      final lat = (2 * math.atan(math.exp(mercN)) - math.pi / 2.0) * 180.0 / math.pi;
+      final lat =
+          (2 * math.atan(math.exp(mercN)) - math.pi / 2.0) * 180.0 / math.pi;
       return lat;
     }
 
@@ -3125,10 +3960,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     int idx = 0;
     // 中心と近隣のポイントを簡易的に再構築（_markersからの復元が難しいため、中心のみ確実に追加）
     if (_center != null) {
-      set.add(am.Annotation(
-        annotationId: am.AnnotationId('c'),
-        position: am.LatLng(_center!.latitude, _center!.longitude),
-      ));
+      set.add(
+        am.Annotation(
+          annotationId: am.AnnotationId('c'),
+          position: am.LatLng(_center!.latitude, _center!.longitude),
+        ),
+      );
       idx++;
     }
     // 近隣はDBから半径30kmで再取得して簡易注釈
@@ -3145,10 +3982,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           final d = _distanceKm(lat, lng, dlat, dlng);
           if (d <= 30 && !(dlat == lat && dlng == lng)) {
             final name = (r['port_name'] ?? '').toString();
-            set.add(am.Annotation(
-              annotationId: am.AnnotationId('n${idx++}'),
-              position: am.LatLng(dlat, dlng),
-            ));
+            set.add(
+              am.Annotation(
+                annotationId: am.AnnotationId('n${idx++}'),
+                position: am.LatLng(dlat, dlng),
+              ),
+            );
           }
         }
         // 再描画
@@ -3167,7 +4006,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 }
 
 class _BottomSheetCatchList extends StatefulWidget {
-  const _BottomSheetCatchList({Key? key, required this.extController}) : super(key: key);
+  const _BottomSheetCatchList({Key? key, required this.extController})
+    : super(key: key);
   final ScrollController extController;
   @override
   State<_BottomSheetCatchList> createState() => _BottomSheetCatchListState();
@@ -3185,9 +4025,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   void initState() {
     super.initState();
     // 直前の選択状態を復元（起動中のみ保持）
-    try { _mode = Common.instance.postListMode; } catch (_) {}
+    try {
+      _mode = Common.instance.postListMode;
+    } catch (_) {}
     _lastCommonMode = _mode;
-    try { Common.instance.addListener(_onCommonModeChanged); } catch (_) {}
+    try {
+      Common.instance.addListener(_onCommonModeChanged);
+    } catch (_) {}
     _loadFirst();
     widget.extController.addListener(_onScroll);
   }
@@ -3195,7 +4039,9 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   @override
   void dispose() {
     widget.extController.removeListener(_onScroll);
-    try { Common.instance.removeListener(_onCommonModeChanged); } catch (_) {}
+    try {
+      Common.instance.removeListener(_onCommonModeChanged);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -3218,7 +4064,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   void _onScroll() {
     if (!_hasMore || _loading) return;
-    if (widget.extController.position.pixels >= widget.extController.position.maxScrollExtent - 200) {
+    if (widget.extController.position.pixels >=
+        widget.extController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -3228,11 +4075,14 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
       final prefs = await SharedPreferences.getInstance();
       final spotId = prefs.getInt('selected_teibou_id');
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final uri = Uri.parse('${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts');
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
+      );
       final body = <String, String>{
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
+        'ambiguous_plevel': ambiguous_plevel.toString(),
         'ts': ts.toString(),
       };
       if (spotId != null && spotId > 0) body['spot_id'] = spotId.toString();
@@ -3247,10 +4097,14 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
       final data = jsonDecode(resp.body);
       if (data is Map && data['status'] == 'success') {
         final List rows = (data['rows'] as List?) ?? [];
-        return rows.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return rows
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       if (data is List) {
-        return data.map((e) => _PostItem.fromJson(e as Map<String, dynamic>)).toList();
+        return data
+            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+            .toList();
       }
       return [];
     } catch (_) {
@@ -3260,7 +4114,11 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   Future<void> _loadFirst() async {
     if (!mounted || _loading) return;
-    setState(() { _loading = true; _page = 1; _hasMore = true; });
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _hasMore = true;
+    });
     final kind = (_mode == 'catch') ? 1 : 0;
     var rows = await _fetch(page: 1, kind: kind);
     rows = await _applyAmbiguityFilter(rows);
@@ -3321,7 +4179,10 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
               Container(
                 width: 60,
                 height: 6,
-                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
               const SizedBox(height: 8),
               Padding(
@@ -3334,7 +4195,11 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                         final posted = await Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => InputPost(initialType: _mode == 'catch' ? 'catch' : 'env'),
+                            builder:
+                                (_) => InputPost(
+                                  initialType:
+                                      _mode == 'catch' ? 'catch' : 'env',
+                                ),
                           ),
                         );
                         if (posted == true) {
@@ -3350,14 +4215,26 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                       },
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                       ),
-                      child: const Text('＋ 投稿', style: TextStyle(fontWeight: FontWeight.w600)),
+                      child: const Text(
+                        '＋ 投稿',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                     // 中央: 投稿一覧（中央寄せ）
                     const Expanded(
                       child: Center(
-                        child: Text('投稿一覧', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                        child: Text(
+                          '投稿一覧',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                     // 右端: セグメント（釣果/環境）を右寄せで
@@ -3369,14 +4246,28 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                           groupValue: _mode,
                           padding: const EdgeInsets.all(0),
                           children: const {
-                            'catch': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('釣果')),
-                            'env': Padding(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), child: Text('環境')),
+                            'catch': Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              child: Text('釣果'),
+                            ),
+                            'env': Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              child: Text('環境'),
+                            ),
                           },
                           onValueChanged: (val) {
                             setState(() {
                               _mode = val;
                               // 現在の選択をアプリ起動中は維持
-                              try { Common.instance.setPostListMode(val); } catch (_) {}
+                              try {
+                                Common.instance.setPostListMode(val);
+                              } catch (_) {}
                               // モード切替時は一覧をリセットして再取得
                               _items.clear();
                               _page = 1;
@@ -3409,31 +4300,57 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
         return Column(
           children: [
             ListTile(
-              leading: (thumb != null)
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.network(thumb, width: 48, height: 48, fit: BoxFit.cover))
-                  : const Icon(Icons.image, size: 40, color: Colors.black38),
-              title: Text(it.title?.isNotEmpty == true ? it.title! : (it.nickName ?? '投稿'), maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(it.detail?.isNotEmpty == true ? it.detail! : (it.createAt ?? ''), maxLines: 1, overflow: TextOverflow.ellipsis),
+              leading:
+                  (thumb != null)
+                      ? ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          thumb,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                      : const Icon(
+                        Icons.image,
+                        size: 40,
+                        color: Colors.black38,
+                      ),
+              title: Text(
+                it.title?.isNotEmpty == true
+                    ? it.title!
+                    : (it.nickName ?? '投稿'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                it.detail?.isNotEmpty == true
+                    ? it.detail!
+                    : (it.createAt ?? ''),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               onTap: () {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => PostDetailPage(
-                    item: PostDetailItem(
-                      userId: it.userId,
-                      postId: it.postId,
-                      postKind: it.postKind,
-                      exist: it.exist,
-                      title: it.title,
-                      detail: it.detail,
-                      imageUrl: it.imageUrl ?? it.thumbUrl,
-                      nickName: it.nickName,
-                      createAt: it.createAt,
-                      spotId: it.spotId,
-                      showNearbyButton: true,
-                    ),
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder:
+                        (_) => PostDetailPage(
+                          item: PostDetailItem(
+                            userId: it.userId,
+                            postId: it.postId,
+                            postKind: it.postKind,
+                            exist: it.exist,
+                            title: it.title,
+                            detail: it.detail,
+                            imageUrl: it.imageUrl ?? it.thumbUrl,
+                            nickName: it.nickName,
+                            createAt: it.createAt,
+                            spotId: it.spotId,
+                            showNearbyButton: true,
+                          ),
+                        ),
                   ),
-                ));
+                );
               },
             ),
             const Divider(height: 1),
@@ -3448,39 +4365,52 @@ class _TideNavObserver extends NavigatorObserver {
   final VoidCallback onChanged;
   _TideNavObserver(this.onChanged);
   @override
-  void didPush(Route route, Route? previousRoute) { onChanged(); }
+  void didPush(Route route, Route? previousRoute) {
+    onChanged();
+  }
+
   @override
-  void didPop(Route route, Route? previousRoute) { onChanged(); }
+  void didPop(Route route, Route? previousRoute) {
+    onChanged();
+  }
 }
 
 class _TideHomePage extends StatelessWidget {
-  const _TideHomePage({Key? key, required this.controller, required this.baseDate}) : super(key: key);
+  const _TideHomePage({
+    Key? key,
+    required this.controller,
+    required this.baseDate,
+  }) : super(key: key);
   final PageController controller;
   final DateTime baseDate;
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final height = constraints.maxHeight; // オーバーレイ内部での有効高さ
-      return PageView.builder(
-        controller: controller,
-        onPageChanged: (int index) async {
-          final newDate = baseDate.add(Duration(days: index - 1000));
-          Common.instance.tideDate = newDate;
-          try { await Common.instance.getTide(true, newDate); } catch (_) {}
-        },
-        itemBuilder: (context, index) {
-          final pageDate = baseDate.add(Duration(days: index - 1000));
-          return _SlidingContent(
-            key: ValueKey('tide-$pageDate'),
-            tidePoint: Common.instance.tidePoint,
-            teibouName: Common.instance.selectedTeibouName,
-            nearestPoint: Common.instance.selectedTeibouNearestPoint,
-            tideDate: pageDate,
-            availableHeight: height,
-          );
-        },
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight; // オーバーレイ内部での有効高さ
+        return PageView.builder(
+          controller: controller,
+          onPageChanged: (int index) async {
+            final newDate = baseDate.add(Duration(days: index - 1000));
+            Common.instance.tideDate = newDate;
+            try {
+              await Common.instance.getTide(true, newDate);
+            } catch (_) {}
+          },
+          itemBuilder: (context, index) {
+            final pageDate = baseDate.add(Duration(days: index - 1000));
+            return _SlidingContent(
+              key: ValueKey('tide-$pageDate'),
+              tidePoint: Common.instance.tidePoint,
+              teibouName: Common.instance.selectedTeibouName,
+              nearestPoint: Common.instance.selectedTeibouNearestPoint,
+              tideDate: pageDate,
+              availableHeight: height,
+            );
+          },
+        );
+      },
+    );
   }
 }
 
@@ -3501,9 +4431,15 @@ class _AppleMapsPanel extends StatelessWidget {
               children: [
                 const Icon(Icons.map, size: 56, color: Colors.black45),
                 const SizedBox(height: 12),
-                const Text('Apple Maps を使用します', style: TextStyle(color: Colors.black54)),
+                const Text(
+                  'Apple Maps を使用します',
+                  style: TextStyle(color: Colors.black54),
+                ),
                 const SizedBox(height: 8),
-                Text('(${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)})', style: const TextStyle(color: Colors.black45, fontSize: 12)),
+                Text(
+                  '(${center.latitude.toStringAsFixed(5)}, ${center.longitude.toStringAsFixed(5)})',
+                  style: const TextStyle(color: Colors.black45, fontSize: 12),
+                ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: onOpen,
@@ -3535,7 +4471,9 @@ class _TideStandalonePage extends StatelessWidget {
         builder: (context, constraints) {
           final h = constraints.maxHeight;
           return _SlidingContent(
-            key: ValueKey('tide-standalone-${Common.instance.tideDate.toIso8601String()}'),
+            key: ValueKey(
+              'tide-standalone-${Common.instance.tideDate.toIso8601String()}',
+            ),
             tidePoint: Common.instance.tidePoint,
             teibouName: Common.instance.selectedTeibouName,
             nearestPoint: Common.instance.selectedTeibouNearestPoint,
@@ -3553,7 +4491,6 @@ class _M {
   final double y;
   const _M(this.x, this.y);
 }
-
 
 // 月画像はドラッグ不可に戻す（プロフィール用トリミングのみドラッグ対応）
 
@@ -3585,8 +4522,14 @@ class _SlidingContent extends StatelessWidget {
         final sid = prefs.getInt('selected_teibou_id');
         if (sid != null && sid > 0) {
           for (final r in rows) {
-            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            if (rid == sid) { hit = r; break; }
+            final rid =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            if (rid == sid) {
+              hit = r;
+              break;
+            }
           }
         }
       } catch (_) {}
@@ -3597,11 +4540,22 @@ class _SlidingContent extends StatelessWidget {
       if (hit != null) {
         final kubun = (hit['kubun'] ?? '').toString();
         final k = kubun.trim();
-        final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
+        final isPort =
+            k == '1' ||
+            k == '2' ||
+            k == '3' ||
+            k == '4' ||
+            k == '特3' ||
+            k == 'gyoko';
         String yomi = (hit['j_yomi'] ?? '').toString();
         if (yomi.isEmpty) yomi = (hit['furigana'] ?? '').toString();
         int? flag;
-        try { flag = hit['flag'] is int ? hit['flag'] as int : int.tryParse(hit['flag']?.toString() ?? ''); } catch (_) {}
+        try {
+          flag =
+              hit['flag'] is int
+                  ? hit['flag'] as int
+                  : int.tryParse(hit['flag']?.toString() ?? '');
+        } catch (_) {}
         return {'yomi': yomi, 'isPort': isPort, 'flag': flag};
       }
     } catch (_) {}
@@ -3638,14 +4592,20 @@ class _SlidingContent extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white54),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
               icon: const Icon(Icons.date_range, size: 16),
               label: const Text('日付変更', style: TextStyle(fontSize: 13)),
               onPressed: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => SetDatePage(showBanner: true, showHeader: true)),
+                  MaterialPageRoute(
+                    builder:
+                        (_) => SetDatePage(showBanner: true, showHeader: true),
+                  ),
                 );
               },
             ),
@@ -3653,7 +4613,10 @@ class _SlidingContent extends StatelessWidget {
           const SizedBox(height: 2),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: SizedBox(width: double.infinity, child: _valueBox(Sio.instance.dispTideDate)),
+            child: SizedBox(
+              width: double.infinity,
+              child: _valueBox(Sio.instance.dispTideDate),
+            ),
           ),
         ],
       ),
@@ -3668,15 +4631,21 @@ class _SlidingContent extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Text('満潮', style: TextStyle(fontSize: 14, color: Colors.white), textAlign: TextAlign.left),
+            child: Text(
+              '満潮',
+              style: TextStyle(fontSize: 14, color: Colors.white),
+              textAlign: TextAlign.left,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Row(children: [
-              Expanded(child: _valueBox(Sio.instance.highTideTime1)),
-              const SizedBox(width: 2.0),
-              Expanded(child: _valueBox(Sio.instance.highTideTime2)),
-            ]),
+            child: Row(
+              children: [
+                Expanded(child: _valueBox(Sio.instance.highTideTime1)),
+                const SizedBox(width: 2.0),
+                Expanded(child: _valueBox(Sio.instance.highTideTime2)),
+              ],
+            ),
           ),
         ],
       ),
@@ -3691,15 +4660,21 @@ class _SlidingContent extends StatelessWidget {
         children: [
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Text('干潮', style: TextStyle(fontSize: 14, color: Colors.white), textAlign: TextAlign.left),
+            child: Text(
+              '干潮',
+              style: TextStyle(fontSize: 14, color: Colors.white),
+              textAlign: TextAlign.left,
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Row(children: [
-              Expanded(child: _valueBox(Sio.instance.lowTideTime1)),
-              const SizedBox(width: 2.0),
-              Expanded(child: _valueBox(Sio.instance.lowTideTime2)),
-            ]),
+            child: Row(
+              children: [
+                Expanded(child: _valueBox(Sio.instance.lowTideTime1)),
+                const SizedBox(width: 2.0),
+                Expanded(child: _valueBox(Sio.instance.lowTideTime2)),
+              ],
+            ),
           ),
         ],
       ),
@@ -3714,19 +4689,35 @@ class _SlidingContent extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Row(children: const [
-              Expanded(child: Text('日出', style: TextStyle(fontSize: 14, color: Colors.white), textAlign: TextAlign.left)),
-              SizedBox(width: 2.0),
-              Expanded(child: Text('日没', style: TextStyle(fontSize: 14, color: Colors.white), textAlign: TextAlign.left)),
-            ]),
+            child: Row(
+              children: const [
+                Expanded(
+                  child: Text(
+                    '日出',
+                    style: TextStyle(fontSize: 14, color: Colors.white),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+                SizedBox(width: 2.0),
+                Expanded(
+                  child: Text(
+                    '日没',
+                    style: TextStyle(fontSize: 14, color: Colors.white),
+                    textAlign: TextAlign.left,
+                  ),
+                ),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-            child: Row(children: [
-              Expanded(child: _valueBox(Sio.instance.sunRiseTime)),
-              const SizedBox(width: 2.0),
-              Expanded(child: _valueBox(Sio.instance.sunSetTime)),
-            ]),
+            child: Row(
+              children: [
+                Expanded(child: _valueBox(Sio.instance.sunRiseTime)),
+                const SizedBox(width: 2.0),
+                Expanded(child: _valueBox(Sio.instance.sunSetTime)),
+              ],
+            ),
           ),
         ],
       ),
@@ -3741,7 +4732,7 @@ class _SlidingContent extends StatelessWidget {
     double gapHeight = availableHeight * 0.05; // 約5%
     double graphHeight = availableHeight - topHeight - gapHeight; // 残り（約45%）
     return Column(
-        children: [
+      children: [
         // 上部：メインコンテンツ（釣り場情報、画像、日付など）
         SizedBox(
           height: topHeight,
@@ -3757,16 +4748,30 @@ class _SlidingContent extends StatelessWidget {
                       // 1) 堤防名 + アイコン + 読み（1/3）
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           child: FutureBuilder<Map<String, dynamic>>(
                             future: _getSelectedTeibouMeta(),
                             builder: (context, snapshot) {
-                              final name = (teibouName != null && teibouName!.isNotEmpty) ? teibouName! : tidePoint;
+                              final name =
+                                  (teibouName != null && teibouName!.isNotEmpty)
+                                      ? teibouName!
+                                      : tidePoint;
                               final meta = snapshot.data;
-                              final isPort = (meta != null && meta['isPort'] == true);
-                              final yomi = (meta != null && meta['yomi'] is String) ? meta['yomi'] as String : '';
-                              final isPending = (meta != null && (meta['flag'] == -1 || meta['flag'] == '-1'));
-                              final displayName = isPending ? '$name (申請中)' : name;
+                              final isPort =
+                                  (meta != null && meta['isPort'] == true);
+                              final yomi =
+                                  (meta != null && meta['yomi'] is String)
+                                      ? meta['yomi'] as String
+                                      : '';
+                              final isPending =
+                                  (meta != null &&
+                                      (meta['flag'] == -1 ||
+                                          meta['flag'] == '-1'));
+                              final displayName =
+                                  isPending ? '$name (申請中)' : name;
                               return Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -3776,24 +4781,37 @@ class _SlidingContent extends StatelessWidget {
                                     children: [
                                       if (isPort)
                                         Padding(
-                                          padding: const EdgeInsets.only(right: 6),
-                                          child: Icon(Icons.anchor, color: Colors.blue.shade600, size: 18),
+                                          padding: const EdgeInsets.only(
+                                            right: 6,
+                                          ),
+                                          child: Icon(
+                                            Icons.anchor,
+                                            color: Colors.blue.shade600,
+                                            size: 18,
+                                          ),
                                         ),
                                       Flexible(
                                         child: Text(
                                           displayName,
-                                          style: const TextStyle(fontSize: 22, color: Colors.white),
+                                          style: const TextStyle(
+                                            fontSize: 22,
+                                            color: Colors.white,
+                                          ),
                                           textAlign: TextAlign.center,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  if (yomi.isNotEmpty) const SizedBox(height: 4),
+                                  if (yomi.isNotEmpty)
+                                    const SizedBox(height: 4),
                                   if (yomi.isNotEmpty)
                                     Text(
                                       yomi,
-                                      style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white70,
+                                      ),
                                       textAlign: TextAlign.center,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -3806,7 +4824,10 @@ class _SlidingContent extends StatelessWidget {
                       // 2) 月画像（1/3）
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
                               final iAge = Common.instance.getMitikake(
@@ -3817,7 +4838,10 @@ class _SlidingContent extends StatelessWidget {
                               final pngPath = 'assets/moon/moon_$no.png';
                               // マスク半径（CustomPainter と同値）
                               const double maskRadius = 32;
-                              final Offset center = Offset(constraints.maxWidth / 2, constraints.maxHeight / 2);
+                              final Offset center = Offset(
+                                constraints.maxWidth / 2,
+                                constraints.maxHeight / 2,
+                              );
 
                               return Stack(
                                 fit: StackFit.expand,
@@ -3833,7 +4857,9 @@ class _SlidingContent extends StatelessWidget {
                                   // 円形くり抜きの白マスク
                                   Positioned.fill(
                                     child: CustomPaint(
-                                      painter: CircularMaskPainter(radius: maskRadius),
+                                      painter: CircularMaskPainter(
+                                        radius: maskRadius,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -3845,19 +4871,28 @@ class _SlidingContent extends StatelessWidget {
                       // 3) 潮名 + 潮汐ポイント（1/3）
                       Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 Sio.instance.sioName,
-                                style: const TextStyle(fontSize: 24, color: Colors.white),
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  color: Colors.white,
+                                ),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 tidePoint,
-                                style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                ),
                                 textAlign: TextAlign.center,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -4164,18 +5199,17 @@ class _SlidingContent extends StatelessWidget {
           ),
         ),
         // 上下の間に5%の隙間（背景は濃紺）
-        if (gapHeight > 0)
-          Container(
-            height: gapHeight,
-            color: _navyBg,
-          ),
+        if (gapHeight > 0) Container(height: gapHeight, color: _navyBg),
         // 下部領域：潮汐グラフエリア（45%）
         SizedBox(
           height: graphHeight,
           child: Stack(
             children: [
               Positioned.fill(
-                child: CustomPaint(painter: DrawTide(), child: SizedBox.shrink()),
+                child: CustomPaint(
+                  painter: DrawTide(),
+                  child: SizedBox.shrink(),
+                ),
               ),
             ],
           ),
@@ -4183,7 +5217,6 @@ class _SlidingContent extends StatelessWidget {
       ],
     );
   }
-
 }
 
 // (削除) 釣り場環境 > 投稿一覧 タブは不要となったため実装も削除
@@ -4209,7 +5242,8 @@ class CircularMaskPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CircularMaskPainter oldDelegate) => oldDelegate.radius != radius;
+  bool shouldRepaint(covariant CircularMaskPainter oldDelegate) =>
+      oldDelegate.radius != radius;
 }
 
 /// DrawTide は下部領域に潮汐グラフを描画する CustomPainter の例です
@@ -4468,13 +5502,18 @@ class DrawTide extends CustomPainter {
       final double sunriseMinutes = (srH * 60 + srM).toDouble();
       final double sunsetMinutes = (ssH * 60 + ssM).toDouble();
 
-      final double sunriseX = rectTide.left +
+      final double sunriseX =
+          rectTide.left +
           sunriseMinutes * (width - leftMargin - rightMargin) / (24.0 * 60.0);
-      final double sunsetX = rectTide.left +
+      final double sunsetX =
+          rectTide.left +
           sunsetMinutes * (width - leftMargin - rightMargin) / (24.0 * 60.0);
 
       // ラベルは白背景＋影で、満潮/干潮と同様の見た目に
-      final TextStyle textStyle = const TextStyle(fontSize: fontSize, color: Colors.black);
+      final TextStyle textStyle = const TextStyle(
+        fontSize: fontSize,
+        color: Colors.black,
+      );
       final String srText = '${two(srH)}:${two(srM)}';
       final String ssText = '${two(ssH)}:${two(ssM)}';
       final TextPainter srTp = TextPainter(
@@ -4499,13 +5538,15 @@ class DrawTide extends CustomPainter {
       final double baseY = rectTide.bottom - 20.0; // 以前より少し上に配置
 
       // 影・背景のペイント
-      final Paint shadowPaint = Paint()
-        ..color = Colors.black.withAlpha(128)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      final Paint shadowPaint =
+          Paint()
+            ..color = Colors.black.withAlpha(128)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
       final Paint bgPaint = Paint()..color = Colors.white;
-      final Paint tickPaint = Paint()
-        ..color = Colors.redAccent
-        ..strokeWidth = 1.2;
+      final Paint tickPaint =
+          Paint()
+            ..color = Colors.redAccent
+            ..strokeWidth = 1.2;
 
       // 日出ラベル
       final double srRectW = srTp.width + padX * 2;
@@ -4513,7 +5554,10 @@ class DrawTide extends CustomPainter {
       final Rect srRect = Rect.fromLTWH(srLeft, baseY, srRectW, rectH);
       canvas.drawRect(srRect.shift(const Offset(2, 2)), shadowPaint);
       canvas.drawRect(srRect, bgPaint);
-      final Offset srTextOffset = Offset(srRect.left + (srRect.width - srTp.width) / 2, srRect.top + (rectH - srTp.height) / 2 - 1);
+      final Offset srTextOffset = Offset(
+        srRect.left + (srRect.width - srTp.width) / 2,
+        srRect.top + (rectH - srTp.height) / 2 - 1,
+      );
       srTp.paint(canvas, srTextOffset);
       // 目印の縦線（下辺付近）
       canvas.drawLine(
@@ -4528,7 +5572,10 @@ class DrawTide extends CustomPainter {
       final Rect ssRect = Rect.fromLTWH(ssLeft, baseY, ssRectW, rectH);
       canvas.drawRect(ssRect.shift(const Offset(2, 2)), shadowPaint);
       canvas.drawRect(ssRect, bgPaint);
-      final Offset ssTextOffset = Offset(ssRect.left + (ssRect.width - ssTp.width) / 2, ssRect.top + (rectH - ssTp.height) / 2 - 1);
+      final Offset ssTextOffset = Offset(
+        ssRect.left + (ssRect.width - ssTp.width) / 2,
+        ssRect.top + (rectH - ssTp.height) / 2 - 1,
+      );
       ssTp.paint(canvas, ssTextOffset);
       canvas.drawLine(
         Offset(sunsetX, rectTide.bottom - 8),
@@ -4541,13 +5588,17 @@ class DrawTide extends CustomPainter {
     try {
       final d = Common.instance.tideDate;
       String two(int v) => v.toString().padLeft(2, '0');
-      const wdays = ['月','火','水','木','金','土','日'];
+      const wdays = ['月', '火', '水', '木', '金', '土', '日'];
       final w = wdays[(d.weekday + 6) % 7]; // DateTime: Mon=1..Sun=7
       final dateStr = '${two(d.month)}/${two(d.day)} ($w)';
       final TextPainter dtp = TextPainter(
         text: TextSpan(
           text: dateStr,
-          style: TextStyle(fontSize: 20, color: Colors.grey.shade500, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 20,
+            color: Colors.grey.shade500,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         textDirection: TextDirection.ltr,
         maxLines: 1,
@@ -4557,9 +5608,17 @@ class DrawTide extends CustomPainter {
       final double yTop = rectTide.top + 5; // 上部余白を半分に
       final Offset dateOffset = Offset(x12 - dtp.width / 2, yTop);
       // 半透明の白背景で視認性を確保
-      final Rect bg = Rect.fromLTWH(dateOffset.dx - 8, yTop - 4, dtp.width + 16, dtp.height + 8);
+      final Rect bg = Rect.fromLTWH(
+        dateOffset.dx - 8,
+        yTop - 4,
+        dtp.width + 16,
+        dtp.height + 8,
+      );
       final Paint bgPaint = Paint()..color = const Color(0x99FFFFFF);
-      canvas.drawRRect(RRect.fromRectAndRadius(bg, const Radius.circular(8)), bgPaint);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(bg, const Radius.circular(8)),
+        bgPaint,
+      );
       dtp.paint(canvas, dateOffset);
     } catch (_) {}
   }
@@ -4623,14 +5682,22 @@ class DrawTide extends CustomPainter {
       path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
     }
     // 曲線下部を半透明の水色で塗りつぶす
-    final lastp = getXY(SioInfo.sample_cnt - 1, width, height, maxWave, minWave);
-    final fillPath = ui.Path.from(path)
-      ..lineTo(lastp.dx, rectTide.bottom)
-      ..lineTo(firstp.dx, rectTide.bottom)
-      ..close();
-    final fillPaint = Paint()
-      ..color = const Color.fromRGBO(64, 164, 223, 0.5)
-      ..style = PaintingStyle.fill;
+    final lastp = getXY(
+      SioInfo.sample_cnt - 1,
+      width,
+      height,
+      maxWave,
+      minWave,
+    );
+    final fillPath =
+        ui.Path.from(path)
+          ..lineTo(lastp.dx, rectTide.bottom)
+          ..lineTo(firstp.dx, rectTide.bottom)
+          ..close();
+    final fillPaint =
+        Paint()
+          ..color = const Color.fromRGBO(64, 164, 223, 0.5)
+          ..style = PaintingStyle.fill;
     canvas.drawPath(fillPath, fillPaint);
 
     // 波線（ストローク）

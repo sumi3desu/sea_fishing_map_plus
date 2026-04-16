@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 
-class ContactPage extends StatefulWidget {
+class ContactPage extends ConsumerStatefulWidget {
   const ContactPage({Key? key}) : super(key: key);
 
   @override
   _ContactPageState createState() => _ContactPageState();
 }
 
-class _ContactPageState extends State<ContactPage> {
+class _ContactPageState extends ConsumerState<ContactPage> {
   BannerAd? _bannerAd;
   final _formKey = GlobalKey<FormState>();
 
@@ -74,32 +76,59 @@ class _ContactPageState extends State<ContactPage> {
 
   @override
   Widget build(BuildContext context) {
-    _bannerAd ??= BannerAd(
-      size: AdSize.banner,
-      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST
-      listener: BannerAdListener(onAdLoaded: (_) => setState(() {}), onAdFailedToLoad: (ad, err) { ad.dispose(); }),
-      request: const AdRequest(),
-    )..load();
+    final isPremium = ref.watch(prem.premiumStateProvider).isPremium;
+    if (!isPremium && _bannerAd == null) {
+      _bannerAd = BannerAd(
+        size: AdSize.banner,
+        adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST
+        listener: BannerAdListener(
+          onAdLoaded: (_) => setState(() {}),
+          onAdFailedToLoad: (ad, err) {
+            ad.dispose();
+          },
+        ),
+        request: const AdRequest(),
+      )..load();
+    }
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            if (_bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
+            Consumer(
+              builder: (context, ref, _) {
+                final isPremium =
+                    ref.watch(prem.premiumStateProvider).isPremium;
+                if (isPremium || _bannerAd == null)
+                  return const SizedBox.shrink();
+                return Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                );
+              },
+            ),
             Container(
               height: kToolbarHeight,
               color: Colors.black,
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.of(context).maybePop()),
+                  BackButton(
+                    color: Colors.white,
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  ),
                   const Expanded(
-                    child: Center(child: Text('お問い合わせ', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
+                    child: Center(
+                      child: Text(
+                        'お問い合わせ',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 48),
                 ],
@@ -107,71 +136,73 @@ class _ContactPageState extends State<ContactPage> {
             ),
             Expanded(
               child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              // お名前入力フィールド
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'お名前',
-                  border: OutlineInputBorder(),
+                padding: const EdgeInsets.all(16.0),
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    children: [
+                      // お名前入力フィールド
+                      TextFormField(
+                        decoration: const InputDecoration(
+                          labelText: 'お名前',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'お名前を入力してください';
+                          }
+                          return null;
+                        },
+                        onSaved: (value) => _name = value!.trim(),
+                      ),
+                      const SizedBox(height: 16),
+                      // メールアドレス入力フィールド
+                      TextFormField(
+                        decoration: const InputDecoration(
+                          labelText: 'メールアドレス',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'メールアドレスを入力してください';
+                          }
+                          if (!RegExp(
+                            r'^[^@]+@[^@]+\.[^@]+',
+                          ).hasMatch(value.trim())) {
+                            return '有効なメールアドレスを入力してください';
+                          }
+                          return null;
+                        },
+                        onSaved: (value) => _email = value!.trim(),
+                      ),
+                      const SizedBox(height: 16),
+                      // お問い合わせ内容入力フィールド（複数行）
+                      TextFormField(
+                        decoration: const InputDecoration(
+                          labelText: 'お問い合わせ内容',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 5,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'お問い合わせ内容を入力してください';
+                          }
+                          return null;
+                        },
+                        onSaved: (value) => _message = value!.trim(),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submit,
+                          child: const Text('送信'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'お名前を入力してください';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _name = value!.trim(),
-              ),
-              const SizedBox(height: 16),
-              // メールアドレス入力フィールド
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'メールアドレス',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'メールアドレスを入力してください';
-                  }
-                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value.trim())) {
-                    return '有効なメールアドレスを入力してください';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _email = value!.trim(),
-              ),
-              const SizedBox(height: 16),
-              // お問い合わせ内容入力フィールド（複数行）
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'お問い合わせ内容',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 5,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'お問い合わせ内容を入力してください';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _message = value!.trim(),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  child: const Text('送信'),
-                ),
-              ),
-            ],
-          ),
-        ),
               ),
             ),
           ],

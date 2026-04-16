@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 import 'appconfig.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'appconfig.dart';
@@ -17,7 +19,7 @@ import 'common.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
 import 'new_account_page.dart';
 
-class InputPost extends StatefulWidget {
+class InputPost extends ConsumerStatefulWidget {
   const InputPost({
     super.key,
     required this.initialType,
@@ -40,10 +42,10 @@ class InputPost extends StatefulWidget {
   final int? initialSpotId; // 編集モードでのスポットID（フォルダ構成に利用）
 
   @override
-  State<InputPost> createState() => _InputPostState();
+  ConsumerState<InputPost> createState() => _InputPostState();
 }
 
-class _InputPostState extends State<InputPost> {
+class _InputPostState extends ConsumerState<InputPost> {
   BannerAd? _bannerAd;
   final ImagePicker _picker = ImagePicker();
   XFile? _pickedImage; // 表示用（選択直後の元画像を表示し続ける）
@@ -59,7 +61,14 @@ class _InputPostState extends State<InputPost> {
   late String _postType;
 
   // 釣り場環境の投稿項目（単一選択）
-  final List<String> _envCategories = const ['規制', '駐車場', 'トイレ', '釣餌', 'コンビニ', 'その他'];
+  final List<String> _envCategories = const [
+    '規制',
+    '駐車場',
+    'トイレ',
+    '釣餌',
+    'コンビニ',
+    'その他',
+  ];
   String? _selectedEnvCategory;
 
   // 釣果入力
@@ -68,8 +77,10 @@ class _InputPostState extends State<InputPost> {
 
   // 環境入力
   String? _envAvailability; // 'あり' or 'なし'
-  final TextEditingController _envSummaryController = TextEditingController(); // 30桁
-  final TextEditingController _envDetailController = TextEditingController(); // 1000桁
+  final TextEditingController _envSummaryController =
+      TextEditingController(); // 30桁
+  final TextEditingController _envDetailController =
+      TextEditingController(); // 1000桁
   bool _emailVerified = false;
 
   @override
@@ -77,13 +88,17 @@ class _InputPostState extends State<InputPost> {
     super.initState();
     // ドラフトがあれば種別を上書き
     final draftType = Common.instance.draftType;
-    _postType = (draftType != null) ? draftType : ((widget.initialType == 'env') ? 'env' : 'catch');
+    _postType =
+        (draftType != null)
+            ? draftType
+            : ((widget.initialType == 'env') ? 'env' : 'catch');
     _loadBanner();
     // メール認証状態を取得
     (() async {
       try {
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
-        if (mounted) setState(() => _emailVerified = (info.email.trim().isNotEmpty));
+        if (mounted)
+          setState(() => _emailVerified = (info.email.trim().isNotEmpty));
       } catch (_) {}
     })();
     // 編集モードの事前入力
@@ -103,13 +118,18 @@ class _InputPostState extends State<InputPost> {
     // ドラフトの内容を復元
     _restoreDraftIfAny();
     // 認証後に自動投稿が要求されている場合は試行
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tryAutoSubmitAfterAuth());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _tryAutoSubmitAfterAuth(),
+    );
   }
 
   void _loadBanner() {
+    final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+    if (isPremium) return;
     _bannerAd = BannerAd(
       size: AdSize.banner,
-      adUnitId: 'ca-app-pub-3940256099942544/2934735716', // TEST用広告ID（釣り場詳細/一覧/日付と同じ）
+      adUnitId:
+          'ca-app-pub-3940256099942544/2934735716', // TEST用広告ID（釣り場詳細/一覧/日付と同じ）
       // adUnitId: 'ca-app-pub-9290857735881347/1643363507', // 本番広告ID
       listener: BannerAdListener(
         onAdLoaded: (_) {
@@ -136,7 +156,10 @@ class _InputPostState extends State<InputPost> {
   Future<String> _spotDisplayText() async {
     try {
       final common = Common.instance;
-      final baseName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
+      final baseName =
+          common.selectedTeibouName.isNotEmpty
+              ? common.selectedTeibouName
+              : common.tidePoint;
       String display = baseName;
       try {
         final rows = await SioDatabase().getAllTeibouWithPrefecture();
@@ -147,8 +170,14 @@ class _InputPostState extends State<InputPost> {
           final sid = prefs.getInt('selected_teibou_id');
           if (sid != null && sid > 0) {
             for (final r in rows) {
-              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-              if (rid == sid) { row = r; break; }
+              final rid =
+                  r['port_id'] is int
+                      ? r['port_id'] as int
+                      : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) {
+                row = r;
+                break;
+              }
             }
           }
         } catch (_) {}
@@ -157,7 +186,12 @@ class _InputPostState extends State<InputPost> {
           (r) => ((r?['port_name'] ?? '').toString() == baseName),
           orElse: () => null,
         );
-        final int? flag = row == null ? null : (row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? ''));
+        final int? flag =
+            row == null
+                ? null
+                : (row['flag'] is int
+                    ? row['flag'] as int
+                    : int.tryParse(row['flag']?.toString() ?? ''));
         if (flag == -1) display = '$baseName (申請中)';
       } catch (_) {}
       return display;
@@ -170,7 +204,10 @@ class _InputPostState extends State<InputPost> {
   Future<String> _spotTitleText() async {
     try {
       final common = Common.instance;
-      final baseName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
+      final baseName =
+          common.selectedTeibouName.isNotEmpty
+              ? common.selectedTeibouName
+              : common.tidePoint;
       String name = baseName;
       String yomi = '';
       try {
@@ -181,8 +218,14 @@ class _InputPostState extends State<InputPost> {
           final sid = prefs.getInt('selected_teibou_id');
           if (sid != null && sid > 0) {
             for (final r in rows) {
-              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-              if (rid == sid) { row = r; break; }
+              final rid =
+                  r['port_id'] is int
+                      ? r['port_id'] as int
+                      : int.tryParse(r['port_id']?.toString() ?? '');
+              if (rid == sid) {
+                row = r;
+                break;
+              }
             }
           }
         } catch (_) {}
@@ -191,7 +234,10 @@ class _InputPostState extends State<InputPost> {
           orElse: () => null,
         );
         if (row != null) {
-          final int? flag = (row['flag'] is int) ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? '');
+          final int? flag =
+              (row['flag'] is int)
+                  ? row['flag'] as int
+                  : int.tryParse(row['flag']?.toString() ?? '');
           if (flag == -1) name = '$baseName (申請中)';
           yomi = ((row['j_yomi'] ?? row['furigana']) ?? '').toString();
         }
@@ -211,7 +257,8 @@ class _InputPostState extends State<InputPost> {
         _networkImageUrl = null; // ネットワーク画像プレビューはクリア
         _clearImage = false; // 新規選択で取り消し解除
         // 先に即時プレビュー → バックグラウンドで圧縮後に差し替え
-        final saved = _scrollController.hasClients ? _scrollController.offset : null;
+        final saved =
+            _scrollController.hasClients ? _scrollController.offset : null;
         setState(() => _pickedImage = x);
         if (saved != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -242,7 +289,8 @@ class _InputPostState extends State<InputPost> {
         _networkImageUrl = null; // ネットワーク画像プレビューはクリア
         _clearImage = false; // 新規選択で取り消し解除
         // 先に即時プレビュー → バックグラウンドで圧縮後に差し替え
-        final saved = _scrollController.hasClients ? _scrollController.offset : null;
+        final saved =
+            _scrollController.hasClients ? _scrollController.offset : null;
         setState(() => _pickedImage = x);
         if (saved != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -267,7 +315,10 @@ class _InputPostState extends State<InputPost> {
 
   bool get _isPostEnabled {
     // 釣果/環境ともに概略があれば投稿可能
-    final s = _postType == 'catch' ? _summaryController.text.trim() : _envSummaryController.text.trim();
+    final s =
+        _postType == 'catch'
+            ? _summaryController.text.trim()
+            : _envSummaryController.text.trim();
     return s.isNotEmpty;
   }
 
@@ -282,12 +333,15 @@ class _InputPostState extends State<InputPost> {
       _summaryController.text = c.draftSummary ?? _summaryController.text;
       _detailController.text = c.draftDetail ?? _detailController.text;
     } else {
-      _envSummaryController.text = c.draftEnvSummary ?? _envSummaryController.text;
+      _envSummaryController.text =
+          c.draftEnvSummary ?? _envSummaryController.text;
       _envDetailController.text = c.draftEnvDetail ?? _envDetailController.text;
     }
     final p = (c.draftImagePath ?? '').trim();
     if (p.isNotEmpty) {
-      try { _pickedImage = XFile(p); } catch (_) {}
+      try {
+        _pickedImage = XFile(p);
+      } catch (_) {}
     }
   }
 
@@ -299,7 +353,9 @@ class _InputPostState extends State<InputPost> {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       final verified = (info.email.trim().isNotEmpty);
       if (!verified) return;
-    } catch (_) { return; }
+    } catch (_) {
+      return;
+    }
     // 投稿可否を再評価
     _onChangedAny('');
     if (!_isPostEnabled) return;
@@ -327,7 +383,9 @@ class _InputPostState extends State<InputPost> {
         );
         await Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const NewAccountPage(returnToInputPost: true)),
+          MaterialPageRoute(
+            builder: (_) => const NewAccountPage(returnToInputPost: true),
+          ),
         );
         // 登録画面から戻ったら自動投稿を試行
         await _tryAutoSubmitAfterAuth();
@@ -338,9 +396,9 @@ class _InputPostState extends State<InputPost> {
     try {
       // 画像圧縮が未完了の場合は待機
       if (_compressing != null && _uploadImage == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('画像を処理中です。完了までお待ちください…')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('画像を処理中です。完了までお待ちください…')));
         final res = await _compressing; // 完了待ち
         if (res != null) _uploadImage = res;
       }
@@ -351,8 +409,14 @@ class _InputPostState extends State<InputPost> {
       final now = DateTime.now().toLocal();
       final userInfo = await loadUserInfo() ?? await getOrInitUserInfo();
       final postKind = (_postType == 'catch') ? 'catch' : 'other';
-      final title = _postType == 'catch' ? _summaryController.text.trim() : _envSummaryController.text.trim();
-      final detail = _postType == 'catch' ? _detailController.text.trim() : _envDetailController.text.trim();
+      final title =
+          _postType == 'catch'
+              ? _summaryController.text.trim()
+              : _envSummaryController.text.trim();
+      final detail =
+          _postType == 'catch'
+              ? _detailController.text.trim()
+              : _envDetailController.text.trim();
       final map = <String, String>{
         'spot_id': spotId.toString(),
         'user_id': userInfo.userId.toString(),
@@ -377,11 +441,17 @@ class _InputPostState extends State<InputPost> {
       final resp = await req.send();
       final status = resp.statusCode;
       if (status == 200) {
-        try { Common.instance.clearPostDraft(); } catch (_) {}
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('投稿を送信しました')));
+        try {
+          Common.instance.clearPostDraft();
+        } catch (_) {}
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('投稿を送信しました')));
         if (mounted) Navigator.pop(context, true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('投稿送信に失敗しました (HTTP $status)')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('投稿送信に失敗しました (HTTP $status)')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -394,9 +464,9 @@ class _InputPostState extends State<InputPost> {
     try {
       // 画像圧縮が未完了の場合は待機
       if (_compressing != null && _uploadImage == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('画像を処理中です。完了までお待ちください…')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('画像を処理中です。完了までお待ちください…')));
         final res = await _compressing; // 完了待ち
         if (res != null) _uploadImage = res;
       }
@@ -404,12 +474,25 @@ class _InputPostState extends State<InputPost> {
       final now = DateTime.now().toLocal();
       final userInfo = await loadUserInfo() ?? await getOrInitUserInfo();
       final postKind = (_postType == 'catch') ? 'catch' : 'other';
-      final title = _postType == 'catch' ? _summaryController.text.trim() : _envSummaryController.text.trim();
-      final detail = _postType == 'catch' ? _detailController.text.trim() : _envDetailController.text.trim();
+      final title =
+          _postType == 'catch'
+              ? _summaryController.text.trim()
+              : _envSummaryController.text.trim();
+      final detail =
+          _postType == 'catch'
+              ? _detailController.text.trim()
+              : _envDetailController.text.trim();
       final postId = widget.editingPostId ?? 0;
-      final spotId = widget.initialSpotId ?? (await SharedPreferences.getInstance()).getInt('selected_teibou_id') ?? 0;
+      final spotId =
+          widget.initialSpotId ??
+          (await SharedPreferences.getInstance()).getInt(
+            'selected_teibou_id',
+          ) ??
+          0;
       if (postId <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('投稿IDが不明のため、保存できませんでした')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('投稿IDが不明のため、保存できませんでした')));
         return;
       }
 
@@ -445,7 +528,9 @@ class _InputPostState extends State<InputPost> {
             thumbPath = j['thumb_path']?.toString();
           }
         } catch (_) {}
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('投稿を保存しました')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('投稿を保存しました')));
         if (mounted) {
           final result = {
             'updated': true,
@@ -457,7 +542,9 @@ class _InputPostState extends State<InputPost> {
           Navigator.pop(context, result);
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存に失敗しました (HTTP $status)')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存に失敗しました (HTTP $status)')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -573,290 +660,347 @@ class _InputPostState extends State<InputPost> {
       body: SafeArea(
         child: Column(
           children: [
-            if (_bannerAd != null)
-              Container(
-                alignment: Alignment.center,
-                width: _bannerAd!.size.width.toDouble(),
-                height: _bannerAd!.size.height.toDouble(),
-                child: AdWidget(ad: _bannerAd!),
-              ),
-          // タイトル行（AppBar の代替）
-          Container(
-            height: kToolbarHeight,
-            color: AppConfig.instance.appBarBackgroundColor,
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.arrow_back),
-                  color: AppConfig.instance.appBarForegroundColor,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '投稿入力',
-                  style: TextStyle(
-                    color: AppConfig.instance.appBarForegroundColor,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _submitting
-                      ? TextButton.icon(
-                          onPressed: null,
-                          icon: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppConfig.instance.appBarForegroundColor,
-                            ),
-                          ),
-                          label: const Text('投稿中…'),
-                        )
-                      : (widget.editMode
-                          ? TextButton.icon(
-                              onPressed: _isPostEnabled ? _saveEdit : null,
-                              icon: const Icon(Icons.save),
-                              label: const Text('保存'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppConfig.instance.appBarForegroundColor,
-                                disabledForegroundColor: AppConfig.instance.appBarForegroundColor.withOpacity(0.3),
-                              ),
-                            )
-                          : TextButton.icon(
-                              onPressed: _isPostEnabled ? _submitPost : null,
-                              icon: const Icon(Icons.send),
-                              label: const Text('投稿'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppConfig.instance.appBarForegroundColor,
-                                disabledForegroundColor: AppConfig.instance.appBarForegroundColor.withOpacity(0.3),
-                              ),
-                            )),
-                ),
-              ],
-            ),
-          ),
-          // 釣り場名表示（白背景のエリア）
-          Container(
-            height: kToolbarHeight,
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            alignment: Alignment.centerLeft,
-            child: FutureBuilder<String>(
-              future: _spotTitleText(),
-              builder: (context, snap) {
-                final txt = (snap.data ?? '').trim();
-                return Text(
-                  txt.isNotEmpty ? txt : '（釣り場未選択）',
-                  style: const TextStyle(fontSize: 18, color: Colors.black87, fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+            Consumer(
+              builder: (context, ref, _) {
+                final isPremium =
+                    ref.watch(prem.premiumStateProvider).isPremium;
+                if (isPremium || _bannerAd == null)
+                  return const SizedBox.shrink();
+                return Container(
+                  alignment: Alignment.center,
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
                 );
               },
             ),
-          ),
-          // 種別切替（釣果/環境）
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            color: Colors.white,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: CupertinoSegmentedControl<String>(
-                groupValue: _postType,
-                padding: const EdgeInsets.all(0),
-                children: const {
-                  'catch': Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Text('釣果')),
-                  'env': Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Text('環境')),
-                },
-                onValueChanged: (val) {
-                  setState(() {
-                    _postType = (val == 'env') ? 'env' : 'catch';
-                    // 入力可否などを即時再評価
-                    _onChangedAny('');
-                  });
-                  // 投稿一覧の選択状態としても反映（起動中は維持）
-                  try { Common.instance.setPostListMode(_postType); } catch (_) {}
-                },
-              ),
-            ),
-          ),
-          // 投稿種別に応じた説明文 + 認証の注意
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _postType == 'catch'
-                      ? '釣果の投稿を入力してください。'
-                      : '釣り場の規制/駐車場/トイレなどについての投稿を入力してください。',
-                ),
-                if (!_emailVerified)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      '※ 投稿するにはメール認証が必要です。',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
+            // タイトル行（AppBar の代替）
+            Container(
+              height: kToolbarHeight,
+              color: AppConfig.instance.appBarBackgroundColor,
+              child: Row(
+                children: [
+                  BackButton(
+                    color: AppConfig.instance.appBarForegroundColor,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '投稿入力',
+                    style: TextStyle(
+                      color: AppConfig.instance.appBarForegroundColor,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          // 画面本体
-          Expanded(
-            child: SingleChildScrollView(
-              key: const PageStorageKey('input_post_scroll'),
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  if (_postType == 'catch') ...[
-                    const Text(
-                      '釣果概要（一覧に表示される32桁）',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _summaryController,
-                      maxLength: 32,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: '例）アジ20cm前後を10匹',
-                        counterText: '',
-                      ),
-                      onChanged: _onChangedAny,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '釣果詳細(1024桁)',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _detailController,
-                      maxLength: 1024,
-                      minLines: 4,
-                      maxLines: 8,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'サイズ、時間帯、仕掛け、場所の状況など詳しく記載してください',
-                      ),
-                      onChanged: _onChangedAny,
-                    ),
-                    const SizedBox(height: 16),
-                    // 画像エリア（タップで選択、幅いっぱい・アスペクト比維持で全体表示）
-                    InkWell(
-                      onTap: _showImageActionSheet,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          if (_pickedImage == null) {
-                            if ((_networkImageUrl ?? '').isNotEmpty) {
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  _networkImageUrl!,
-                                  width: constraints.maxWidth,
-                                  fit: BoxFit.fitWidth,
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child:
+                        _submitting
+                            ? TextButton.icon(
+                              onPressed: null,
+                              icon: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color:
+                                      AppConfig.instance.appBarForegroundColor,
                                 ),
-                              );
-                            }
-                            return Container(
-                              width: double.infinity,
-                              height: 180,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Center(
-                                child: Icon(Icons.camera_alt, size: 40, color: Colors.black54),
-                              ),
-                            );
-                          }
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(_pickedImage!.path),
-                              width: constraints.maxWidth,
-                              fit: BoxFit.fitWidth,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                  if (_postType == 'env') ...[
-                    const Text('環境概要（一覧に表示される30桁）', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _envSummaryController,
-                      maxLength: 30,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: '例）駐車場、トイレなどの状況',
-                        counterText: '',
-                      ),
-                      onChanged: _onChangedAny,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('環境詳細（1000桁）', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _envDetailController,
-                      maxLength: 1000,
-                      minLines: 4,
-                      maxLines: 10,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: '駐車場、トイレなどの状況や注意点を詳しく記載してください',
-                      ),
-                      onChanged: _onChangedAny,
-                    ),
-                    const SizedBox(height: 16),
-                    InkWell(
-                      onTap: _showImageActionSheet,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          if (_pickedImage == null) {
-                            return Container(
-                              width: double.infinity,
-                              height: 180,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Center(
-                                child: Icon(Icons.camera_alt, size: 40, color: Colors.black54),
-                              ),
-                            );
-                          }
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(_pickedImage!.path),
-                              width: constraints.maxWidth,
-                              fit: BoxFit.fitWidth,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                              label: const Text('投稿中…'),
+                            )
+                            : (widget.editMode
+                                ? TextButton.icon(
+                                  onPressed: _isPostEnabled ? _saveEdit : null,
+                                  icon: const Icon(Icons.save),
+                                  label: const Text('保存'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor:
+                                        AppConfig
+                                            .instance
+                                            .appBarForegroundColor,
+                                    disabledForegroundColor: AppConfig
+                                        .instance
+                                        .appBarForegroundColor
+                                        .withOpacity(0.3),
+                                  ),
+                                )
+                                : TextButton.icon(
+                                  onPressed:
+                                      _isPostEnabled ? _submitPost : null,
+                                  icon: const Icon(Icons.send),
+                                  label: const Text('投稿'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor:
+                                        AppConfig
+                                            .instance
+                                            .appBarForegroundColor,
+                                    disabledForegroundColor: AppConfig
+                                        .instance
+                                        .appBarForegroundColor
+                                        .withOpacity(0.3),
+                                  ),
+                                )),
+                  ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
+            // 釣り場名表示（白背景のエリア）
+            Container(
+              height: kToolbarHeight,
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.centerLeft,
+              child: FutureBuilder<String>(
+                future: _spotTitleText(),
+                builder: (context, snap) {
+                  final txt = (snap.data ?? '').trim();
+                  return Text(
+                    txt.isNotEmpty ? txt : '（釣り場未選択）',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+            ),
+            // 種別切替（釣果/環境）
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.white,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: CupertinoSegmentedControl<String>(
+                  groupValue: _postType,
+                  padding: const EdgeInsets.all(0),
+                  children: const {
+                    'catch': Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Text('釣果'),
+                    ),
+                    'env': Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Text('環境'),
+                    ),
+                  },
+                  onValueChanged: (val) {
+                    setState(() {
+                      _postType = (val == 'env') ? 'env' : 'catch';
+                      // 入力可否などを即時再評価
+                      _onChangedAny('');
+                    });
+                    // 投稿一覧の選択状態としても反映（起動中は維持）
+                    try {
+                      Common.instance.setPostListMode(_postType);
+                    } catch (_) {}
+                  },
+                ),
+              ),
+            ),
+            // 投稿種別に応じた説明文 + 認証の注意
+            Container(
+              width: double.infinity,
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _postType == 'catch'
+                        ? '釣果の投稿を入力してください。'
+                        : '釣り場の規制/駐車場/トイレなどについての投稿を入力してください。',
+                  ),
+                  if (!_emailVerified)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text(
+                        '※ 投稿するにはメール認証が必要です。',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // 画面本体
+            Expanded(
+              child: SingleChildScrollView(
+                key: const PageStorageKey('input_post_scroll'),
+                controller: _scrollController,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    if (_postType == 'catch') ...[
+                      const Text(
+                        '釣果概要（一覧に表示される32桁）',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _summaryController,
+                        maxLength: 32,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: '例）アジ20cm前後を10匹',
+                          counterText: '',
+                        ),
+                        onChanged: _onChangedAny,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '釣果詳細(1024桁)',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _detailController,
+                        maxLength: 1024,
+                        minLines: 4,
+                        maxLines: 8,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'サイズ、時間帯、仕掛け、場所の状況など詳しく記載してください',
+                        ),
+                        onChanged: _onChangedAny,
+                      ),
+                      const SizedBox(height: 16),
+                      // 画像エリア（タップで選択、幅いっぱい・アスペクト比維持で全体表示）
+                      InkWell(
+                        onTap: _showImageActionSheet,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (_pickedImage == null) {
+                              if ((_networkImageUrl ?? '').isNotEmpty) {
+                                return ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    _networkImageUrl!,
+                                    width: constraints.maxWidth,
+                                    fit: BoxFit.fitWidth,
+                                  ),
+                                );
+                              }
+                              return Container(
+                                width: double.infinity,
+                                height: 180,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  border: Border.all(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.camera_alt,
+                                    size: 40,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              );
+                            }
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                File(_pickedImage!.path),
+                                width: constraints.maxWidth,
+                                fit: BoxFit.fitWidth,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    if (_postType == 'env') ...[
+                      const Text(
+                        '環境概要（一覧に表示される30桁）',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _envSummaryController,
+                        maxLength: 30,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: '例）駐車場、トイレなどの状況',
+                          counterText: '',
+                        ),
+                        onChanged: _onChangedAny,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '環境詳細（1000桁）',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _envDetailController,
+                        maxLength: 1000,
+                        minLines: 4,
+                        maxLines: 10,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: '駐車場、トイレなどの状況や注意点を詳しく記載してください',
+                        ),
+                        onChanged: _onChangedAny,
+                      ),
+                      const SizedBox(height: 16),
+                      InkWell(
+                        onTap: _showImageActionSheet,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            if (_pickedImage == null) {
+                              return Container(
+                                width: double.infinity,
+                                height: 180,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  border: Border.all(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.camera_alt,
+                                    size: 40,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              );
+                            }
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                File(_pickedImage!.path),
+                                width: constraints.maxWidth,
+                                fit: BoxFit.fitWidth,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -495,17 +495,17 @@ Future<UserInfo?> loadUserInfo() async {
 }
 
 
-class MainPage extends StatefulWidget {
+class MainPage extends ConsumerStatefulWidget {
   const MainPage({super.key, required this.title, this.initialIndex = 0});
 
   final String title;
   final int initialIndex;
 
   @override
-  State<MainPage> createState() => _MainPageState();
+  ConsumerState<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends ConsumerState<MainPage> {
   static const double _postFabDiameter = 61.0;
   BannerAd? _bannerAd;
   // 規約・プライバシーポリシー同意ダイアログ制御
@@ -565,7 +565,10 @@ class _MainPageState extends State<MainPage> {
     super.initState();
     // 初期タブを外部指定で切り替え可能にする
     _selectedIndex = widget.initialIndex;
-    _loadBanner();
+    final isPremium = ref.read(prem.premiumStateProvider).isPremium;
+    if (!isPremium) {
+      _loadBanner();
+    }
     // 日付タブは廃止（Tide ページ内の「日付変更」ボタンから遷移）
     // 共通状態からの「釣り場詳細へ遷移」要求に反応
     try {
@@ -992,13 +995,18 @@ class _MainPageState extends State<MainPage> {
               padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight),
               child: Column(
                 children: [
-                  if (_bannerAd != null)
-                    Container(
-                      alignment: Alignment.center,
-                      width: _bannerAd!.size.width.toDouble(),
-                      height: _bannerAd!.size.height.toDouble(),
-                      child: AdWidget(ad: _bannerAd!),
-                    ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final isPremium = ref.watch(prem.premiumStateProvider).isPremium;
+                      if (isPremium || _bannerAd == null) return const SizedBox.shrink();
+                      return Container(
+                        alignment: Alignment.center,
+                        width: _bannerAd!.size.width.toDouble(),
+                        height: _bannerAd!.size.height.toDouble(),
+                        child: AdWidget(ad: _bannerAd!),
+                      );
+                    },
+                  ),
                 // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
                 if (_selectedIndex == 2)
                   SizedBox(
