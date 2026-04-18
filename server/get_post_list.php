@@ -28,6 +28,7 @@ try {
     $page    = isset($_POST['page']) ? (int)$_POST['page'] : (isset($_GET['page']) ? (int)$_GET['page'] : 0);
     $pageSz  = isset($_POST['page_size']) ? (int)$_POST['page_size'] : (isset($_GET['page_size']) ? (int)$_GET['page_size'] : 0);
     if ($pageSz <= 0) $pageSz = 0; // 未指定時は従来のlimitを使用
+    $userId  = isset($_POST['user_id']) ? (int)$_POST['user_id'] : (isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0);
     // 0: 指定スポットのみ / 1: 釣果は近隣10スポット。未指定は従来互換で1。
     $ambiguousPlevel = isset($_POST['ambiguous_plevel']) ? (int)$_POST['ambiguous_plevel'] : (isset($_GET['ambiguous_plevel']) ? (int)$_GET['ambiguous_plevel'] : 1);
 
@@ -43,17 +44,22 @@ try {
         $k = (int)$getKind;
         if ($k === 1) {
             // 釣果: 近隣10スポット（指定があれば）を対象
-            $where[] = 'post_kind = 1';
+            $where[] = 'p.post_kind = 1';
         } else if ($k === 0) {
-            $where[] = 'post_kind <> 1';
+            $where[] = 'p.post_kind <> 1';
         } else {
-            $where[] = 'post_kind = :post_kind';
+            $where[] = 'p.post_kind = :post_kind';
             $params[':post_kind'] = $k;
         }
     } else {
         // 不正値は釣果として扱う
         $k = 1;
-        $where[] = 'post_kind = 1';
+        $where[] = 'p.post_kind = 1';
+    }
+
+    if ($userId > 0) {
+        $where[] = 'p.user_id = :user_id';
+        $params[':user_id'] = $userId;
     }
 
     // スポット指定時の処理
@@ -61,8 +67,9 @@ try {
     $nearIds = [];
     if ($spotId > 0) {
         // get_kind=1 かつ ambiguous_plevel != 0 のときだけ近隣10スポット。
-        // ambiguous_plevel=0 や釣果以外は指定スポットのみ取得する。
-        if (isset($k) && $k === 1 && $ambiguousPlevel !== 0) {
+        // ただし user_id 指定時（釣り日記など）は指定スポットのみ取得する。
+        // ambiguous_plevel=0 や釣果以外も指定スポットのみ取得する。
+        if (isset($k) && $k === 1 && $ambiguousPlevel !== 0 && $userId <= 0) {
             try {
                 // 基点座標
                 $stmt0 = $pdo->prepare('SELECT latitude, longitude FROM teibou WHERE port_id = :sid LIMIT 1');
@@ -100,9 +107,9 @@ try {
                 $inPh[] = $ph;
                 $params[$ph] = (int)$val;
             }
-            $where[] = 'spot_id IN ('.implode(',', $inPh).')';
+            $where[] = 'p.spot_id IN ('.implode(',', $inPh).')';
         } else {
-            $where[] = 'spot_id = :spot_id';
+            $where[] = 'p.spot_id = :spot_id';
             $params[':spot_id'] = $spotId;
         }
     }

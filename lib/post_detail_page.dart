@@ -19,6 +19,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'dart:io' show Platform;
 import 'main.dart';
 import 'constants.dart';
+import 'common.dart';
 
 class PostDetailPage extends ConsumerStatefulWidget {
   const PostDetailPage({super.key, required this.item});
@@ -39,16 +40,21 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
   int? _myUpDown; // 1=thumb up, 0=thumb down, null/その他=未投票
   bool _disliking = false; // 低評価送信中
   bool _canEdit = false;
+  bool _isMine = false;
   String _cacheTs = '';
   bool _updated = false; // 編集で更新されたか（戻り値用）
   bool _imageCleared = false; // 編集で画像を外したか
   String? _overrideImageUrl; // 編集結果で受け取った新しい画像URL
   String? _newImagePath; // 編集結果で受け取った相対 image_path
   String? _newThumbPath; // 編集結果で受け取った相対 thumb_path
+  String? _currentTitle;
+  String? _currentDetail;
 
   @override
   void initState() {
     super.initState();
+    _currentTitle = widget.item.title;
+    _currentDetail = widget.item.detail;
     _loadBanner();
     _fetchAvatarIfAny();
     _loadLikeCount();
@@ -456,6 +462,27 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       if (src == null) return;
       final double sLat = (src['latitude'] as num).toDouble();
       final double sLng = (src['longitude'] as num).toDouble();
+      final String spotName = (src['port_name'] ?? '').toString();
+      final int? prefId =
+          src['todoufuken_id'] is int
+              ? src['todoufuken_id'] as int
+              : int.tryParse(src['todoufuken_id']?.toString() ?? '') ??
+                  int.tryParse(src['pref_id_from_port']?.toString() ?? '');
+      if (_isMine) {
+        await Common.instance.saveSelectedTeibou(
+          spotName,
+          Common.instance.tidePoint,
+          id: sid,
+          lat: sLat,
+          lng: sLng,
+          prefId: prefId,
+        );
+        Common.instance.shouldJumpPage = true;
+        Common.instance.requestNavigateToTidePage();
+        if (!mounted) return;
+        Navigator.pop(context);
+        return;
+      }
       // 距離計算して近い順に並べる
       List<Map<String, dynamic>> list = [];
       for (final r in rows) {
@@ -733,7 +760,12 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       final me =
           (widget.item.userId != null) && (info.userId == widget.item.userId);
       final isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
-      if (mounted) setState(() => _canEdit = me || isAdmin);
+      if (mounted) {
+        setState(() {
+          _isMine = me;
+          _canEdit = me || isAdmin;
+        });
+      }
     } catch (_) {}
   }
 
@@ -769,8 +801,13 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
             if (updated) {
               setState(() {
                 _updated = true;
+                _currentTitle = res['title']?.toString() ?? _currentTitle;
+                _currentDetail = res['detail']?.toString() ?? _currentDetail;
                 if (cleared) {
                   _imageCleared = true;
+                  _overrideImageUrl = null;
+                  _newImagePath = null;
+                  _newThumbPath = null;
                 } else {
                   _cacheTs = DateTime.now().millisecondsSinceEpoch.toString();
                   final ip = (res['image_path']?.toString() ?? '').trim();
@@ -1091,62 +1128,78 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
               Container(
                 height: kToolbarHeight,
                 color: AppConfig.instance.appBarBackgroundColor,
-                child: Row(
-                  children: [
-                    BackButton(
-                      color: AppConfig.instance.appBarForegroundColor,
-                      onPressed: () {
-                        final map = {
-                          'updated': _updated,
-                          'clearedImage': _imageCleared,
-                          'postId': widget.item.postId,
-                        };
-                        if (_newImagePath != null)
-                          map['image_path'] = _newImagePath;
-                        if (_newThumbPath != null)
-                          map['thumb_path'] = _newThumbPath;
-                        Navigator.pop(context, map);
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    const Text(
-                      '投稿詳細',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (widget.item.showNearbyButton &&
-                        (widget.item.spotId ?? 0) > 0 &&
-                        ambiguous_plevel != 0)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: TextButton.icon(
-                          onPressed: _openNearbyMap,
-                          icon: const Icon(Icons.map),
-                          label: const Text('釣れた周辺の釣り場を見る'),
-                          style: TextButton.styleFrom(
-                            foregroundColor:
-                                AppConfig.instance.appBarForegroundColor,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final nearbyLabel = _canEdit ? '釣れた場所' : '釣れたエリア';
+                    return Row(
+                      children: [
+                        BackButton(
+                          color: AppConfig.instance.appBarForegroundColor,
+                          onPressed: () {
+                            final map = {
+                              'updated': _updated,
+                              'clearedImage': _imageCleared,
+                              'postId': widget.item.postId,
+                            };
+                            if (_newImagePath != null)
+                              map['image_path'] = _newImagePath;
+                            if (_newThumbPath != null)
+                              map['thumb_path'] = _newThumbPath;
+                            Navigator.pop(context, map);
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        const Expanded(
+                          child: Text(
+                            '投稿詳細',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    if (_canEdit)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: TextButton.icon(
-                          onPressed: _openEdit,
-                          icon: const Icon(Icons.edit),
-                          label: const Text('編集'),
-                          style: TextButton.styleFrom(
-                            foregroundColor:
-                                AppConfig.instance.appBarForegroundColor,
+                        if (widget.item.showNearbyButton &&
+                            (widget.item.spotId ?? 0) > 0 &&
+                            ambiguous_plevel != 0)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: TextButton.icon(
+                              onPressed: _openNearbyMap,
+                              icon: const Icon(Icons.map),
+                              label: Text(nearbyLabel),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    AppConfig.instance.appBarForegroundColor,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                  ],
+                        if (_canEdit)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: TextButton.icon(
+                              onPressed: _openEdit,
+                              icon: const Icon(Icons.edit),
+                              label: const Text('編集'),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    AppConfig.instance.appBarForegroundColor,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
               const Divider(height: 1),
@@ -1311,9 +1364,9 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                           ),
                         const SizedBox(height: 8),
                       ],
-                      if ((it.title ?? '').isNotEmpty) ...[
+                      if ((_currentTitle ?? '').isNotEmpty) ...[
                         Text(
-                          it.title!,
+                          _currentTitle!,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -1321,9 +1374,9 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                         ),
                         const SizedBox(height: 8),
                       ],
-                      if ((it.detail ?? '').isNotEmpty) ...[
+                      if ((_currentDetail ?? '').isNotEmpty) ...[
                         Text(
-                          it.detail!,
+                          _currentDetail!,
                           style: const TextStyle(fontSize: 15, height: 1.6),
                         ),
                         const SizedBox(height: 16),

@@ -534,6 +534,7 @@ class Common extends ChangeNotifier {
 
   // 投稿一覧の表示モード（'catch' or 'env'）。アプリ起動中のみ保持。
   String postListMode = 'catch';
+  bool fishingDiaryMode = false;
 
   void setPostListMode(String mode) {
     final m = (mode == 'env') ? 'env' : 'catch';
@@ -541,6 +542,19 @@ class Common extends ChangeNotifier {
       postListMode = m;
       notifyListeners();
     }
+  }
+
+  Future<void> loadFishingDiaryMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    fishingDiaryMode = prefs.getBool('fishing_diary_mode') ?? false;
+  }
+
+  Future<void> setFishingDiaryMode(bool enabled) async {
+    if (fishingDiaryMode == enabled) return;
+    fishingDiaryMode = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('fishing_diary_mode', enabled);
+    notifyListeners();
   }
 
   // ===== 投稿入力のドラフト（メール認証フロー復帰用） =====

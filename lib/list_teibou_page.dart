@@ -27,7 +27,18 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   bool _loading = true;
   List<Map<String, dynamic>> _rows = [];
   final List<String> _regions = const [
-    'お気に入り', '近くの釣り場', '北海道', '東北', '関東', '中部', '近畿', '中国', '四国', '九州', '沖縄'
+    'お気に入り',
+    '近くの釣り場',
+    'マイ釣り場',
+    '北海道',
+    '東北',
+    '関東',
+    '中部',
+    '近畿',
+    '中国',
+    '四国',
+    '九州',
+    '沖縄',
   ];
   int _selectedRegionIndex = 0;
   final Map<String, Set<int>> _regionPrefSet = {};
@@ -43,13 +54,20 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   bool _nearbyLoading = false;
   String? _nearbyError;
   final Map<int, int> _nearbyNumberById = {}; // port_id -> 1..10
-  final Map<int, int> _nearbyMetersById = {}; // port_id -> meters from current location
+  final Map<int, int> _nearbyMetersById =
+      {}; // port_id -> meters from current location
   double? _nearbyUserLat;
   double? _nearbyUserLng;
   // 起動時の自動近隣検索（未選択時）の実行フラグ（同一ライフサイクル内で一度だけ）
   bool _didStartupNearbyAutoSelect = false;
   bool _startupNearbyRunning = false;
   bool _didAutoSearchOnNearbyTab = false; // 「近くの釣り場」タブ表示時に一度だけ自動検索
+  List<Map<String, dynamic>> _mySpots = [];
+  bool _mySpotsLoading = false;
+  String? _mySpotsError;
+  final Map<int, _MySpotSummary> _mySpotSummaryById = {};
+  Set<int> _myCatchSpotIds = <int>{};
+  bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
 
   @override
   void initState() {
@@ -63,7 +81,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     // 釣り場詳細の地図などからの選択変更を反映
     Common.instance.addListener(_onCommonChangedJump);
     // 起動時、未選択なら一度だけ「近くの釣り場」を検索して最寄りを自動選択
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeRunStartupNearbyAutoSelect());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeRunStartupNearbyAutoSelect(),
+    );
   }
 
   void _onDbChanged() {
@@ -75,6 +95,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   int _lastCenterTick = 0;
   void _onCommonChangedJump() async {
     if (!mounted) return;
+    if (_lastFishingDiaryMode != Common.instance.fishingDiaryMode) {
+      _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+      setState(() {});
+    }
     // 起動時の自動近隣検索要求が来ている場合は、一度だけ検索＋自動選択を実施
     final cmn = Common.instance;
     if (cmn.autoNearbySearchPending) {
@@ -102,7 +126,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       if (targetId == null && _selectedTeibouName != null) {
         for (final r in _rows) {
           if ((r['port_name'] ?? '').toString() == _selectedTeibouName) {
-            targetId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            targetId =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
             break;
           }
         }
@@ -128,6 +155,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           Future.delayed(const Duration(milliseconds: 80), _scrollOnly);
         }
       }
+
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollOnly());
     }
 
@@ -150,12 +178,20 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         final savedPref = prefs.getInt('selected_teibou_pref_id');
         if (savedId != null) {
           for (final r in _rows) {
-            final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
+            final rid =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
             if (rid == savedId) {
               selId = rid;
-              prefId = savedPref ?? (r['todoufuken_id'] is int
-                  ? r['todoufuken_id'] as int
-                  : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? ''));
+              prefId =
+                  savedPref ??
+                  (r['todoufuken_id'] is int
+                      ? r['todoufuken_id'] as int
+                      : int.tryParse(r['todoufuken_id']?.toString() ?? '') ??
+                          int.tryParse(
+                            r['pref_id_from_port']?.toString() ?? '',
+                          ));
               selResolvedName = (r['port_name'] ?? '').toString();
               break;
             }
@@ -181,10 +217,15 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           final d = _haversine(sLat, sLng, dlat, dlng, cosLat: rlat);
           if (d < best) {
             best = d;
-            bestId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            bestPref = r['todoufuken_id'] is int
-                ? r['todoufuken_id'] as int
-                : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '');
+            bestId =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            bestPref =
+                r['todoufuken_id'] is int
+                    ? r['todoufuken_id'] as int
+                    : int.tryParse(r['todoufuken_id']?.toString() ?? '') ??
+                        int.tryParse(r['pref_id_from_port']?.toString() ?? '');
             bestName = (r['port_name'] ?? '').toString();
           }
         }
@@ -197,10 +238,15 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         for (final r in _rows) {
           final name = (r['port_name'] ?? '').toString();
           if (name == selName) {
-            selId = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-            prefId = r['todoufuken_id'] is int
-                ? r['todoufuken_id'] as int
-                : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '');
+            selId =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            prefId =
+                r['todoufuken_id'] is int
+                    ? r['todoufuken_id'] as int
+                    : int.tryParse(r['todoufuken_id']?.toString() ?? '') ??
+                        int.tryParse(r['pref_id_from_port']?.toString() ?? '');
             selResolvedName = name;
             break;
           }
@@ -255,6 +301,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           common.shouldJumpPage = false;
         }
       }
+
       WidgetsBinding.instance.addPostFrameCallback((_) => _scroll());
     }
   }
@@ -293,11 +340,20 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     }
   }
 
-  Widget _buildKubunIconOrPref(String kubun, String prefName, {bool isPending = false}) {
+  Widget _buildKubunIconOrPref(
+    String kubun,
+    String prefName, {
+    bool isPending = false,
+  }) {
     final k = kubun.trim();
     IconData? icon;
     Color color = Colors.blue.shade600;
-    if (k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko') {
+    if (k == '1' ||
+        k == '2' ||
+        k == '3' ||
+        k == '4' ||
+        k == '特3' ||
+        k == 'gyoko') {
       icon = Icons.anchor; // 港系
       color = Colors.blue.shade600;
     } else if (k == 'teibou') {
@@ -336,15 +392,16 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     final prefs = await db.getTodoufukenAll();
     print('teibou rows: ${rows.length}');
     print('todoufuken rows: ${prefs.length}');
-    
+
     final map = <String, Set<int>>{};
     _prefNameById.clear();
     for (final r in prefs) {
       // 地方名の正規化（末尾「地方」除去、複合表記の分岐）
       String chihou = (r['chihou_name'] ?? '').toString().trim();
-      final id = r['todoufuken_id'] is int
-          ? r['todoufuken_id'] as int
-          : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+      final id =
+          r['todoufuken_id'] is int
+              ? r['todoufuken_id'] as int
+              : int.tryParse(r['todoufuken_id']?.toString() ?? '');
       if (id == null) continue;
       final name = (r['todoufuken_name'] ?? '').toString();
       if (name.isNotEmpty) _prefNameById[id] = name;
@@ -372,6 +429,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         ..addAll(map);
       _loading = false;
     });
+    _loadMySpots(showLoading: false);
     // 初期選択があればスクロール
     if (_selectedTeibouId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -448,10 +506,18 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           } else if (e is String) {
             id = int.tryParse(e);
           } else if (e is Map) {
-            final v = e['spot_id'] ?? e['spotId'] ?? e['port_id'] ?? e['portId'] ?? e['id'];
-            if (v is int) id = v;
-            else if (v is num) id = v.toInt();
-            else if (v is String) id = int.tryParse(v);
+            final v =
+                e['spot_id'] ??
+                e['spotId'] ??
+                e['port_id'] ??
+                e['portId'] ??
+                e['id'];
+            if (v is int)
+              id = v;
+            else if (v is num)
+              id = v.toInt();
+            else if (v is String)
+              id = int.tryParse(v);
           }
           if (id != null) ids.add(id);
         }
@@ -506,12 +572,16 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     if (_didStartupNearbyAutoSelect || _startupNearbyRunning) return;
     // データ読み込み完了を待つ
     if (_loading) {
-      Future.delayed(const Duration(milliseconds: 120), _maybeRunStartupNearbyAutoSelect);
+      Future.delayed(
+        const Duration(milliseconds: 120),
+        _maybeRunStartupNearbyAutoSelect,
+      );
       return;
     }
     _startupNearbyRunning = true;
     // 現在の選択状態を確認し、既に選択済みなら自動選択は行わず検索のみ反映
-    final alreadySelected = (_selectedTeibouId != null) ||
+    final alreadySelected =
+        (_selectedTeibouId != null) ||
         (Common.instance.selectedTeibouName.isNotEmpty ||
             Common.instance.selectedTeibouLat != 0.0 ||
             Common.instance.selectedTeibouLng != 0.0);
@@ -561,7 +631,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   void dispose() {
     _scrollController.dispose();
     SioDatabase().removeListener(_onDbChanged);
-    try { Common.instance.removeListener(_onCommonChangedJump); } catch (_) {}
+    try {
+      Common.instance.removeListener(_onCommonChangedJump);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -574,35 +646,59 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     // 地方でフィルタ
     final selectedRegion = _regions[_selectedRegionIndex];
     // 「近くの釣り場」タブが表示され、一覧が空なら一度だけ自動検索を実行
-    if (selectedRegion == '近くの釣り場' && !_nearbyLoading && (_nearby.isEmpty) && (_nearbyError == null) && !_didAutoSearchOnNearbyTab) {
+    if (selectedRegion == '近くの釣り場' &&
+        !_nearbyLoading &&
+        (_nearby.isEmpty) &&
+        (_nearbyError == null) &&
+        !_didAutoSearchOnNearbyTab) {
       _didAutoSearchOnNearbyTab = true;
       // ボタン押下時と同等の処理だが、選択状態は変更しない
-      WidgetsBinding.instance.addPostFrameCallback((_) => _performNearbySearch(autoSelectNearest: false));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _performNearbySearch(autoSelectNearest: false),
+      );
     }
     List<Map<String, dynamic>> filtered;
     if (selectedRegion == 'お気に入り') {
-      filtered = _rows.where((r) {
-        final id = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-        return id != null && _favoriteIds.contains(id);
-      }).toList();
+      filtered =
+          _rows.where((r) {
+            final id =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            return id != null && _favoriteIds.contains(id);
+          }).toList();
     } else if (selectedRegion == '近くの釣り場') {
       filtered = List<Map<String, dynamic>>.from(_nearby); // 検索順（距離昇順）のまま
+    } else if (selectedRegion == 'マイ釣り場') {
+      filtered = List<Map<String, dynamic>>.from(_mySpots);
     } else {
       // todoufuken テーブル由来の地方→都道府県ID集合で厳密にフィルタ
       final allowed = _regionPrefSet[selectedRegion] ?? <int>{};
-      filtered = _rows.where((r) {
-        int? pid = r['todoufuken_id'] is int
-            ? r['todoufuken_id'] as int
-            : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-        pid ??= int.tryParse(r['pref_id_from_port']?.toString() ?? '');
-        return pid != null && allowed.contains(pid);
-      }).toList();
+      filtered =
+          _rows.where((r) {
+            int? pid =
+                r['todoufuken_id'] is int
+                    ? r['todoufuken_id'] as int
+                    : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+            pid ??= int.tryParse(r['pref_id_from_port']?.toString() ?? '');
+            return pid != null && allowed.contains(pid);
+          }).toList();
+    }
+    if (Common.instance.fishingDiaryMode) {
+      filtered =
+          filtered.where((r) {
+            final id =
+                r['port_id'] is int
+                    ? r['port_id'] as int
+                    : int.tryParse(r['port_id']?.toString() ?? '');
+            return id != null && _myCatchSpotIds.contains(id);
+          }).toList();
     }
 
     // 既に都道府県ID順、読み順で並んでいる想定（SQLのORDER BY）。
     // 表示のために都道府県ごとにグループ化。
     final List<_PrefGroup> groups = [];
-    if (selectedRegion == '近くの釣り場') {
+    if (selectedRegion == '近くの釣り場' || selectedRegion == 'マイ釣り場') {
       // グループ化せず、検索結果をそのまま一括で表示
       groups.add(_PrefGroup(name: '検索結果', id: null, rows: filtered));
     } else {
@@ -612,9 +708,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
 
       for (final r in filtered) {
         String pref = (r['todoufuken_name'] ?? '').toString();
-        int? prefId = r['todoufuken_id'] is int
-            ? r['todoufuken_id'] as int
-            : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+        int? prefId =
+            r['todoufuken_id'] is int
+                ? r['todoufuken_id'] as int
+                : int.tryParse(r['todoufuken_id']?.toString() ?? '');
         prefId ??= int.tryParse(r['pref_id_from_port']?.toString() ?? '');
         if (pref.isEmpty) {
           // 名称が取れない場合は都道府県IDから名称を復元、なければ地方名(推定)
@@ -630,7 +727,13 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           currentPrefId = prefId;
         }
         if (pref != currentPref) {
-          groups.add(_PrefGroup(name: currentPref!, id: currentPrefId, rows: currentList));
+          groups.add(
+            _PrefGroup(
+              name: currentPref!,
+              id: currentPrefId,
+              rows: currentList,
+            ),
+          );
           currentPref = pref;
           currentPrefId = prefId;
           currentList = [];
@@ -638,7 +741,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         currentList.add(r);
       }
       if (currentPref != null) {
-        groups.add(_PrefGroup(name: currentPref!, id: currentPrefId, rows: currentList));
+        groups.add(
+          _PrefGroup(name: currentPref!, id: currentPrefId, rows: currentList),
+        );
       }
     }
 
@@ -659,6 +764,49 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: FilterChip(
+                showCheckmark: false,
+                selected: Common.instance.fishingDiaryMode,
+                onSelected: (v) => Common.instance.setFishingDiaryMode(v),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: const VisualDensity(
+                  horizontal: -2.5,
+                  vertical: -2,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                avatarBoxConstraints: const BoxConstraints.tightFor(
+                  width: 18,
+                  height: 18,
+                ),
+                avatar: Icon(
+                  Icons.menu_book,
+                  size: 14,
+                  color:
+                      Common.instance.fishingDiaryMode
+                          ? Colors.white
+                          : Colors.black87,
+                ),
+                label: Text(
+                  '釣り日記',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color:
+                        Common.instance.fishingDiaryMode
+                            ? Colors.white
+                            : Colors.black87,
+                  ),
+                ),
+                backgroundColor: Colors.white,
+                selectedColor: const Color(0xFFFFB74D),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -672,7 +820,24 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 child: ElevatedButton.icon(
                   onPressed: _nearbyLoading ? null : _onSearchNearby,
                   icon: const Icon(Icons.search),
-                  label: const Text('検索'),
+                  label: const Text('表示'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey.shade200,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+              ),
+            ),
+          ] else if (selectedRegion == 'マイ釣り場') ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ElevatedButton.icon(
+                  onPressed: _mySpotsLoading ? null : _onShowMySpots,
+                  icon: const Icon(Icons.visibility),
+                  label: const Text('表示'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey.shade200,
                     foregroundColor: Colors.black,
@@ -683,43 +848,58 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           ],
           const Divider(height: 1),
           Expanded(
-            child: groups.isEmpty
-                ? Center(
-                    child: Text(
-                      selectedRegion == '近くの釣り場'
-                          ? (_nearbyLoading
-                              ? '検索中...'
-                              : (_nearbyError ?? '「検索」を押して現在地から近い釣り場を表示'))
-                          : 'この地方のデータがありません',
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: groups.length,
-                    itemBuilder: (context, index) {
-                      final g = groups[index];
-                      if (selectedRegion == '近くの釣り場') {
-                        // ヘッダー無しでそのまま並べる（近い順）
-                        return Column(children: g.rows.map((row) => _buildRow(row)).toList());
-                      } else {
-                        return StickyHeader(
-                          header: Container(
-                            height: 50,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            alignment: Alignment.centerLeft,
-                            color: Colors.grey.shade300,
-                            child: Text(
-                              g.name,
-                              style: const TextStyle(fontSize: 18, color: Colors.black),
+            child:
+                groups.isEmpty
+                    ? Center(
+                      child: Text(
+                        selectedRegion == '近くの釣り場'
+                            ? (_nearbyLoading
+                                ? '検索中...'
+                                : (_nearbyError ?? '「表示」を押して現在地から近い釣り場を表示'))
+                            : selectedRegion == 'マイ釣り場'
+                            ? (_mySpotsLoading
+                                ? '表示中...'
+                                : (_mySpotsError ?? '「表示」を押して自分の釣果がある釣り場を表示'))
+                            : 'この地方のデータがありません',
+                      ),
+                    )
+                    : ListView.builder(
+                      controller: _scrollController,
+                      itemCount: groups.length,
+                      itemBuilder: (context, index) {
+                        final g = groups[index];
+                        if (selectedRegion == '近くの釣り場' ||
+                            selectedRegion == 'マイ釣り場') {
+                          // ヘッダー無しでそのまま並べる（近い順）
+                          return Column(
+                            children:
+                                g.rows.map((row) => _buildRow(row)).toList(),
+                          );
+                        } else {
+                          return StickyHeader(
+                            header: Container(
+                              height: 50,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              alignment: Alignment.centerLeft,
+                              color: Colors.grey.shade300,
+                              child: Text(
+                                g.name,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ),
-                          ),
-                          content: Column(
-                            children: g.rows.map((row) => _buildRow(row)).toList(),
-                          ),
-                        );
-                      }
-                    },
-                  ),
+                            content: Column(
+                              children:
+                                  g.rows.map((row) => _buildRow(row)).toList(),
+                            ),
+                          );
+                        }
+                      },
+                    ),
           ),
         ],
       ),
@@ -729,6 +909,96 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   Future<void> _onSearchNearby() async {
     // ユーザー操作（ボタン押下）時は自動選択しない
     await _performNearbySearch(autoSelectNearest: false);
+  }
+
+  Future<void> _onShowMySpots() async {
+    await _loadMySpots(showLoading: true);
+  }
+
+  Future<void> _loadMySpots({required bool showLoading}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _mySpotsLoading = true;
+        _mySpotsError = null;
+        _mySpots = [];
+        _mySpotSummaryById.clear();
+      });
+    }
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final resp = await http
+          .post(
+            Uri.parse('${AppConfig.instance.baseUrl}get_my_spot_list.php'),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json, text/plain, */*',
+            },
+            body: {'user_id': info.userId.toString()},
+          )
+          .timeout(kHttpTimeout);
+      if (resp.statusCode != 200) {
+        if (!mounted) return;
+        setState(() {
+          _mySpotsError = '取得に失敗しました（HTTP ${resp.statusCode}）';
+          _mySpotsLoading = false;
+        });
+        return;
+      }
+      final data = jsonDecode(resp.body);
+      final rows =
+          (data is Map && data['status'] == 'success' && data['rows'] is List)
+              ? (data['rows'] as List)
+              : (data is List ? data : const []);
+      final byId = <int, Map<String, dynamic>>{};
+      for (final r in _rows) {
+        final pid =
+            r['port_id'] is int
+                ? r['port_id'] as int
+                : int.tryParse(r['port_id']?.toString() ?? '');
+        if (pid != null) byId[pid] = r;
+      }
+      final ordered = <Map<String, dynamic>>[];
+      final summaryMap = <int, _MySpotSummary>{};
+      final ids = <int>{};
+      for (final e in rows) {
+        if (e is! Map) continue;
+        final m = Map<String, dynamic>.from(e as Map);
+        final spotId =
+            m['spot_id'] is int
+                ? m['spot_id'] as int
+                : int.tryParse(m['spot_id']?.toString() ?? '');
+        if (spotId == null) continue;
+        final base = byId[spotId];
+        if (base == null) continue;
+        ordered.add(base);
+        ids.add(spotId);
+        summaryMap[spotId] = _MySpotSummary(
+          lastCatchAt: (m['last_catch_at'] ?? '').toString(),
+          catchCount:
+              m['catch_count'] is int
+                  ? m['catch_count'] as int
+                  : int.tryParse(m['catch_count']?.toString() ?? '') ?? 0,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _mySpots = ordered;
+        _myCatchSpotIds = ids;
+        _mySpotSummaryById
+          ..clear()
+          ..addAll(summaryMap);
+        _mySpotsLoading = false;
+        if (ordered.isEmpty) {
+          _mySpotsError = '自分の釣果がある釣り場はありません';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _mySpotsError = '取得中にエラーが発生しました';
+        _mySpotsLoading = false;
+      });
+    }
   }
 
   // 実体：近くの釣り場検索（autoSelectNearest=true のときのみ最寄りを自動選択）
@@ -765,7 +1035,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         });
         return;
       }
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       final clat = pos.latitude;
       final clng = pos.longitude;
       _nearbyUserLat = clat;
@@ -792,7 +1064,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       _nearbyNumberById.clear();
       _nearbyMetersById.clear();
       for (int i = 0; i < top.length; i++) {
-        final pid = top[i]['port_id'] is int ? top[i]['port_id'] as int : int.tryParse(top[i]['port_id']?.toString() ?? '');
+        final pid =
+            top[i]['port_id'] is int
+                ? top[i]['port_id'] as int
+                : int.tryParse(top[i]['port_id']?.toString() ?? '');
         if (pid != null) _nearbyNumberById[pid] = i + 1;
         if (pid != null) _nearbyMetersById[pid] = metersList[idx[i]];
       }
@@ -804,15 +1079,22 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       // 起動時のみ：最寄りの釣り場を自動選択して保存
       if (autoSelectNearest && top.isNotEmpty) {
         final first = top.first;
-        final int? selId = first['port_id'] is int ? first['port_id'] as int : int.tryParse(first['port_id']?.toString() ?? '');
+        final int? selId =
+            first['port_id'] is int
+                ? first['port_id'] as int
+                : int.tryParse(first['port_id']?.toString() ?? '');
         final String selName = (first['port_name'] ?? '').toString();
         final double? selLat = _toDouble(first['latitude']);
         final double? selLng = _toDouble(first['longitude']);
         int? prefId;
         try {
-          prefId = first['todoufuken_id'] is int
-              ? first['todoufuken_id'] as int
-              : int.tryParse(first['todoufuken_id']?.toString() ?? '') ?? int.tryParse(first['pref_id_from_port']?.toString() ?? '');
+          prefId =
+              first['todoufuken_id'] is int
+                  ? first['todoufuken_id'] as int
+                  : int.tryParse(first['todoufuken_id']?.toString() ?? '') ??
+                      int.tryParse(
+                        first['pref_id_from_port']?.toString() ?? '',
+                      );
         } catch (_) {}
         if (selId != null) {
           setState(() {
@@ -821,12 +1103,21 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           });
           await _saveSelection(id: selId, name: selName);
           // 潮汐ポイント（最寄り）も設定
-          if (selLat != null && selLng != null && !_pointsLoading && _pointCoords.isNotEmpty) {
+          if (selLat != null &&
+              selLng != null &&
+              !_pointsLoading &&
+              _pointCoords.isNotEmpty) {
             final np = _nearestPointName(selLat, selLng);
             if (np != null) {
               Common.instance.tidePoint = np;
               Common.instance.savePoint(np);
-              Common.instance.saveSelectedTeibou(selName, np, lat: selLat, lng: selLng, prefId: prefId);
+              Common.instance.saveSelectedTeibou(
+                selName,
+                np,
+                lat: selLat,
+                lng: selLng,
+                prefId: prefId,
+              );
               Common.instance.notify();
             }
           }
@@ -841,43 +1132,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   }
 
   String _buildListTitle() {
-    final base = '釣り場一覧';
-    final spot = _selectedTeibouName ?? '';
-    if (spot.isEmpty) return base;
-    // 都道府県名の推定
-    int pid = Common.instance.selectedTeibouPrefId;
-    if (pid == 0) {
-      // まずは ID で引く
-      if (_selectedTeibouId != null) {
-        for (final r in _rows) {
-          final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-          if (rid == _selectedTeibouId) {
-            pid = r['todoufuken_id'] is int
-                ? r['todoufuken_id'] as int
-                : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-            break;
-          }
-        }
-      }
-      // 次に名前で引く
-      if (pid == 0) {
-        for (final r in _rows) {
-          final n = (r['port_name'] ?? '').toString();
-          if (n == spot) {
-            pid = r['todoufuken_id'] is int
-                ? r['todoufuken_id'] as int
-                : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-            break;
-          }
-        }
-      }
-    }
-    String pref = '';
-    if (pid != 0) {
-      pref = _prefNameById[pid] ?? '';
-    }
-    final head = pref.isNotEmpty ? '$pref $spot' : spot;
-    return '$base[$head]';
+    return '釣り場一覧';
   }
 
   Widget _buildRegionTabs() {
@@ -911,12 +1166,17 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   Widget _buildRow(Map<String, dynamic> row) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final prefName = (row['todoufuken_name'] ?? '').toString();
-    final int? prefIdRow = row['todoufuken_id'] is int
-        ? row['todoufuken_id'] as int
-        : int.tryParse(row['todoufuken_id']?.toString() ?? '') ?? int.tryParse(row['pref_id_from_port']?.toString() ?? '');
+    final int? prefIdRow =
+        row['todoufuken_id'] is int
+            ? row['todoufuken_id'] as int
+            : int.tryParse(row['todoufuken_id']?.toString() ?? '') ??
+                int.tryParse(row['pref_id_from_port']?.toString() ?? '');
     final portName = (row['port_name'] ?? '').toString();
     final yomi = (row['j_yomi'] ?? '').toString();
-    final portId = row['port_id'] is int ? row['port_id'] as int : int.tryParse(row['port_id']?.toString() ?? '');
+    final portId =
+        row['port_id'] is int
+            ? row['port_id'] as int
+            : int.tryParse(row['port_id']?.toString() ?? '');
     String title = portName;
     // 近くの釣り場タブでは順位番号（①〜⑩）を付与
     if (_regions[_selectedRegionIndex] == '近くの釣り場' && portId != null) {
@@ -927,21 +1187,37 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     }
     final kubun = (row['kubun'] ?? '').toString();
     final kubunLabel = _kubunLabel(kubun);
+    final rightTopLabel =
+        (kubunLabel != null && kubunLabel.isNotEmpty) ? kubunLabel : prefName;
     final k = kubun.trim();
-    final isPort = k == '1' || k == '2' || k == '3' || k == '4' || k == '特3' || k == 'gyoko';
-    final int? flag = row['flag'] is int ? row['flag'] as int : int.tryParse(row['flag']?.toString() ?? '');
+    final isPort =
+        k == '1' ||
+        k == '2' ||
+        k == '3' ||
+        k == '4' ||
+        k == '特3' ||
+        k == 'gyoko';
+    final int? flag =
+        row['flag'] is int
+            ? row['flag'] as int
+            : int.tryParse(row['flag']?.toString() ?? '');
     final bool isPending = flag == -1;
     if (isPending) {
       title = '$title (申請中)';
     }
     final lat = _toDouble(row['latitude']);
     final lng = _toDouble(row['longitude']);
-    final hasPosition = lat != null && lng != null && (lat != 0.0 || lng != 0.0);
+    final hasPosition =
+        lat != null && lng != null && (lat != 0.0 || lng != 0.0);
     final isFav = portId != null && _favoriteIds.contains(portId);
     final isSelected = portId != null && _selectedTeibouId == portId;
     String? nearest;
     int? distanceMeters;
     final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣り場');
+    final bool isMySpotTab = (_regions[_selectedRegionIndex] == 'マイ釣り場');
+    final _MySpotSummary? mySummary =
+        (portId != null) ? _mySpotSummaryById[portId] : null;
+    final bool hasMyCatch = portId != null && _myCatchSpotIds.contains(portId);
     if (isNearbyTab) {
       if (portId != null) distanceMeters = _nearbyMetersById[portId];
     } else if (hasPosition && !_pointsLoading && _pointCoords.isNotEmpty) {
@@ -955,21 +1231,23 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     }
 
     final onOpenMap = () async {
-        if (!hasPosition) {
-          if (!mounted) return;
-          messenger?.showSnackBar(const SnackBar(content: Text('位置情報がありません')));
-          return;
-        }
+      if (!hasPosition) {
+        if (!mounted) return;
+        messenger?.showSnackBar(const SnackBar(content: Text('位置情報がありません')));
+        return;
+      }
 
-        if (Common.instance.mapKind == MapType.googleMaps.index) {
-          await Common.instance.openGoogleMaps(lat!, lng!);
-        } else if (Common.instance.mapKind == MapType.appleMaps.index) {
-          await Common.instance.openAppleMaps(lat!, lng!);
-        } else {
-          if (!mounted) return;
-          messenger?.showSnackBar(const SnackBar(content: Text('設定から地図アプリを選択してください')));
-        }
-      };
+      if (Common.instance.mapKind == MapType.googleMaps.index) {
+        await Common.instance.openGoogleMaps(lat!, lng!);
+      } else if (Common.instance.mapKind == MapType.appleMaps.index) {
+        await Common.instance.openAppleMaps(lat!, lng!);
+      } else {
+        if (!mounted) return;
+        messenger?.showSnackBar(
+          const SnackBar(content: Text('設定から地図アプリを選択してください')),
+        );
+      }
+    };
 
     return Slidable(
       key: ValueKey('teibou_${row['port_id']}'),
@@ -985,8 +1263,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 _favoriteIds.remove(portId);
                 // リモートも削除
                 try {
-                  final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                  final url = '${AppConfig.instance.baseUrl}regist_favorite.php';
+                  final info =
+                      await loadUserInfo() ?? await getOrInitUserInfo();
+                  final url =
+                      '${AppConfig.instance.baseUrl}regist_favorite.php';
                   final resp = await http
                       .post(
                         Uri.parse(url),
@@ -1003,23 +1283,39 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       .timeout(kHttpTimeout);
                   if (resp.statusCode == 200) {
                     messenger?.clearSnackBars();
-                    messenger?.showSnackBar(SnackBar(content: Text('お気に入り解除: $portName')));
+                    messenger?.showSnackBar(
+                      SnackBar(content: Text('お気に入り解除: $portName')),
+                    );
                   } else {
                     messenger?.clearSnackBars();
-                    messenger?.showSnackBar(SnackBar(content: Text('お気に入り解除の同期に失敗しました（${resp.statusCode}）'), duration: const Duration(seconds: 3)));
+                    messenger?.showSnackBar(
+                      SnackBar(
+                        content: Text('お気に入り解除の同期に失敗しました（${resp.statusCode}）'),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
                   }
                 } catch (_) {
                   messenger?.clearSnackBars();
-                  messenger?.showSnackBar(const SnackBar(content: Text('お気に入り解除の同期中にエラーが発生しました（ローカル保存済み）'), duration: Duration(seconds: 3)));
+                  messenger?.showSnackBar(
+                    const SnackBar(
+                      content: Text('お気に入り解除の同期中にエラーが発生しました（ローカル保存済み）'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
                 }
               } else {
                 await SioDatabase().addFavoriteTeibou(portId);
                 _favoriteIds.add(portId);
                 // リモートへも登録（失敗は無視）
                 try {
-                  final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                  final uri = Uri.parse('${AppConfig.instance.baseUrl}regist_favorite.php');
-                  final primaryUrl = '${AppConfig.instance.baseUrl}regist_favorite.php';
+                  final info =
+                      await loadUserInfo() ?? await getOrInitUserInfo();
+                  final uri = Uri.parse(
+                    '${AppConfig.instance.baseUrl}regist_favorite.php',
+                  );
+                  final primaryUrl =
+                      '${AppConfig.instance.baseUrl}regist_favorite.php';
                   final resp = await http
                       .post(
                         Uri.parse(primaryUrl),
@@ -1037,14 +1333,26 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       .timeout(kHttpTimeout);
                   if (resp.statusCode == 200) {
                     messenger?.clearSnackBars();
-                    messenger?.showSnackBar(SnackBar(content: Text('お気に入り登録: $portName')));
+                    messenger?.showSnackBar(
+                      SnackBar(content: Text('お気に入り登録: $portName')),
+                    );
                   } else {
                     messenger?.clearSnackBars();
-                    messenger?.showSnackBar(SnackBar(content: Text('お気に入りの同期に失敗しました（${resp.statusCode}）'), duration: const Duration(seconds: 3)));
+                    messenger?.showSnackBar(
+                      SnackBar(
+                        content: Text('お気に入りの同期に失敗しました（${resp.statusCode}）'),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
                   }
                 } catch (e) {
                   messenger?.clearSnackBars();
-                  messenger?.showSnackBar(const SnackBar(content: Text('お気に入りの同期中にエラーが発生しました（ローカル保存済み）'), duration: Duration(seconds: 3)));
+                  messenger?.showSnackBar(
+                    const SnackBar(
+                      content: Text('お気に入りの同期中にエラーが発生しました（ローカル保存済み）'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
                 }
               }
               if (mounted) setState(() {});
@@ -1060,88 +1368,131 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             onPressed: (c) async {
               if (!hasPosition) {
                 if (!mounted) return;
-                messenger?.showSnackBar(const SnackBar(content: Text('位置情報がありません')));
+                messenger?.showSnackBar(
+                  const SnackBar(content: Text('位置情報がありません')),
+                );
                 return;
               }
-          // 地図表示
-          final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣り場');
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) {
-                if (isNearbyTab && _nearby.isNotEmpty) {
-                  // 検索した10件をそのまま地図へ（ハイライトは指定釣り場）
-                  final pts = _nearby.map((r) {
-                    final id = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                    final name = (r['port_name'] ?? '').toString();
-                    final dlat = _toDouble(r['latitude']) ?? 0.0;
-                    final dlng = _toDouble(r['longitude']) ?? 0.0;
-                    return {'id': id, 'name': name, 'lat': dlat, 'lng': dlng};
-                  }).toList();
-                  return NearbyMapPage(points: pts, highlightId: portId);
-                }
-                // 既存の近隣検索マップ（中心＋半径）
-                return NearbyMapPage(
-                  centerLat: lat!,
-                  centerLng: lng!,
-                  centerName: portName,
-                  radiusKm: 30.0,
-                );
-              },
-            ),
-          );
-          if (result is Map && result['id'] != null) {
-            final selId = (result['id'] is int) ? result['id'] as int : int.tryParse(result['id'].toString());
-            final selName = (result['name'] ?? '').toString();
-            final selLat = result['lat'] is double ? result['lat'] as double : _toDouble(result['lat']);
-            final selLng = result['lng'] is double ? result['lng'] as double : _toDouble(result['lng']);
-            if (selId != null) {
-              // 選択堤防の地方タブへ切替
-              String? selRegion;
-              int? pid;
-              for (final r in _rows) {
-                final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                if (rid == selId) {
-                  pid = r['todoufuken_id'] is int
-                      ? r['todoufuken_id'] as int
-                      : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-                  pid ??= int.tryParse(r['pref_id_from_port']?.toString() ?? '');
-                  if (pid != null) {
-                    selRegion = _regionNameForPrefId(pid);
+              // 地図表示
+              final bool isNearbyTab =
+                  (_regions[_selectedRegionIndex] == '近くの釣り場');
+              final result = await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) {
+                    if (isNearbyTab && _nearby.isNotEmpty) {
+                      // 検索した10件をそのまま地図へ（ハイライトは指定釣り場）
+                      final pts =
+                          _nearby.map((r) {
+                            final id =
+                                r['port_id'] is int
+                                    ? r['port_id'] as int
+                                    : int.tryParse(
+                                      r['port_id']?.toString() ?? '',
+                                    );
+                            final name = (r['port_name'] ?? '').toString();
+                            final dlat = _toDouble(r['latitude']) ?? 0.0;
+                            final dlng = _toDouble(r['longitude']) ?? 0.0;
+                            return {
+                              'id': id,
+                              'name': name,
+                              'lat': dlat,
+                              'lng': dlng,
+                            };
+                          }).toList();
+                      return NearbyMapPage(points: pts, highlightId: portId);
+                    }
+                    // 既存の近隣検索マップ（中心＋半径）
+                    return NearbyMapPage(
+                      centerLat: lat!,
+                      centerLng: lng!,
+                      centerName: portName,
+                      radiusKm: 30.0,
+                    );
+                  },
+                ),
+              );
+              if (result is Map && result['id'] != null) {
+                final selId =
+                    (result['id'] is int)
+                        ? result['id'] as int
+                        : int.tryParse(result['id'].toString());
+                final selName = (result['name'] ?? '').toString();
+                final selLat =
+                    result['lat'] is double
+                        ? result['lat'] as double
+                        : _toDouble(result['lat']);
+                final selLng =
+                    result['lng'] is double
+                        ? result['lng'] as double
+                        : _toDouble(result['lng']);
+                if (selId != null) {
+                  // 選択堤防の地方タブへ切替
+                  String? selRegion;
+                  int? pid;
+                  for (final r in _rows) {
+                    final rid =
+                        r['port_id'] is int
+                            ? r['port_id'] as int
+                            : int.tryParse(r['port_id']?.toString() ?? '');
+                    if (rid == selId) {
+                      pid =
+                          r['todoufuken_id'] is int
+                              ? r['todoufuken_id'] as int
+                              : int.tryParse(
+                                r['todoufuken_id']?.toString() ?? '',
+                              );
+                      pid ??= int.tryParse(
+                        r['pref_id_from_port']?.toString() ?? '',
+                      );
+                      if (pid != null) {
+                        selRegion = _regionNameForPrefId(pid);
+                      }
+                      break;
+                    }
                   }
-                  break;
+                  final regionIdx =
+                      (selRegion != null) ? _regions.indexOf(selRegion!) : -1;
+                  setState(() {
+                    if (regionIdx >= 0) _selectedRegionIndex = regionIdx;
+                    _selectedTeibouId = selId;
+                    _selectedTeibouName =
+                        selName.isNotEmpty ? selName : _selectedTeibouName;
+                  });
+                  // 潮汐ポイント更新（最寄りに切り替え）
+                  if (selLat != null &&
+                      selLng != null &&
+                      !_pointsLoading &&
+                      _pointCoords.isNotEmpty) {
+                    final np = _nearestPointName(selLat, selLng);
+                    if (np != null) {
+                      Common.instance.tidePoint = np;
+                      Common.instance.savePoint(np);
+                      Common.instance.saveSelectedTeibou(
+                        _selectedTeibouName ?? selName,
+                        np,
+                        lat: selLat,
+                        lng: selLng,
+                        prefId: pid,
+                      );
+                      // 一覧内操作では shouldJumpPage を立てない（他タブ用のジャンプフラグは地図側のみ）
+                      Common.instance.notify();
+                    }
+                  }
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    final key = _rowKeys[selId];
+                    if (key != null && key.currentContext != null) {
+                      Scrollable.ensureVisible(
+                        key.currentContext!,
+                        duration: const Duration(milliseconds: 300),
+                        alignment: 0.5,
+                      );
+                    }
+                  });
                 }
               }
-              final regionIdx = (selRegion != null) ? _regions.indexOf(selRegion!) : -1;
-              setState(() {
-                if (regionIdx >= 0) _selectedRegionIndex = regionIdx;
-                _selectedTeibouId = selId;
-                _selectedTeibouName = selName.isNotEmpty ? selName : _selectedTeibouName;
-              });
-              // 潮汐ポイント更新（最寄りに切り替え）
-              if (selLat != null && selLng != null && !_pointsLoading && _pointCoords.isNotEmpty) {
-                final np = _nearestPointName(selLat, selLng);
-                if (np != null) {
-                  Common.instance.tidePoint = np;
-                  Common.instance.savePoint(np);
-                  Common.instance.saveSelectedTeibou(_selectedTeibouName ?? selName, np, lat: selLat, lng: selLng, prefId: pid);
-                  // 一覧内操作では shouldJumpPage を立てない（他タブ用のジャンプフラグは地図側のみ）
-                  Common.instance.notify();
-                }
-              }
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                final key = _rowKeys[selId];
-                if (key != null && key.currentContext != null) {
-                  Scrollable.ensureVisible(
-                    key.currentContext!,
-                    duration: const Duration(milliseconds: 300),
-                    alignment: 0.5,
-                  );
-                }
-              });
-            }
-          }
             },
-            backgroundColor: hasPosition ? Colors.orange.shade100 : Colors.grey.shade400,
+            backgroundColor:
+                hasPosition ? Colors.orange.shade100 : Colors.grey.shade400,
             child: Icon(
               Icons.location_pin,
               color: hasPosition ? Colors.orange : Colors.white.withAlpha(64),
@@ -1150,10 +1501,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           ),
           CustomSlidableAction(
             onPressed: (context) async => await onOpenMap(),
-            backgroundColor: hasPosition ? Colors.lightBlue.shade100 : Colors.grey.shade400,
+            backgroundColor:
+                hasPosition ? Colors.lightBlue.shade100 : Colors.grey.shade400,
             child: Icon(
               Icons.directions_car,
-              color: hasPosition ? Colors.blueAccent : Colors.white.withAlpha(64),
+              color:
+                  hasPosition ? Colors.blueAccent : Colors.white.withAlpha(64),
               size: 28,
             ),
           ),
@@ -1172,128 +1525,212 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
               // 即時にCommonへ反映し、永続化
               Common.instance.tidePoint = np;
               Common.instance.savePoint(np);
-              Common.instance.saveSelectedTeibou(portName, np, lat: lat, lng: lng, prefId: prefIdRow);
+              Common.instance.saveSelectedTeibou(
+                portName,
+                np,
+                lat: lat,
+                lng: lng,
+                prefId: prefIdRow,
+              );
               // 一覧内での選択では shouldJumpPage は立てない
               Common.instance.notify();
             }
           }
-    // 選択直後に「釣り場詳細」タブへ遷移
+          // 選択直後に「釣り場詳細」タブへ遷移
           Common.instance.requestNavigateToTidePage();
         },
         child: Container(
-          key: (portId != null) ? _rowKeys.putIfAbsent(portId, () => GlobalKey()) : null,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: isSelected
-              ? BoxDecoration(
-                  color: Colors.transparent,
-                  border: Border.all(color: Colors.black, width: 2.0),
-                )
-              : BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade300),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color:
+                    hasMyCatch
+                        ? const Color(0xFFFFB74D)
+                        : const Color(0xFFBDBDBD),
+                width: 8,
+              ),
+            ),
+          ),
+          child: Container(
+            key:
+                (portId != null)
+                    ? _rowKeys.putIfAbsent(portId, () => GlobalKey())
+                    : null,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration:
+                isSelected
+                    ? BoxDecoration(
+                      color: Colors.transparent,
+                      border: Border.all(color: Colors.black, width: 2.0),
+                    )
+                    : BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 80,
+                  child: _buildKubunIconOrPref(
+                    k,
+                    prefName,
+                    isPending: isPending,
                   ),
                 ),
-          child: Row(
-            children: [
-            SizedBox(
-              width: 80,
-              child: _buildKubunIconOrPref(k, prefName, isPending: isPending),
-            ),
-              const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.red : Colors.black,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.red : Colors.black,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (yomi.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2.0),
+                          child: Text(
+                            yomi,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
                   ),
-                  if (yomi.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2.0),
-                      child: Text(
-                        yomi,
+                ),
+                const SizedBox(width: 8),
+                if (isMySpotTab)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        rightTopLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _formatCatchDate(mySummary?.lastCatchAt),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                ],
-              ),
-            ),
-              const SizedBox(width: 8),
-              if (!hasPosition && !isNearbyTab)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (kubunLabel != null && kubunLabel.isNotEmpty)
                       Text(
-                        kubunLabel,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                        '${mySummary?.catchCount ?? 0}投稿',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
-                    Text(
-                      '位置なし',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              if (isNearbyTab)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (kubunLabel != null && kubunLabel.isNotEmpty)
-                      Text(
-                        kubunLabel,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
-                      ),
-                    if (hasPosition)
-                      Text(
-                        '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                      )
-                    else
+                    ],
+                  )
+                else if (!hasPosition && !isNearbyTab)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (kubunLabel != null && kubunLabel.isNotEmpty)
+                        Text(
+                          kubunLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       Text(
                         '位置なし',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
                       ),
-                    Text(
-                      distanceMeters != null ? '直線距離: ${distanceMeters}m' : '直線距離: -',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    ),
-                  ],
-                )
-              else if (hasPosition)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (kubunLabel != null && kubunLabel.isNotEmpty)
+                    ],
+                  )
+                else if (isNearbyTab)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (kubunLabel != null && kubunLabel.isNotEmpty)
+                        Text(
+                          kubunLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      if (hasPosition)
+                        Text(
+                          '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        )
+                      else
+                        Text(
+                          '位置なし',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       Text(
-                        kubunLabel,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                        distanceMeters != null
+                            ? '直線距離: ${distanceMeters}m'
+                            : '直線距離: -',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
-                    Text(
-                      '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    ),
-                  ],
-                ),
-          ],
+                    ],
+                  )
+                else if (hasPosition)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (kubunLabel != null && kubunLabel.isNotEmpty)
+                        Text(
+                          kubunLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      Text(
+                        '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }
 
   String _circledNum(int n) {
-    const list = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+    const list = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
     if (n >= 1 && n <= 10) return list[n - 1];
     return n.toString();
   }
@@ -1313,14 +1750,22 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     return bestName;
   }
 
-  double _haversine(double lat1, double lon1, double lat2, double lon2, {double? cosLat}) {
+  double _haversine(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2, {
+    double? cosLat,
+  }) {
     // 距離比較用。地球半径は省略し、相対比較できる値にする
     const double deg2rad = 3.141592653589793 / 180.0;
     final dLat = (lat2 - lat1) * deg2rad;
     final dLon = (lon2 - lon1) * deg2rad;
     final sLat = math.sin(dLat / 2);
     final sLon = math.sin(dLon / 2);
-    final a = sLat * sLat + math.cos(lat1 * deg2rad) * math.cos(lat2 * deg2rad) * sLon * sLon;
+    final a =
+        sLat * sLat +
+        math.cos(lat1 * deg2rad) * math.cos(lat2 * deg2rad) * sLon * sLon;
     return a; // 半径や2*asinは省略（比較のみ）
   }
 
@@ -1329,9 +1774,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     const double deg2rad = 3.141592653589793 / 180.0;
     final dLat = (lat2 - lat1) * deg2rad;
     final dLon = (lon2 - lon1) * deg2rad;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * deg2rad) * math.cos(lat2 * deg2rad) *
-            math.sin(dLon / 2) * math.sin(dLon / 2);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * deg2rad) *
+            math.cos(lat2 * deg2rad) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return (R * c).round();
   }
@@ -1342,6 +1790,19 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     if (v is int) return v.toDouble();
     return double.tryParse(v.toString());
   }
+
+  String _formatCatchDate(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return '-';
+    if (s.length >= 10) return s.substring(0, 10);
+    return s;
+  }
+}
+
+class _MySpotSummary {
+  final String lastCatchAt;
+  final int catchCount;
+  const _MySpotSummary({required this.lastCatchAt, required this.catchCount});
 }
 
 class _PrefGroup {

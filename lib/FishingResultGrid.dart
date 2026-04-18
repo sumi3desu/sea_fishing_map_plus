@@ -28,14 +28,17 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   final Map<int, String> _prefNameById = {};
   final Map<int, String> _spotNameById = {};
   bool _isAdmin = false;
+  int? _myUserId;
   bool _metaReady = false; // 都道府県/釣り場名とadminの準備完了
   final Map<int, String> _imgTsByPost = {}; // キャッシュバスター（編集後の差し替え用）
+  bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
 
   @override
   void initState() {
     super.initState();
     _initMeta();
     _loadImageTsMap();
+    Common.instance.addListener(_onCommonChanged);
     _loadFirst();
     _sc.addListener(() {
       if (_sc.position.pixels >= _sc.position.maxScrollExtent - 200) {
@@ -47,11 +50,28 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   Future<void> _initMeta() async {
     await _ensurePrefMap();
     await _checkAdmin();
+    await _loadMyUserId();
     if (mounted) setState(() => _metaReady = true);
+  }
+
+  Future<void> _loadMyUserId() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (!mounted) return;
+      setState(() => _myUserId = info.userId);
+    } catch (_) {}
+  }
+
+  void _onCommonChanged() {
+    final enabled = Common.instance.fishingDiaryMode;
+    if (_lastFishingDiaryMode == enabled) return;
+    _lastFishingDiaryMode = enabled;
+    _loadFirst();
   }
 
   @override
   void dispose() {
+    Common.instance.removeListener(_onCommonChanged);
     _sc.dispose();
     super.dispose();
   }
@@ -69,6 +89,13 @@ class _FishingResultGridState extends State<FishingResultGrid> {
         'ambiguous_plevel': ambiguous_plevel.toString(),
         'ts': ts.toString(),
       };
+      if (Common.instance.fishingDiaryMode) {
+        final uid =
+            _myUserId ??
+            (await loadUserInfo() ?? await getOrInitUserInfo()).userId;
+        _myUserId ??= uid;
+        if (uid > 0) body['user_id'] = uid.toString();
+      }
       final resp = await http
           .post(
             uri,
@@ -219,24 +246,71 @@ class _FishingResultGridState extends State<FishingResultGrid> {
           Container(
             height: kToolbarHeight,
             color: AppConfig.instance.appBarBackgroundColor,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  Text(
-                    '🐟',
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: AppConfig.instance.appBarForegroundColor,
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '🐟',
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: AppConfig.instance.appBarForegroundColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '釣果',
+                          style: TextStyle(
+                            color: AppConfig.instance.appBarForegroundColor,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '釣果',
-                    style: TextStyle(
-                      color: AppConfig.instance.appBarForegroundColor,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilterChip(
+                      showCheckmark: false,
+                      selected: Common.instance.fishingDiaryMode,
+                      onSelected: (v) => Common.instance.setFishingDiaryMode(v),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: const VisualDensity(
+                        horizontal: -2.5,
+                        vertical: -2,
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      avatarBoxConstraints: const BoxConstraints.tightFor(
+                        width: 18,
+                        height: 18,
+                      ),
+                      avatar: Icon(
+                        Icons.menu_book,
+                        size: 14,
+                        color:
+                            Common.instance.fishingDiaryMode
+                                ? Colors.white
+                                : Colors.black87,
+                      ),
+                      label: Text(
+                        '釣り日記',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              Common.instance.fishingDiaryMode
+                                  ? Colors.white
+                                  : Colors.black87,
+                        ),
+                      ),
+                      backgroundColor: Colors.white,
+                      selectedColor: const Color(0xFFFFB74D),
                     ),
                   ),
                 ],
@@ -494,6 +568,7 @@ extension _MosaicBuilders on _FishingResultGridState {
       }
     }
     final bottomLabel = it.nickName ?? '';
+    final isMine = _myUserId != null && it.userId == _myUserId;
     final bool canShowSpotName = (ambiguous_plevel == 0) || _isAdmin;
     final String? spotName =
         (it.spotId != null) ? _spotNameById[it.spotId] : null;
@@ -588,10 +663,27 @@ extension _MosaicBuilders on _FishingResultGridState {
                   ? Image.network(url, fit: BoxFit.cover)
                   : const ColoredBox(color: Colors.black12),
               // 上部ラベル行（都道府県 + 釣り場名を半角スペース区切りで1つのラベルに）
-              if (combinedTopLabel.isNotEmpty)
+              if (isMine)
                 Positioned(
                   top: 4,
                   left: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFB74D),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.person,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+              if (combinedTopLabel.isNotEmpty)
+                Positioned(
+                  top: 4,
+                  left: isMine ? 44 : 4,
                   right: 4,
                   child: Align(
                     alignment: Alignment.centerLeft,

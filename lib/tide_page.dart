@@ -1365,6 +1365,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   double _lastSheetSize = 0.25; // 直近のシートサイズ（可視時）
   int _sheetReloadTick = 0; // 投稿一覧シートの再構築用トリガ
   Set<int> _favoriteIds = <int>{};
+  Set<int> _myCatchSpotIds = <int>{};
+  int? _latestMyCatchSpotId;
+  bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
   // 潮汐オーバーレイ表示とスワイプ用
   bool _showTideOverlay = false;
   late PageController _tidePageController;
@@ -1439,6 +1442,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   Future<void> _onViewLongPress(double llat, double llng) async {
+    if (Common.instance.fishingDiaryMode) return;
     try {
       final rows = await SioDatabase().getAllTeibouWithPrefecture();
       double best = double.infinity;
@@ -1520,6 +1524,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       _ensureSheetVisible();
     });
     _loadFavorites();
+    _loadMyCatchSpotIds();
   }
 
   void _onCommonChanged() {
@@ -1540,9 +1545,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   Future<void> _prepare() async {
+    final diaryMode = Common.instance.fishingDiaryMode;
+    if (diaryMode) {
+      await _ensureDiarySelectedSpotIfNeeded();
+    }
     final name = Common.instance.selectedTeibouName;
     final lat = Common.instance.selectedTeibouLat;
     final lng = Common.instance.selectedTeibouLng;
+    final diaryModeChanged = _lastFishingDiaryMode != diaryMode;
     double useLat = lat;
     double useLng = lng;
     String useName = name;
@@ -1606,11 +1616,15 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
     if (useLat != 0.0 || useLng != 0.0) {
       // 変更検知（緯度経度 or 名前）
-      if (_lastLat != useLat || _lastLng != useLng || _lastName != useName) {
+      if (_lastLat != useLat ||
+          _lastLng != useLng ||
+          _lastName != useName ||
+          diaryModeChanged) {
         _center = LatLng(useLat, useLng);
         _lastLat = useLat;
         _lastLng = useLng;
         _lastName = useName;
+        _lastFishingDiaryMode = diaryMode;
         await _loadMarkers(
           centerName: useName,
           lat: useLat,
@@ -1619,8 +1633,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         );
         // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
-          final z = _zoomForRadius(30.0) + 1.0;
-          final adjusted = _computeCenteredForSheet(_center!, z);
+          final viewport = diaryMode ? await _buildDiaryViewport() : null;
+          final displayCenter = _center!;
+          final displayRadiusKm = viewport?.radiusKm ?? 30.0;
+          final z =
+              (diaryMode && !diaryModeChanged)
+                  ? _currentZoom
+                  : diaryMode
+                  ? _zoomForRadius(displayRadiusKm)
+                  : _zoomForRadius(30.0) + 1.0;
+          final adjusted = _computeCenteredForSheet(displayCenter, z);
           setState(() {
             _center = adjusted;
           });
@@ -1652,11 +1674,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if ((fallbackLat != 0.0 || fallbackLng != 0.0)) {
         if (_lastLat != fallbackLat ||
             _lastLng != fallbackLng ||
-            _lastName != fallbackName) {
+            _lastName != fallbackName ||
+            diaryModeChanged) {
           _center = LatLng(fallbackLat, fallbackLng);
           _lastLat = fallbackLat;
           _lastLng = fallbackLng;
           _lastName = fallbackName;
+          _lastFishingDiaryMode = diaryMode;
           await _loadMarkers(
             centerName: fallbackName,
             lat: fallbackLat,
@@ -1664,8 +1688,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             radiusKm: 30.0,
           );
           if (mounted && _center != null) {
-            final z = _zoomForRadius(30.0) + 1.0;
-            final adjusted = _computeCenteredForSheet(_center!, z);
+            final viewport = diaryMode ? await _buildDiaryViewport() : null;
+            final displayCenter = _center!;
+            final displayRadiusKm = viewport?.radiusKm ?? 30.0;
+            final z =
+                (diaryMode && !diaryModeChanged)
+                    ? _currentZoom
+                    : diaryMode
+                    ? _zoomForRadius(displayRadiusKm)
+                    : _zoomForRadius(30.0) + 1.0;
+            final adjusted = _computeCenteredForSheet(displayCenter, z);
             setState(() {
               _center = adjusted;
             });
@@ -1922,8 +1954,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
     final bool isCenterFav =
         centerPortId != null && _favoriteIds.contains(centerPortId);
+    final bool diaryMode = Common.instance.fishingDiaryMode;
+    final bool showCenterMarker =
+        !centerRejected &&
+        (!diaryMode ||
+            (centerPortId != null && _myCatchSpotIds.contains(centerPortId)));
     // AppleMap 中心注釈
-    if (!centerRejected) {
+    if (showCenterMarker) {
       _appleAnnotations.add(
         am.Annotation(
           annotationId: am.AnnotationId('c'),
@@ -1957,10 +1994,22 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               ? r['port_id'] as int
               : int.tryParse(r['port_id']?.toString() ?? '');
       if (dlat == null || dlng == null) continue;
+      final bool isSameAsCenter =
+          (centerPortId != null && portId == centerPortId) ||
+          ((dlat - center.latitude).abs() < 1e-8 &&
+              (dlng - center.longitude).abs() < 1e-8);
+      if (diaryMode &&
+          !(portId != null &&
+              _myCatchSpotIds.contains(portId) &&
+              !isSameAsCenter)) {
+        continue;
+      }
       final d = _distanceKm(lat, lng, dlat, dlng);
-      if (d <= radiusKm && !(dlat == lat && dlng == lng)) {
+      if (diaryMode || (d <= radiusKm && !isSameAsCenter)) {
         if (d > maxDkm) maxDkm = d;
         final bool isFav = portId != null && _favoriteIds.contains(portId);
+        final bool hasMyCatch =
+            portId != null && _myCatchSpotIds.contains(portId);
         _markers.add(
           fm.Marker(
             width: 220,
@@ -2082,15 +2131,27 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         ),
                       ],
                     ),
-                    child: Text(
-                      displayName,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.black,
-                        fontWeight: isFav ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hasMyCatch) ...[
+                          _buildMyCatchBadge(),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            displayName,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.black,
+                              fontWeight:
+                                  isFav ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Icon(
@@ -2411,15 +2472,27 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         BoxShadow(color: Colors.black26, blurRadius: 2),
                       ],
                     ),
-                    child: Text(
-                      centerPending ? '$cn (申請中)' : cn,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: Colors.black87,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (centerPortId != null &&
+                            _myCatchSpotIds.contains(centerPortId)) ...[
+                          _buildMyCatchBadge(),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            centerPending ? '$cn (申請中)' : cn,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -2435,7 +2508,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       );
 
     // GoogleMap 中心マーカー（zIndexを高めに）
-    if (!centerRejected)
+    if (showCenterMarker)
       _gmMarkers.add(
         gm.Marker(
           markerId: const gm.MarkerId('c'),
@@ -2622,6 +2695,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       onMapCreated: (c) => _gmController = c,
                       onLongPress: (pos) async {
                         if (!_applyMode) {
+                          if (Common.instance.fishingDiaryMode) return;
                           // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
                           await _onViewLongPress(pos.latitude, pos.longitude);
                           return;
@@ -2721,6 +2795,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         ),
                         onLongPress: (tapPosition, latlng) async {
                           if (!_applyMode) {
+                            if (Common.instance.fishingDiaryMode) return;
                             // 閲覧モード: 半径30km以内の釣り場を表示し、最寄りを選択
                             await _onViewLongPress(
                               latlng.latitude,
@@ -2756,9 +2831,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       children: [
                         fm.TileLayer(
                           urlTemplate:
-                              'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          subdomains: const ['a', 'b', 'c'],
-                          userAgentPackageName: 'jp.bouzer.siowadou',
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'jp.bouzer.seafishingmap',
                           tileProvider: fm.NetworkTileProvider(),
                         ),
                         if (ambiguous_plevel == 2)
@@ -3641,7 +3715,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     if (radiusKm <= 20) return 11.5;
     if (radiusKm <= 30) return 11.0;
     if (radiusKm <= 50) return 10.5;
-    return 10.0;
+    if (radiusKm <= 100) return 9.5;
+    if (radiusKm <= 200) return 8.5;
+    if (radiusKm <= 400) return 7.5;
+    if (radiusKm <= 800) return 6.5;
+    if (radiusKm <= 1600) return 5.5;
+    if (radiusKm <= 3200) return 4.5;
+    return 3.5;
   }
 
   String? _kubunLabelLocal(String kubun) {
@@ -3914,6 +3994,162 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     } catch (_) {}
   }
 
+  Future<void> _loadMyCatchSpotIds() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final resp = await http
+          .post(
+            Uri.parse('${AppConfig.instance.baseUrl}get_my_spot_list.php'),
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json, text/plain, */*',
+            },
+            body: {'user_id': info.userId.toString()},
+          )
+          .timeout(kHttpTimeout);
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body);
+      final rows =
+          (data is Map && data['status'] == 'success' && data['rows'] is List)
+              ? (data['rows'] as List)
+              : (data is List ? data : const []);
+      final ids = <int>{};
+      int? latestSpotId;
+      for (final e in rows) {
+        if (e is! Map) continue;
+        final id =
+            e['spot_id'] is int
+                ? e['spot_id'] as int
+                : int.tryParse(e['spot_id']?.toString() ?? '');
+        if (id != null && id > 0) {
+          ids.add(id);
+          latestSpotId ??= id;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _myCatchSpotIds = ids;
+        _latestMyCatchSpotId = latestSpotId;
+      });
+      if (Common.instance.fishingDiaryMode) {
+        _lastLat = null;
+        _lastLng = null;
+        _lastName = '';
+        _prepare();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _ensureDiarySelectedSpotIfNeeded() async {
+    if (_myCatchSpotIds.isEmpty) return;
+    int? selectedId;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      selectedId = prefs.getInt('selected_teibou_id');
+    } catch (_) {}
+    if (selectedId != null && _myCatchSpotIds.contains(selectedId)) return;
+    final fallbackId = _latestMyCatchSpotId;
+    if (fallbackId == null || fallbackId <= 0) return;
+    try {
+      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      Map<String, dynamic>? hit;
+      for (final r in rows) {
+        final rid =
+            r['port_id'] is int
+                ? r['port_id'] as int
+                : int.tryParse(r['port_id']?.toString() ?? '');
+        if (rid == fallbackId) {
+          hit = r;
+          break;
+        }
+      }
+      if (hit == null) return;
+      final dlat = _toDouble(hit['latitude']);
+      final dlng = _toDouble(hit['longitude']);
+      if (dlat == null || dlng == null) return;
+      String? np;
+      if (!_pointsLoading && _pointCoords.isNotEmpty) {
+        np = _nearestPointName(dlat, dlng);
+      }
+      final prefId =
+          hit['todoufuken_id'] is int
+              ? hit['todoufuken_id'] as int
+              : int.tryParse(hit['todoufuken_id']?.toString() ?? '') ??
+                  int.tryParse(hit['pref_id_from_port']?.toString() ?? '');
+      await Common.instance.saveSelectedTeibou(
+        (hit['port_name'] ?? '').toString(),
+        np ?? Common.instance.tidePoint,
+        id: fallbackId,
+        lat: dlat,
+        lng: dlng,
+        prefId: prefId,
+      );
+    } catch (_) {}
+  }
+
+  Future<_DiaryViewport?> _buildDiaryViewport() async {
+    if (_myCatchSpotIds.isEmpty) return null;
+    try {
+      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final points = <LatLng>[];
+      for (final r in rows) {
+        final int? flag =
+            r['flag'] is int
+                ? r['flag'] as int
+                : int.tryParse(r['flag']?.toString() ?? '');
+        if (flag == -2) continue;
+        final int? portId =
+            r['port_id'] is int
+                ? r['port_id'] as int
+                : int.tryParse(r['port_id']?.toString() ?? '');
+        if (portId == null || !_myCatchSpotIds.contains(portId)) continue;
+        final dlat = _toDouble(r['latitude']);
+        final dlng = _toDouble(r['longitude']);
+        if (dlat == null || dlng == null) continue;
+        points.add(LatLng(dlat, dlng));
+      }
+      if (points.isEmpty) return null;
+
+      double minLat = points.first.latitude;
+      double maxLat = points.first.latitude;
+      double minLng = points.first.longitude;
+      double maxLng = points.first.longitude;
+      for (final p in points.skip(1)) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+
+      final center = LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+      double radiusKm = 5.0;
+      for (final p in points) {
+        final d = _distanceKm(
+          center.latitude,
+          center.longitude,
+          p.latitude,
+          p.longitude,
+        );
+        if (d > radiusKm) radiusKm = d;
+      }
+      return _DiaryViewport(center: center, radiusKm: radiusKm * 1.15);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildMyCatchBadge() {
+    return Container(
+      width: 16,
+      height: 16,
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFB74D),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.person, color: Colors.white, size: 11),
+    );
+  }
+
   // 現在のボトムシートサイズと上部オーバーレイに応じて、
   // マーカーが可視領域の中央に来るよう中心を調整
   LatLng _computeCenteredForSheet(LatLng marker, double zoom) {
@@ -4005,6 +4241,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 }
 
+class _DiaryViewport {
+  const _DiaryViewport({required this.center, required this.radiusKm});
+
+  final LatLng center;
+  final double radiusKm;
+}
+
 class _BottomSheetCatchList extends StatefulWidget {
   const _BottomSheetCatchList({Key? key, required this.extController})
     : super(key: key);
@@ -4020,6 +4263,9 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   int _page = 1;
   String _mode = 'catch'; // 'catch' or 'env'
   String _lastCommonMode = 'catch';
+  bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+  int? _myUserId;
+  int? _selectedSpotId;
 
   @override
   void initState() {
@@ -4032,8 +4278,21 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     try {
       Common.instance.addListener(_onCommonModeChanged);
     } catch (_) {}
+    _loadMyUserId();
     _loadFirst();
     widget.extController.addListener(_onScroll);
+  }
+
+  Future<void> _loadMyUserId() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _myUserId = info.userId;
+        _selectedSpotId = prefs.getInt('selected_teibou_id');
+      });
+    } catch (_) {}
   }
 
   @override
@@ -4047,18 +4306,21 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   void _onCommonModeChanged() {
     final cm = Common.instance.postListMode;
-    if (cm != _lastCommonMode) {
-      _lastCommonMode = cm;
-      if (mounted && _mode != cm) {
-        setState(() {
-          _mode = cm;
-          _items.clear();
-          _page = 1;
-          _hasMore = true;
-          _loading = false;
-        });
-        _loadFirst();
-      }
+    final diaryEnabled = Common.instance.fishingDiaryMode;
+    final modeChanged = cm != _lastCommonMode;
+    final diaryChanged = diaryEnabled != _lastFishingDiaryMode;
+    if (!modeChanged && !diaryChanged) return;
+    _lastCommonMode = cm;
+    _lastFishingDiaryMode = diaryEnabled;
+    if (mounted) {
+      setState(() {
+        _mode = cm;
+        _items.clear();
+        _page = 1;
+        _hasMore = true;
+        _loading = false;
+      });
+      _loadFirst();
     }
   }
 
@@ -4086,6 +4348,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
         'ts': ts.toString(),
       };
       if (spotId != null && spotId > 0) body['spot_id'] = spotId.toString();
+      if (Common.instance.fishingDiaryMode) {
+        final uid =
+            _myUserId ??
+            (await loadUserInfo() ?? await getOrInitUserInfo()).userId;
+        _myUserId ??= uid;
+        if (uid > 0) body['user_id'] = uid.toString();
+      }
       final resp = await http
           .post(
             uri,
@@ -4297,61 +4566,79 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
         }
         final it = _items[listIndex];
         final thumb = it.thumbUrl ?? it.imageUrl;
+        final isMineAtCurrentSpot =
+            _myUserId != null &&
+            _selectedSpotId != null &&
+            it.userId == _myUserId &&
+            it.spotId == _selectedSpotId;
         return Column(
           children: [
-            ListTile(
-              leading:
-                  (thumb != null)
-                      ? ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          thumb,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                      : const Icon(
-                        Icons.image,
-                        size: 40,
-                        color: Colors.black38,
-                      ),
-              title: Text(
-                it.title?.isNotEmpty == true
-                    ? it.title!
-                    : (it.nickName ?? '投稿'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                it.detail?.isNotEmpty == true
-                    ? it.detail!
-                    : (it.createAt ?? ''),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder:
-                        (_) => PostDetailPage(
-                          item: PostDetailItem(
-                            userId: it.userId,
-                            postId: it.postId,
-                            postKind: it.postKind,
-                            exist: it.exist,
-                            title: it.title,
-                            detail: it.detail,
-                            imageUrl: it.imageUrl ?? it.thumbUrl,
-                            nickName: it.nickName,
-                            createAt: it.createAt,
-                            spotId: it.spotId,
-                            showNearbyButton: true,
-                          ),
-                        ),
+            Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color:
+                        isMineAtCurrentSpot
+                            ? const Color(0xFFFFB74D)
+                            : const Color(0xFFBDBDBD),
+                    width: 8,
                   ),
-                );
-              },
+                ),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.only(left: 12, right: 16),
+                leading:
+                    (thumb != null)
+                        ? ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.network(
+                            thumb,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                        : const Icon(
+                          Icons.image,
+                          size: 40,
+                          color: Colors.black38,
+                        ),
+                title: Text(
+                  it.title?.isNotEmpty == true
+                      ? it.title!
+                      : (it.nickName ?? '投稿'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  it.detail?.isNotEmpty == true
+                      ? it.detail!
+                      : (it.createAt ?? ''),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => PostDetailPage(
+                            item: PostDetailItem(
+                              userId: it.userId,
+                              postId: it.postId,
+                              postKind: it.postKind,
+                              exist: it.exist,
+                              title: it.title,
+                              detail: it.detail,
+                              imageUrl: it.imageUrl ?? it.thumbUrl,
+                              nickName: it.nickName,
+                              createAt: it.createAt,
+                              spotId: it.spotId,
+                            ),
+                          ),
+                    ),
+                  );
+                },
+              ),
             ),
             const Divider(height: 1),
           ],

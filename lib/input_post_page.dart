@@ -534,6 +534,8 @@ class _InputPostState extends ConsumerState<InputPost> {
         if (mounted) {
           final result = {
             'updated': true,
+            'title': title,
+            'detail': detail,
             'clearedImage': (_clearImage && pathToSend == null),
             if (imagePath != null) 'image_path': imagePath,
             if (thumbPath != null) 'thumb_path': thumbPath,

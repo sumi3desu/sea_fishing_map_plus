@@ -8,7 +8,15 @@ import 'common.dart';
 import 'dart:math' as math;
 
 class NearbyMapPage extends StatefulWidget {
-  const NearbyMapPage({super.key, this.points, this.centerLat, this.centerLng, this.centerName, this.radiusKm, this.highlightId});
+  const NearbyMapPage({
+    super.key,
+    this.points,
+    this.centerLat,
+    this.centerLng,
+    this.centerName,
+    this.radiusKm,
+    this.highlightId,
+  });
   final List<Map<String, dynamic>>? points; // {id?, name, lat, lng}
   final double? centerLat;
   final double? centerLng;
@@ -50,7 +58,10 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       _cands = widget.points!;
       // 候補の重心
       double slat = 0.0, slng = 0.0;
-      for (final p in _cands) { slat += (p['lat'] as num).toDouble(); slng += (p['lng'] as num).toDouble(); }
+      for (final p in _cands) {
+        slat += (p['lat'] as num).toDouble();
+        slng += (p['lng'] as num).toDouble();
+      }
       final cLat = slat / _cands.length;
       final cLng = slng / _cands.length;
 
@@ -61,7 +72,10 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
         final rows = await db.query('teibou');
         // 既存ID集合
         final existingIds = <int>{};
-        for (final e in _cands) { final id = e['id'] as int?; if (id != null) existingIds.add(id); }
+        for (final e in _cands) {
+          final id = e['id'] as int?;
+          if (id != null) existingIds.add(id);
+        }
         final tmp = <Map<String, dynamic>>[];
         for (final r in rows) {
           final id = int.tryParse(r['port_id']?.toString() ?? '');
@@ -73,8 +87,16 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
           // 近接重複も軽く除外
           bool nearDup = false;
           for (final e in _cands) {
-            final dl = _dist(lat, lng, (e['lat'] as num).toDouble(), (e['lng'] as num).toDouble());
-            if (dl < 50.0) { nearDup = true; break; }
+            final dl = _dist(
+              lat,
+              lng,
+              (e['lat'] as num).toDouble(),
+              (e['lng'] as num).toDouble(),
+            );
+            if (dl < 50.0) {
+              nearDup = true;
+              break;
+            }
           }
           if (nearDup) continue;
           tmp.add({'id': id, 'name': name, 'lat': lat, 'lng': lng, 'd': d});
@@ -130,12 +152,17 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       }
       if (permission == LocationPermission.deniedForever) return;
 
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       if (mounted) setState(() => _myPos = LatLng(pos.latitude, pos.longitude));
 
       _posSub?.cancel();
       _posSub = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
       ).listen((p) {
         if (!mounted) return;
         setState(() => _myPos = LatLng(p.latitude, p.longitude));
@@ -154,8 +181,14 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       if (lng < minLng) minLng = lng;
       if (lng > maxLng) maxLng = lng;
     }
-    final bounds = fm.LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
-    final fit = fm.CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24));
+    final bounds = fm.LatLngBounds(
+      LatLng(minLat, minLng),
+      LatLng(maxLat, maxLng),
+    );
+    final fit = fm.CameraFit.bounds(
+      bounds: bounds,
+      padding: const EdgeInsets.all(24),
+    );
     _controller.fitCamera(fit);
   }
 
@@ -167,40 +200,56 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       final p = list[i];
       markers.add(
         fm.Marker(
-              point: LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
-              width: 160,
-              height: 60,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () => _selectPoint(p),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1, 1))],
-                      ),
-                      child: Text(
-                        (p['name'] ?? '').toString(),
-                        style: const TextStyle(fontSize: 11, color: Colors.black),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+          point: LatLng(
+            (p['lat'] as num).toDouble(),
+            (p['lng'] as num).toDouble(),
+          ),
+          width: 160,
+          height: 60,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () => _selectPoint(p),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
                   ),
-                  GestureDetector(
-                    onTap: () => _selectPoint(p),
-                    child: Icon(
-                      Icons.location_on,
-                      color: ((p['id'] ?? -1) == _selectedId) ? Colors.red : Colors.blue,
-                      size: 28,
-                    ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 2,
+                        offset: Offset(1, 1),
+                      ),
+                    ],
                   ),
-                ],
+                  child: Text(
+                    (p['name'] ?? '').toString(),
+                    style: const TextStyle(fontSize: 11, color: Colors.black),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
-            ));
+              GestureDetector(
+                onTap: () => _selectPoint(p),
+                child: Icon(
+                  Icons.location_on,
+                  color:
+                      ((p['id'] ?? -1) == _selectedId)
+                          ? Colors.red
+                          : Colors.blue,
+                  size: 28,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     if (_myPos != null) {
       markers.add(
@@ -217,7 +266,13 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
               decoration: BoxDecoration(
                 color: Colors.orange,
                 shape: BoxShape.circle,
-                boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4, offset: Offset(1, 1))],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 4,
+                    offset: Offset(1, 1),
+                  ),
+                ],
                 border: Border.all(color: Colors.white, width: 2),
               ),
             ),
@@ -226,7 +281,11 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('周辺の釣り場'), backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text('釣れたエリア'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
       body: Column(
         children: [
           // タイトル下の説明エリア（AppBarと同じ高さ・白背景）
@@ -238,60 +297,86 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                '円内のいずれかで釣果の投稿されています。\n釣り場保護のため、正確な位置は公開しません',
+                'この円内で釣果がありますが、非公開です。\n釣り場をタップすると「釣り場詳細」画面に移動します。',
                 style: TextStyle(color: Colors.black87, fontSize: 13),
               ),
             ),
           ),
           const Divider(height: 1),
           Expanded(
-            child: (_pts.isEmpty)
-                ? const Center(child: CircularProgressIndicator())
-                : Builder(builder: (context) {
-                    fm.MapOptions mapOpts;
-                    if (_circleCenter != null && _circleRadiusM > 0) {
-                      final screenW = MediaQuery.of(context).size.width;
-                      final z = _zoomForCircle(_circleCenter!.latitude, _circleRadiusM, screenW, marginFactor: 1.05);
-                      mapOpts = fm.MapOptions(initialCenter: _circleCenter!, initialZoom: z);
-                    } else {
-                      // build-timeに初期カメラを bounds フィットで指定し、初回から確実に描画
-                      double minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
-                      for (final p in _pts) {
-                        final lat = (p['lat'] as num).toDouble();
-                        final lng = (p['lng'] as num).toDouble();
-                        if (lat < minLat) minLat = lat;
-                        if (lat > maxLat) maxLat = lat;
-                        if (lng < minLng) minLng = lng;
-                        if (lng > maxLng) maxLng = lng;
-                      }
-                      final bounds = fm.LatLngBounds(LatLng(minLat, minLng), LatLng(maxLat, maxLng));
-                      mapOpts = fm.MapOptions(initialCameraFit: fm.CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24)));
-                    }
-                    return fm.FlutterMap(
-                      mapController: _controller,
-                      options: mapOpts,
-                      children: [
-                        fm.TileLayer(
-                          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          subdomains: const ['a', 'b', 'c'],
-                          userAgentPackageName: 'jp.bouzer.siowadou',
-                          tileProvider: fm.NetworkTileProvider(),
-                        ),
-                        if (_circleCenter != null && _circleRadiusM > 0)
-                          fm.CircleLayer(circles: [
-                            fm.CircleMarker(
-                              point: _circleCenter!,
-                              radius: _circleRadiusM,
-                              useRadiusInMeter: true,
-                              color: Colors.redAccent.withOpacity(0.12),
-                              borderColor: Colors.redAccent.withOpacity(0.35),
-                              borderStrokeWidth: 2,
+            child:
+                (_pts.isEmpty)
+                    ? const Center(child: CircularProgressIndicator())
+                    : Builder(
+                      builder: (context) {
+                        fm.MapOptions mapOpts;
+                        if (_circleCenter != null && _circleRadiusM > 0) {
+                          final screenW = MediaQuery.of(context).size.width;
+                          final z = _zoomForCircle(
+                            _circleCenter!.latitude,
+                            _circleRadiusM,
+                            screenW,
+                            marginFactor: 1.05,
+                          );
+                          mapOpts = fm.MapOptions(
+                            initialCenter: _circleCenter!,
+                            initialZoom: z,
+                          );
+                        } else {
+                          // build-timeに初期カメラを bounds フィットで指定し、初回から確実に描画
+                          double minLat = 90,
+                              maxLat = -90,
+                              minLng = 180,
+                              maxLng = -180;
+                          for (final p in _pts) {
+                            final lat = (p['lat'] as num).toDouble();
+                            final lng = (p['lng'] as num).toDouble();
+                            if (lat < minLat) minLat = lat;
+                            if (lat > maxLat) maxLat = lat;
+                            if (lng < minLng) minLng = lng;
+                            if (lng > maxLng) maxLng = lng;
+                          }
+                          final bounds = fm.LatLngBounds(
+                            LatLng(minLat, minLng),
+                            LatLng(maxLat, maxLng),
+                          );
+                          mapOpts = fm.MapOptions(
+                            initialCameraFit: fm.CameraFit.bounds(
+                              bounds: bounds,
+                              padding: const EdgeInsets.all(24),
                             ),
-                          ]),
-                        fm.MarkerLayer(markers: markers),
-                      ],
-                    );
-                  }),
+                          );
+                        }
+                        return fm.FlutterMap(
+                          mapController: _controller,
+                          options: mapOpts,
+                          children: [
+                            fm.TileLayer(
+                              urlTemplate:
+                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'jp.bouzer.seafishingmap',
+                              tileProvider: fm.NetworkTileProvider(),
+                            ),
+                            if (_circleCenter != null && _circleRadiusM > 0)
+                              fm.CircleLayer(
+                                circles: [
+                                  fm.CircleMarker(
+                                    point: _circleCenter!,
+                                    radius: _circleRadiusM,
+                                    useRadiusInMeter: true,
+                                    color: Colors.redAccent.withOpacity(0.12),
+                                    borderColor: Colors.redAccent.withOpacity(
+                                      0.35,
+                                    ),
+                                    borderStrokeWidth: 2,
+                                  ),
+                                ],
+                              ),
+                            fm.MarkerLayer(markers: markers),
+                          ],
+                        );
+                      },
+                    ),
           ),
         ],
       ),
@@ -306,13 +391,23 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     final inside = <Map<String, dynamic>>[];
     final outside = <Map<String, dynamic>>[];
     for (final p in _pts) {
-      final d = _dist(_circleCenter!.latitude, _circleCenter!.longitude, (p['lat'] as num).toDouble(), (p['lng'] as num).toDouble());
-      if (d <= _circleRadiusM) inside.add(p); else outside.add(p);
+      final d = _dist(
+        _circleCenter!.latitude,
+        _circleCenter!.longitude,
+        (p['lat'] as num).toDouble(),
+        (p['lng'] as num).toDouble(),
+      );
+      if (d <= _circleRadiusM)
+        inside.add(p);
+      else
+        outside.add(p);
     }
     // 安定したランダム順（候補IDの和をシードに利用）
     int seed = 0;
     final ids = _cands.map((e) => (e['id'] as int?) ?? 0).toList()..sort();
-    for (final id in ids) { seed = 0x1fffffff & (seed * 131 + id); }
+    for (final id in ids) {
+      seed = 0x1fffffff & (seed * 131 + id);
+    }
     final rnd = math.Random(seed == 0 ? _pts.length : seed);
     for (int i = inside.length - 1; i > 0; i--) {
       final j = rnd.nextInt(i + 1);
@@ -323,13 +418,20 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     return [...inside, ...outside];
   }
 
-  double _zoomForCircle(double lat, double radiusM, double screenWidthPx, {double marginFactor = 1.05}) {
+  double _zoomForCircle(
+    double lat,
+    double radiusM,
+    double screenWidthPx, {
+    double marginFactor = 1.05,
+  }) {
     // 円の半径が画面半幅の marginFactor 倍で収まるズーム
     final halfWidthMeters = radiusM * marginFactor;
     final worldCircumference = 40075016.68557849; // m
     final metersPerPixel = (halfWidthMeters * 2) / screenWidthPx;
     final cosLat = math.cos(lat * math.pi / 180.0).abs().clamp(0.0001, 1.0);
-    final z = math.log(worldCircumference * cosLat / (metersPerPixel * 256)) / math.log(2);
+    final z =
+        math.log(worldCircumference * cosLat / (metersPerPixel * 256)) /
+        math.log(2);
     return z.clamp(3.0, 19.0);
   }
 
@@ -352,7 +454,12 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     // 半径は中心からの最大距離（5%のマージン）
     double maxM = 0.0;
     for (final p in _cands) {
-      final d = _dist(cLat, cLng, (p['lat'] as num).toDouble(), (p['lng'] as num).toDouble());
+      final d = _dist(
+        cLat,
+        cLng,
+        (p['lat'] as num).toDouble(),
+        (p['lng'] as num).toDouble(),
+      );
       if (d > maxM) maxM = d;
     }
     _circleRadiusM = maxM * 1.05;
@@ -366,8 +473,22 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     setState(() => _selectedId = id);
     try {
       // 近辺選択を現在の詳細に反映（最近傍潮汐ポイントは既存のまま維持）
-      await Common.instance.saveSelectedTeibou(name, Common.instance.tidePoint, id: id, lat: lat, lng: lng);
+      await Common.instance.saveSelectedTeibou(
+        name,
+        Common.instance.tidePoint,
+        id: id,
+        lat: lat,
+        lng: lng,
+      );
     } catch (_) {}
+    // 曖昧候補(points)モードでは、選択状態を保存して釣り場詳細へ戻す
+    if (widget.points != null) {
+      Common.instance.shouldJumpPage = true;
+      Common.instance.requestNavigateToTidePage();
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
     // center+radiusモードでは選択を返す（既存の一覧の動作に合わせる）
     if (widget.centerLat != null && widget.centerLng != null) {
       if (!mounted) return;
@@ -380,15 +501,22 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     final dLat = (lat2 - lat1) * math.pi / 180.0;
     final dLon = (lon2 - lon1) * math.pi / 180.0;
     final a =
-        (math.sin(dLat / 2) * math.sin(dLat / 2)) + math.cos(lat1 * math.pi / 180.0) * math.cos(lat2 * math.pi / 180.0) * (math.sin(dLon / 2) * math.sin(dLon / 2));
+        (math.sin(dLat / 2) * math.sin(dLat / 2)) +
+        math.cos(lat1 * math.pi / 180.0) *
+            math.cos(lat2 * math.pi / 180.0) *
+            (math.sin(dLon / 2) * math.sin(dLon / 2));
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return r * c;
   }
 
   @override
   void dispose() {
-    try { _posSub?.cancel(); } catch (_) {}
-    try { _blinkTimer?.cancel(); } catch (_) {}
+    try {
+      _posSub?.cancel();
+    } catch (_) {}
+    try {
+      _blinkTimer?.cancel();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -402,7 +530,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
 }
 
 String _circledNum(int n) {
-  const list = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+  const list = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
   if (n >= 1 && n <= 10) return list[n - 1];
   return n.toString();
 }

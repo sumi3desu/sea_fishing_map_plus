@@ -3,7 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // ADDED: セキュアストレージ用
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:provider/provider.dart' as fp; // alias to avoid Riverpod name clash
+import 'package:provider/provider.dart'
+    as fp; // alias to avoid Riverpod name clash
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http; // ADDED: 自動ログイン用
 import 'dart:async';
@@ -41,25 +42,27 @@ Future<void> confirmAndDownloadInitialData({
   required Future<bool> Function() runDownload,
   FutureOr<void> Function()? onSuccess,
 }) async {
-  final proceed = await showDialog<bool>(
+  final proceed =
+      await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          title: const Text('初回データの準備'),
-          content: const Text(
-            'アプリの利用に必要な初回データをダウンロードします。\nWi‑Fi 環境での実行を推奨します。実行しますか？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
+        builder:
+            (_) => AlertDialog(
+              title: const Text('初回データの準備'),
+              content: const Text(
+                'アプリの利用に必要な初回データをダウンロードします。\nWi‑Fi 環境での実行を推奨します。実行しますか？',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('実行'),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('実行'),
-            ),
-          ],
-        ),
       ) ??
       false;
 
@@ -68,18 +71,18 @@ Future<void> confirmAndDownloadInitialData({
   final ok = await runDownload();
   if (ok) {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('初回データの準備が完了しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('初回データの準備が完了しました')));
     } catch (_) {}
     if (onSuccess != null) {
       await onSuccess();
     }
   } else {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('初回データの準備に失敗しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('初回データの準備に失敗しました')));
     } catch (_) {}
   }
 }
@@ -116,10 +119,10 @@ void main() async {
 
   // 共通状態の初期化
   await Common.instance.loadSelectedTeibou();
+  await Common.instance.loadFishingDiaryMode();
   if (Common.instance.selectedTeibouNearestPoint.isNotEmpty) {
     Common.instance.tidePoint = Common.instance.selectedTeibouNearestPoint;
-    await Common.instance
-        .savePoint(Common.instance.selectedTeibouNearestPoint);
+    await Common.instance.savePoint(Common.instance.selectedTeibouNearestPoint);
   }
   await Common.instance.setupNearestByLocationIfUnset();
 
@@ -128,9 +131,7 @@ void main() async {
 
   runApp(
     ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       child: fp.ChangeNotifierProvider<Common>(
         create: (_) => Common.instance,
         child: const MyApp(),
@@ -140,7 +141,9 @@ void main() async {
 
   // 1.5秒後に初回フレームの描画を許可（= ネイティブスプラッシュを消す）
   Future.delayed(const Duration(milliseconds: 1000), () {
-    try { binding.allowFirstFrame(); } catch (_) {}
+    try {
+      binding.allowFirstFrame();
+    } catch (_) {}
   });
 }
 
@@ -207,17 +210,23 @@ class _SplashScreenState extends State<SplashScreen> {
 
 // SharedPreferencesの保存キー
 const String userInfoKey = 'user_info_siowadou_pro_key';
+
 /// 質問一覧を保持する StateProvider
-final questionsProvider = StateProvider<List<Map<String, dynamic>>>((ref) => []);
+final questionsProvider = StateProvider<List<Map<String, dynamic>>>(
+  (ref) => [],
+);
+
 /// PIN問題 StateProvider
 final pinningsProvider = StateProvider<List<Map<String, dynamic>>>((ref) => []);
 
 /// ScoreScreen の再フェッチトリガー
 final scoreRefreshProvider = StateProvider<int>((ref) => 0);
+
 /// Fetch済みフラグ StateProvider
 final hasFetchedQuestionsProvider = StateProvider<bool>((ref) => false);
+
 /// Settings/Paywall が更新時にインクリメントし、HomeScreen の再描画を促す
-final entitlementVersionProvider = StateProvider<int>((ref) => 0); 
+final entitlementVersionProvider = StateProvider<int>((ref) => 0);
 
 /// shared_preferences の Provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -235,6 +244,7 @@ final isEmailRegisteredProvider = Provider<bool>((ref) {
 
 /// キャッシュリスト StateProvider
 final cacheQuestionProvider = StateProvider<List<CacheQuestion>>((ref) => []);
+
 /*
 class UserInfo {
   final int userId; // メール認証済みユーザID
@@ -313,54 +323,58 @@ class UserInfo {
   });
 
   factory UserInfo.fromJson(Map<String, dynamic> json) => UserInfo(
-        userId: json['userId'] as int,
-        email: json['email'] as String,
-        uuid: json['uuid'] as String,
-        status: json['status'] as String,
-        createdAt: json['created_at'] as String,
-        refreshToken: json['refresh_token'] as String?,
-        nickName: (json['nick_name'] ?? json['nickName']) as String?,
-        reportsBlocked: (json['reports_blocked'] is int)
+    userId: json['userId'] as int,
+    email: json['email'] as String,
+    uuid: json['uuid'] as String,
+    status: json['status'] as String,
+    createdAt: json['created_at'] as String,
+    refreshToken: json['refresh_token'] as String?,
+    nickName: (json['nick_name'] ?? json['nickName']) as String?,
+    reportsBlocked:
+        (json['reports_blocked'] is int)
             ? json['reports_blocked'] as int
             : ((json['reports_blocked'] is bool)
                 ? ((json['reports_blocked'] as bool) ? 1 : 0)
                 : (json['reports_blocked'] is String)
-                    ? int.tryParse(json['reports_blocked'] as String) ?? 0
-                    : 0),
-        reportsBlockedUntil: json['reports_blocked_until'] as String?,
-        reportsBlockedReason: json['reports_blocked_reason'] as String?,
-        role: json['role'] as String?,
-        canReport: (json['can_report'] is bool)
+                ? int.tryParse(json['reports_blocked'] as String) ?? 0
+                : 0),
+    reportsBlockedUntil: json['reports_blocked_until'] as String?,
+    reportsBlockedReason: json['reports_blocked_reason'] as String?,
+    role: json['role'] as String?,
+    canReport:
+        (json['can_report'] is bool)
             ? json['can_report'] as bool
             : (json['can_report'] is int)
-                ? ((json['can_report'] as int) != 0)
-                : true,
-        photoUrl: (json['profile_image_url'] ?? json['photo_url']) as String?,
-        photoVersion: (json['profile_image_version'] is int)
+            ? ((json['can_report'] as int) != 0)
+            : true,
+    photoUrl: (json['profile_image_url'] ?? json['photo_url']) as String?,
+    photoVersion:
+        (json['profile_image_version'] is int)
             ? json['profile_image_version'] as int
             : (json['photo_version'] is int)
-                ? json['photo_version'] as int
-                : null,
-      );
+            ? json['photo_version'] as int
+            : null,
+  );
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        'email': email,
-        'uuid': uuid,
-        'status': status,
-        'created_at': createdAt,
-        if (refreshToken != null) 'refresh_token': refreshToken,
-        if (nickName != null) 'nick_name': nickName,
-        'reports_blocked': reportsBlocked,
-        if (reportsBlockedUntil != null) 'reports_blocked_until': reportsBlockedUntil,
-        if (reportsBlockedReason != null) 'reports_blocked_reason': reportsBlockedReason,
-        if (role != null) 'role': role,
-        'can_report': canReport,
-        if (photoUrl != null) 'profile_image_url': photoUrl,
-        if (photoVersion != null) 'profile_image_version': photoVersion,
-      };
+    'userId': userId,
+    'email': email,
+    'uuid': uuid,
+    'status': status,
+    'created_at': createdAt,
+    if (refreshToken != null) 'refresh_token': refreshToken,
+    if (nickName != null) 'nick_name': nickName,
+    'reports_blocked': reportsBlocked,
+    if (reportsBlockedUntil != null)
+      'reports_blocked_until': reportsBlockedUntil,
+    if (reportsBlockedReason != null)
+      'reports_blocked_reason': reportsBlockedReason,
+    if (role != null) 'role': role,
+    'can_report': canReport,
+    if (photoUrl != null) 'profile_image_url': photoUrl,
+    if (photoVersion != null) 'profile_image_version': photoVersion,
+  };
 }
-
 
 /// UserInfo をセキュアストレージに保存する
 Future<void> saveUserInfo(UserInfo info) async {
@@ -371,6 +385,7 @@ Future<void> saveUserInfo(UserInfo info) async {
 final userInfoProvider = FutureProvider<UserInfo?>((ref) async {
   return await loadUserInfo();
 });
+
 /// サーバーから UserInfo を取得／新規作成
 Future<UserInfo> getUserInfoFromServer({
   required String uuid,
@@ -394,7 +409,7 @@ Future<UserInfo> getUserInfoFromServer({
         status: data['status'] as String,
         createdAt: data['createdAt'] as String,
         nickName: (data['nick_name'] ?? data['nickName']) as String?,
-        role: (data['role'] as String?)
+        role: (data['role'] as String?),
       );
     } else {
       throw Exception('get_user_info.php が失敗しました: ${data['status']}');
@@ -427,7 +442,6 @@ final settingProvider = StateProvider<SettingData>((ref) {
     pinOnly: prefs.getBool('pinOnly') ?? false,
   );
 });
-
 
 /// UserInfo が保存されていなければ初期化し、サーバー問い合わせも含めて生成・保存する
 Future<UserInfo> getOrInitUserInfo() async {
@@ -494,7 +508,6 @@ Future<UserInfo?> loadUserInfo() async {
   return null;
 }
 
-
 class MainPage extends ConsumerStatefulWidget {
   const MainPage({super.key, required this.title, this.initialIndex = 0});
 
@@ -513,7 +526,7 @@ class _MainPageState extends ConsumerState<MainPage> {
   bool _agreeAll = false;
   final String _tosUrl = 'asset://assets/policies/terms_of_use.html';
   final String _privacyUrl = 'asset://assets/policies/privacy_policy.html';
-   // 初回起動で同意未完了の場合、同意後にデータ警告を出すための保留フラグ
+  // 初回起動で同意未完了の場合、同意後にデータ警告を出すための保留フラグ
   bool _noDataCheckPending = false;
 
   // タブのインデックス（0: 釣果、1: 釣り場一覧、2: 釣り場詳細、3: 日付、4: 設定、5: 情報）
@@ -536,14 +549,13 @@ class _MainPageState extends ConsumerState<MainPage> {
     final int pageIndex = index > 2 ? index - 1 : index;
     // 釣り場詳細(=pageIndex 2) への遷移は、未選択時はブロックして案内
     if (pageIndex == 2) {
-      final hasSelection = (Common.instance.selectedTeibouName.isNotEmpty ||
-          Common.instance.selectedTeibouLat != 0.0 ||
-          Common.instance.selectedTeibouLng != 0.0);
+      final hasSelection =
+          (Common.instance.selectedTeibouName.isNotEmpty ||
+              Common.instance.selectedTeibouLat != 0.0 ||
+              Common.instance.selectedTeibouLng != 0.0);
       if (!hasSelection) {
         final messenger = ScaffoldMessenger.maybeOf(context);
-        messenger?.showSnackBar(
-          SnackBar(content: Text(warningSelectSpot)),
-        );
+        messenger?.showSnackBar(SnackBar(content: Text(warningSelectSpot)));
         return;
       }
     }
@@ -555,8 +567,12 @@ class _MainPageState extends ConsumerState<MainPage> {
       tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
       // 釣り場一覧タブが選択されたときにDB更新を通知して再読込を促す
     } else if (pageIndex == 1) {
-      try { SioDatabase().notifyListeners(); } catch (_) {}
-      try { Common.instance.requestListCentering(); } catch (_) {}
+      try {
+        SioDatabase().notifyListeners();
+      } catch (_) {}
+      try {
+        Common.instance.requestListCentering();
+      } catch (_) {}
     }
   }
 
@@ -577,7 +593,6 @@ class _MainPageState extends ConsumerState<MainPage> {
     // 初回起動時に同意ダイアログを検討して表示
     _maybeShowConsentDialog();
 
-    
     // RevenueCat 初期化（UI構築後に実行し、エラーをSnackBarで通知）
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
@@ -589,15 +604,19 @@ class _MainPageState extends ConsumerState<MainPage> {
         RevenueCatService.configure(appUserId: appUserId).catchError((e) {
           if (!mounted) return;
           final msg = 'RevenueCat初期化エラー: ' + e.toString();
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(msg)));
         });
       } catch (e) {
         if (!mounted) return;
         final msg = 'RevenueCat初期化エラー: ' + e.toString();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     });
-    
+
     // 起動時にユーザ情報(特に role)を最新化して保存（各画面の表示整合性のため）
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshUserRole());
     // すでに同意済みで初回データが未準備なら、確認なしで自動実行
@@ -630,7 +649,9 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   @override
   void dispose() {
-    try { Common.instance.removeListener(_onCommonNavigateRequest); } catch (_) {}
+    try {
+      Common.instance.removeListener(_onCommonNavigateRequest);
+    } catch (_) {}
     _bannerAd?.dispose();
     super.dispose();
   }
@@ -644,9 +665,13 @@ class _MainPageState extends ConsumerState<MainPage> {
         _selectedIndex = 2; // 釣り場詳細タブ
       });
       // 遷移直後に潮汐の再読込も実施
-      try { tidePageKey.currentState?.refreshTide(Common.instance.tideDate); } catch (_) {}
+      try {
+        tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
+      } catch (_) {}
       // 釣果リストも強制再読み込み（選択釣り場の変更を確実に反映）
-      try { tidePageKey.currentState?.forceReloadCatchList(); } catch (_) {}
+      try {
+        tidePageKey.currentState?.forceReloadCatchList();
+      } catch (_) {}
     }
   }
 
@@ -657,9 +682,10 @@ class _MainPageState extends ConsumerState<MainPage> {
     try {
       await Common.instance.loadSelectedTeibou();
     } catch (_) {}
-    final hasSel = (Common.instance.selectedTeibouName.isNotEmpty ||
-        Common.instance.selectedTeibouLat != 0.0 ||
-        Common.instance.selectedTeibouLng != 0.0);
+    final hasSel =
+        (Common.instance.selectedTeibouName.isNotEmpty ||
+            Common.instance.selectedTeibouLat != 0.0 ||
+            Common.instance.selectedTeibouLng != 0.0);
     if (hasSel) {
       _didStartupAutoSelect = true;
       return;
@@ -669,22 +695,37 @@ class _MainPageState extends ConsumerState<MainPage> {
       await Common.instance.setupNearestByLocationIfUnset();
     } catch (_) {}
     // 検索一覧（「近くの釣り場」）にも結果を反映させるため、一覧ページへ検索の実行を依頼
-    try { Common.instance.requestAutoNearbySearch(); } catch (_) {}
+    try {
+      Common.instance.requestAutoNearbySearch();
+    } catch (_) {}
   }
-    // 初回準備が完了しているか（堤防テーブルが揃っているか）
+
+  // 初回準備が完了しているか（堤防テーブルが揃っているか）
   Future<bool> _isInitialDataMissing() async {
     try {
       // SioDatabase 側の実テーブルから判定（legacy DB ではなく）
       final sdb = await SioDatabase().database;
       int tb = 0, tdfk = 0, k = 0;
       try {
-        tb = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM teibou')) ?? 0;
+        tb =
+            sqflite.Sqflite.firstIntValue(
+              await sdb.rawQuery('SELECT COUNT(*) FROM teibou'),
+            ) ??
+            0;
       } catch (_) {}
       try {
-        tdfk = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM todoufuken')) ?? 0;
+        tdfk =
+            sqflite.Sqflite.firstIntValue(
+              await sdb.rawQuery('SELECT COUNT(*) FROM todoufuken'),
+            ) ??
+            0;
       } catch (_) {}
       try {
-        k = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM kubun')) ?? 0;
+        k =
+            sqflite.Sqflite.firstIntValue(
+              await sdb.rawQuery('SELECT COUNT(*) FROM kubun'),
+            ) ??
+            0;
       } catch (_) {}
       return (tb == 0 || tdfk == 0 || k == 0);
     } catch (_) {
@@ -708,9 +749,8 @@ class _MainPageState extends ConsumerState<MainPage> {
         builder: (ctx) {
           bool localAgree = _agreeAll;
           final titleTextStyle = Theme.of(ctx).textTheme.titleLarge;
-          final scaledTitleStyle = (titleTextStyle ?? const TextStyle()).copyWith(
-            fontSize: (titleTextStyle?.fontSize ?? 20) * 0.8,
-          );
+          final scaledTitleStyle = (titleTextStyle ?? const TextStyle())
+              .copyWith(fontSize: (titleTextStyle?.fontSize ?? 20) * 0.8);
           return WillPopScope(
             onWillPop: () async => false,
             child: StatefulBuilder(
@@ -719,6 +759,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                   if (mounted) setState(() => _agreeAll = v);
                   setStateDialog(() => localAgree = v);
                 }
+
                 return AlertDialog(
                   title: Text('利用規約・プライバシーポリシーへの同意', style: scaledTitleStyle),
                   content: SingleChildScrollView(
@@ -733,7 +774,8 @@ class _MainPageState extends ConsumerState<MainPage> {
                           children: [
                             Checkbox(
                               visualDensity: VisualDensity.compact,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
                               value: localAgree,
                               onChanged: (v) => setAgree(v ?? false),
                             ),
@@ -741,28 +783,53 @@ class _MainPageState extends ConsumerState<MainPage> {
                             Expanded(
                               child: RichText(
                                 text: TextSpan(
-                                  style: const TextStyle(color: Colors.black, fontSize: 14),
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 14,
+                                  ),
                                   children: [
                                     TextSpan(
                                       text: '利用規約',
-                                      style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
-                                      recognizer: (TapGestureRecognizer()..onTap = () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => HtmlViewPage(title: '利用規約', url: _tosUrl)),
-                                        );
-                                      }),
+                                      style: const TextStyle(
+                                        color: Colors.blue,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer:
+                                          (TapGestureRecognizer()
+                                            ..onTap = () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (_) => HtmlViewPage(
+                                                        title: '利用規約',
+                                                        url: _tosUrl,
+                                                      ),
+                                                ),
+                                              );
+                                            }),
                                     ),
                                     const TextSpan(text: ' と '),
                                     TextSpan(
                                       text: 'プライバシーポリシー',
-                                      style: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
-                                      recognizer: (TapGestureRecognizer()..onTap = () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => HtmlViewPage(title: 'プライバシーポリシー', url: _privacyUrl)),
-                                        );
-                                      }),
+                                      style: const TextStyle(
+                                        color: Colors.blue,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer:
+                                          (TapGestureRecognizer()
+                                            ..onTap = () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (_) => HtmlViewPage(
+                                                        title: 'プライバシーポリシー',
+                                                        url: _privacyUrl,
+                                                      ),
+                                                ),
+                                              );
+                                            }),
                                     ),
                                     const TextSpan(text: ' に同意します'),
                                   ],
@@ -776,25 +843,31 @@ class _MainPageState extends ConsumerState<MainPage> {
                   ),
                   actions: [
                     ElevatedButton(
-                      onPressed: localAgree
-                          ? () {
-                              _saveConsentAndProceed(() async {
-                                if (!mounted) return;
-                                Navigator.of(context, rootNavigator: true).pop();
-                                _consentDialogShown = false;
-                                // 同意直後に初回データダウンロードの案内を実施（必要時）
-                                _noDataCheckPending = false; // 旧警告フローはクリア
-                                try {
-                                  if (await _isInitialDataMissing()) {
-                                    final ok = await _confirmAndDownloadInitialData();
-                                    if (ok) await _maybeStartupAutoSelectAndSearch();
-                                  } else {
-                                    await _maybeStartupAutoSelectAndSearch();
-                                  }
-                                } catch (_) {}
-                              });
-                            }
-                          : null,
+                      onPressed:
+                          localAgree
+                              ? () {
+                                _saveConsentAndProceed(() async {
+                                  if (!mounted) return;
+                                  Navigator.of(
+                                    context,
+                                    rootNavigator: true,
+                                  ).pop();
+                                  _consentDialogShown = false;
+                                  // 同意直後に初回データダウンロードの案内を実施（必要時）
+                                  _noDataCheckPending = false; // 旧警告フローはクリア
+                                  try {
+                                    if (await _isInitialDataMissing()) {
+                                      final ok =
+                                          await _confirmAndDownloadInitialData();
+                                      if (ok)
+                                        await _maybeStartupAutoSelectAndSearch();
+                                    } else {
+                                      await _maybeStartupAutoSelectAndSearch();
+                                    }
+                                  } catch (_) {}
+                                });
+                              }
+                              : null,
                       child: const Text('同意して続行'),
                     ),
                   ],
@@ -806,6 +879,7 @@ class _MainPageState extends ConsumerState<MainPage> {
       );
     });
   }
+
   Future<void> _saveConsentAndProceed(FutureOr<void> Function() proceed) async {
     // チェック未ONならスナックバーで通知
     if (!_agreeAll) {
@@ -823,18 +897,21 @@ class _MainPageState extends ConsumerState<MainPage> {
       // サーバ側にも簡易送信（失敗しても無視）
       try {
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
-        await http.post(
-          Uri.parse('${AppConfig.instance.baseUrl}user_consent.php'),
-          body: {
-            'uuid': info.uuid,
-            'version_agreed': latest,
-            'agreed_at': DateTime.now().toUtc().toIso8601String(),
-          },
-        ).timeout(kHttpTimeout);
+        await http
+            .post(
+              Uri.parse('${AppConfig.instance.baseUrl}user_consent.php'),
+              body: {
+                'uuid': info.uuid,
+                'version_agreed': latest,
+                'agreed_at': DateTime.now().toUtc().toIso8601String(),
+              },
+            )
+            .timeout(kHttpTimeout);
       } catch (_) {}
     } catch (_) {}
     await proceed();
   }
+
   // 規約・プライバシーポリシーへの同意が済んでいるかを確認
   Future<bool> _hasPolicyConsent() async {
     try {
@@ -857,11 +934,12 @@ class _MainPageState extends ConsumerState<MainPage> {
     try {
       if (!mounted) return false;
       final err = SioSyncService().lastError;
-      final msg = ok
-          ? '初回データの準備が完了しました'
-          : (!kReleaseMode && (err != null && err.isNotEmpty)
-              ? '初回データの準備に失敗しました（$err）'
-              : '初回データの準備に失敗しました');
+      final msg =
+          ok
+              ? '初回データの準備が完了しました'
+              : (!kReleaseMode && (err != null && err.isNotEmpty)
+                  ? '初回データの準備に失敗しました（$err）'
+                  : '初回データの準備に失敗しました');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (_) {}
     return ok;
@@ -874,13 +952,14 @@ class _MainPageState extends ConsumerState<MainPage> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: SizedBox(
-          width: 64,
-          height: 64,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ),
+      builder:
+          (_) => const AlertDialog(
+            content: SizedBox(
+              width: 64,
+              height: 64,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
     );
     bool success = false;
     try {
@@ -889,14 +968,29 @@ class _MainPageState extends ConsumerState<MainPage> {
       await initialTable(legacyDb, info.userId); // 既存ローカルテーブル群の作成（別DB）
 
       // 初回データ（堤防・都道府県・区分）を明示的に同期（SioDatabase 側）
-      final ok = await SioSyncService().syncFishingData(userId: info.userId, force: true);
+      final ok = await SioSyncService().syncFishingData(
+        userId: info.userId,
+        force: true,
+      );
       if (ok) {
         try {
           final sdb = await SioDatabase().database;
           int tb = 0, tdfk = 0, kb = 0;
-          tb = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM teibou')) ?? 0;
-          tdfk = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM todoufuken')) ?? 0;
-          kb = sqflite.Sqflite.firstIntValue(await sdb.rawQuery('SELECT COUNT(*) FROM kubun')) ?? 0;
+          tb =
+              sqflite.Sqflite.firstIntValue(
+                await sdb.rawQuery('SELECT COUNT(*) FROM teibou'),
+              ) ??
+              0;
+          tdfk =
+              sqflite.Sqflite.firstIntValue(
+                await sdb.rawQuery('SELECT COUNT(*) FROM todoufuken'),
+              ) ??
+              0;
+          kb =
+              sqflite.Sqflite.firstIntValue(
+                await sdb.rawQuery('SELECT COUNT(*) FROM kubun'),
+              ) ??
+              0;
           success = (tb > 0 && tdfk > 0 && kb > 0);
           if (!success) {
             final details = 'teibou=$tb todoufuken=$tdfk kubun=$kb';
@@ -904,7 +998,8 @@ class _MainPageState extends ConsumerState<MainPage> {
               SioSyncService().lastError = 'データ不足（$details）';
             } else {
               // 既にAPI由来のエラーがある場合は補足として追記
-              SioSyncService().lastError = '${SioSyncService().lastError} / データ不足（$details）';
+              SioSyncService().lastError =
+                  '${SioSyncService().lastError} / データ不足（$details）';
             }
           }
         } catch (_) {
@@ -927,27 +1022,33 @@ class _MainPageState extends ConsumerState<MainPage> {
     }
     // プログレスを閉じる（以降で画面遷移の可能性があるため先に閉じる）
     if (mounted) {
-      try { Navigator.of(context, rootNavigator: true).pop(); } catch (_) {}
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
     }
 
     // 成功時、一覧などへDB更新を通知
     if (success) {
-      try { SioDatabase().notifyListeners(); } catch (_) {}
+      try {
+        SioDatabase().notifyListeners();
+      } catch (_) {}
     }
 
     // 失敗時は画面遷移せず、エラーを通知してそのまま戻る
     if (!success && mounted) {
       try {
         final err = SioSyncService().lastError;
-        final msg = (!kReleaseMode && (err != null && err.isNotEmpty))
-            ? '初回データの準備に失敗しました（$err）'
-            : '初回データの準備に失敗しました。通信環境をご確認のうえ、後ほどお試しください。';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        final msg =
+            (!kReleaseMode && (err != null && err.isNotEmpty))
+                ? '初回データの準備に失敗しました（$err）'
+                : '初回データの準備に失敗しました。通信環境をご確認のうえ、後ほどお試しください。';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       } catch (_) {}
     }
     return success;
   }
-
 
   void _loadBanner() {
     _bannerAd = BannerAd(
@@ -971,6 +1072,7 @@ class _MainPageState extends ConsumerState<MainPage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final common = fp.Provider.of<Common>(context);
+
     /// メインコンテンツは各タブごとに作成（IndexedStack により各状態が保持される）
     final List<Widget> pages = [
       const FishingResultGrid(),
@@ -992,13 +1094,17 @@ class _MainPageState extends ConsumerState<MainPage> {
             top: true,
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight),
+              padding: const EdgeInsets.only(
+                bottom: kBottomNavigationBarHeight,
+              ),
               child: Column(
                 children: [
                   Consumer(
                     builder: (context, ref, _) {
-                      final isPremium = ref.watch(prem.premiumStateProvider).isPremium;
-                      if (isPremium || _bannerAd == null) return const SizedBox.shrink();
+                      final isPremium =
+                          ref.watch(prem.premiumStateProvider).isPremium;
+                      if (isPremium || _bannerAd == null)
+                        return const SizedBox.shrink();
                       return Container(
                         alignment: Alignment.center,
                         width: _bannerAd!.size.width.toDouble(),
@@ -1007,91 +1113,186 @@ class _MainPageState extends ConsumerState<MainPage> {
                       );
                     },
                   ),
-                // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
-                if (_selectedIndex == 2)
-                  SizedBox(
-                    height: kToolbarHeight,
-                    width: double.infinity,
-                    child: FutureBuilder<String>(
-                  future: () async {
-                    final spotName = common.selectedTeibouName.isNotEmpty ? common.selectedTeibouName : common.tidePoint;
-                    String prefName = '';
-                    try {
-                      int pid = common.selectedTeibouPrefId;
-                      if (pid == 0) {
-                        // まずは選択済みport_idで引く（同名別県の誤参照防止）
-                        try {
-                          final prefs = await SharedPreferences.getInstance();
-                          final sid = prefs.getInt('selected_teibou_id');
-                          if (sid != null && sid > 0) {
-                            final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                            for (final r in rows) {
-                              final rid = r['port_id'] is int ? r['port_id'] as int : int.tryParse(r['port_id']?.toString() ?? '');
-                              if (rid == sid) {
-                                pid = r['todoufuken_id'] is int
-                                    ? r['todoufuken_id'] as int
-                                    : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-                                break;
+                  // タブ2(釣り場詳細)のとき、広告の下に AppBar と同等のタイトルを表示（黒背景/白文字）
+                  if (_selectedIndex == 2)
+                    SizedBox(
+                      height: kToolbarHeight,
+                      width: double.infinity,
+                      child: FutureBuilder<String>(
+                        future: () async {
+                          final spotName =
+                              common.selectedTeibouName.isNotEmpty
+                                  ? common.selectedTeibouName
+                                  : common.tidePoint;
+                          String prefName = '';
+                          try {
+                            int pid = common.selectedTeibouPrefId;
+                            if (pid == 0) {
+                              // まずは選択済みport_idで引く（同名別県の誤参照防止）
+                              try {
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                final sid = prefs.getInt('selected_teibou_id');
+                                if (sid != null && sid > 0) {
+                                  final rows =
+                                      await SioDatabase()
+                                          .getAllTeibouWithPrefecture();
+                                  for (final r in rows) {
+                                    final rid =
+                                        r['port_id'] is int
+                                            ? r['port_id'] as int
+                                            : int.tryParse(
+                                              r['port_id']?.toString() ?? '',
+                                            );
+                                    if (rid == sid) {
+                                      pid =
+                                          r['todoufuken_id'] is int
+                                              ? r['todoufuken_id'] as int
+                                              : int.tryParse(
+                                                    r['todoufuken_id']
+                                                            ?.toString() ??
+                                                        '',
+                                                  ) ??
+                                                  int.tryParse(
+                                                    r['pref_id_from_port']
+                                                            ?.toString() ??
+                                                        '',
+                                                  ) ??
+                                                  0;
+                                      break;
+                                    }
+                                  }
+                                }
+                              } catch (_) {}
+                              // port_id で取得できなかった場合のみ、名前一致でフォールバック
+                              if (pid == 0 &&
+                                  common.selectedTeibouName.isNotEmpty) {
+                                final rows =
+                                    await SioDatabase()
+                                        .getAllTeibouWithPrefecture();
+                                for (final r in rows) {
+                                  final n = (r['port_name'] ?? '').toString();
+                                  if (n == common.selectedTeibouName) {
+                                    pid =
+                                        r['todoufuken_id'] is int
+                                            ? r['todoufuken_id'] as int
+                                            : int.tryParse(
+                                                  r['todoufuken_id']
+                                                          ?.toString() ??
+                                                      '',
+                                                ) ??
+                                                int.tryParse(
+                                                  r['pref_id_from_port']
+                                                          ?.toString() ??
+                                                      '',
+                                                ) ??
+                                                0;
+                                    break;
+                                  }
+                                }
                               }
                             }
-                          }
-                        } catch (_) {}
-                        // port_id で取得できなかった場合のみ、名前一致でフォールバック
-                        if (pid == 0 && common.selectedTeibouName.isNotEmpty) {
-                          final rows = await SioDatabase().getAllTeibouWithPrefecture();
-                          for (final r in rows) {
-                            final n = (r['port_name'] ?? '').toString();
-                            if (n == common.selectedTeibouName) {
-                              pid = r['todoufuken_id'] is int
-                                  ? r['todoufuken_id'] as int
-                                  : int.tryParse(r['todoufuken_id']?.toString() ?? '') ?? int.tryParse(r['pref_id_from_port']?.toString() ?? '') ?? 0;
-                              break;
+                            if (pid != 0) {
+                              final prefs =
+                                  await SioDatabase().getTodoufukenAll();
+                              for (final r in prefs) {
+                                final id =
+                                    r['todoufuken_id'] is int
+                                        ? r['todoufuken_id'] as int
+                                        : int.tryParse(
+                                          r['todoufuken_id']?.toString() ?? '',
+                                        );
+                                if (id == pid) {
+                                  prefName =
+                                      (r['todoufuken_name'] ?? '').toString();
+                                  break;
+                                }
+                              }
                             }
-                          }
-                        }
-                      }
-                      if (pid != 0) {
-                        final prefs = await SioDatabase().getTodoufukenAll();
-                        for (final r in prefs) {
-                          final id = r['todoufuken_id'] is int ? r['todoufuken_id'] as int : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-                          if (id == pid) {
-                            prefName = (r['todoufuken_name'] ?? '').toString();
-                            break;
-                          }
-                        }
-                      }
-                    } catch (_) {}
-                    return '釣り場詳細[' + (prefName.isNotEmpty ? '$prefName ' : '') + spotName + ']';
-                  }(),
-                  builder: (context, snap) {
-                    return AppBar(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      centerTitle: true,
-                      elevation: 0,
-                      automaticallyImplyLeading: false,
-                      title: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          Icon(Icons.place, color: Colors.white),
-                          SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              '釣り場詳細',
-                              style: TextStyle(color: Colors.white),
-                              overflow: TextOverflow.ellipsis,
+                          } catch (_) {}
+                          return '釣り場詳細[' +
+                              (prefName.isNotEmpty ? '$prefName ' : '') +
+                              spotName +
+                              ']';
+                        }(),
+                        builder: (context, snap) {
+                          return AppBar(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            centerTitle: true,
+                            elevation: 0,
+                            automaticallyImplyLeading: false,
+                            title: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.place, color: Colors.white),
+                                SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '釣り場詳細',
+                                    style: TextStyle(color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            actions: [
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  showCheckmark: false,
+                                  selected: common.fishingDiaryMode,
+                                  onSelected:
+                                      (v) => Common.instance
+                                          .setFishingDiaryMode(v),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: const VisualDensity(
+                                    horizontal: -2.5,
+                                    vertical: -2,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 2,
+                                  ),
+                                  labelPadding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  avatarBoxConstraints:
+                                      const BoxConstraints.tightFor(
+                                        width: 18,
+                                        height: 18,
+                                      ),
+                                  avatar: Icon(
+                                    Icons.menu_book,
+                                    size: 14,
+                                    color:
+                                        common.fishingDiaryMode
+                                            ? Colors.white
+                                            : Colors.black87,
+                                  ),
+                                  label: Text(
+                                    '釣り日記',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color:
+                                          common.fishingDiaryMode
+                                              ? Colors.white
+                                              : Colors.black87,
+                                    ),
+                                  ),
+                                  backgroundColor: Colors.white,
+                                  selectedColor: const Color(0xFFFFB74D),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
-              ),
-                // 釣り場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
-                Expanded(
-                  child: IndexedStack(index: _selectedIndex, children: pages),
-                ),
+                    ),
+                  // 釣り場詳細のタイトル直下のアクションバーは廃止（地図上部へ移設）
+                  Expanded(
+                    child: IndexedStack(index: _selectedIndex, children: pages),
+                  ),
                 ],
               ),
             ),
@@ -1110,22 +1311,34 @@ class _MainPageState extends ConsumerState<MainPage> {
                 currentIndex: _navIndexFromPageIndex(_selectedIndex),
                 onTap: _onItemTapped,
                 items: <BottomNavigationBarItem>[
-                  const BottomNavigationBarItem(icon: Text('🐟', style: TextStyle(fontSize: 20)), label: '釣果'),
-                  const BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '釣り場一覧'),
+                  const BottomNavigationBarItem(
+                    icon: Text('🐟', style: TextStyle(fontSize: 20)),
+                    label: '釣果',
+                  ),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.list_alt),
+                    label: '釣り場一覧',
+                  ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.add_circle, color: Colors.transparent),
                     label: '',
                   ),
-                  const BottomNavigationBarItem(icon: Icon(Icons.place), label: '釣り場詳細'),
-                  const BottomNavigationBarItem(icon: Icon(Icons.settings), label: '設定'),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.place),
+                    label: '釣り場詳細',
+                  ),
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.settings),
+                    label: '設定',
+                  ),
                 ],
               ),
             ),
           ),
           // 中央の＋ボタン（オーバーレイ固定・ナビの手前）
-            Positioned(
-              left: 0,
-              right: 0,
+          Positioned(
+            left: 0,
+            right: 0,
             // 現在の位置から約5px下げる（= 半重なりをわずかに深く）
             bottom: (kBottomNavigationBarHeight - (_postFabDiameter / 2)) + 30,
             child: Center(child: _buildPostFab(context)),
@@ -1137,8 +1350,8 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   int _navIndexFromPageIndex(int pageIndex) {
     if (pageIndex <= 1) return pageIndex; // 0:釣果, 1:一覧
-    if (pageIndex == 2) return 3;         // 釣り場詳細はナビの3番目
-    return 4;                              // 設定はナビの4番目
+    if (pageIndex == 2) return 3; // 釣り場詳細はナビの3番目
+    return 4; // 設定はナビの4番目
   }
 
   Widget _buildPostFab(BuildContext context) {
@@ -1147,7 +1360,10 @@ class _MainPageState extends ConsumerState<MainPage> {
       elevation: 0,
       highlightElevation: 0,
       disabledElevation: 0,
-      constraints: const BoxConstraints.tightFor(width: _postFabDiameter, height: _postFabDiameter),
+      constraints: const BoxConstraints.tightFor(
+        width: _postFabDiameter,
+        height: _postFabDiameter,
+      ),
       shape: const CircleBorder(),
       fillColor: const Color(0xFF1E90FF),
       child: const Icon(Icons.add, color: Colors.white, size: 26),
@@ -1156,21 +1372,22 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   Future<void> _onPressCreatePost() async {
     // 釣り場未選択のときは投稿画面へ遷移させない
-    final hasSelection = (Common.instance.selectedTeibouName.isNotEmpty ||
-        Common.instance.selectedTeibouLat != 0.0 ||
-        Common.instance.selectedTeibouLng != 0.0);
+    final hasSelection =
+        (Common.instance.selectedTeibouName.isNotEmpty ||
+            Common.instance.selectedTeibouLat != 0.0 ||
+            Common.instance.selectedTeibouLng != 0.0);
     if (!hasSelection) {
       final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(
-        SnackBar(content: Text(warningSelectSpot)),
-      );
+      messenger?.showSnackBar(SnackBar(content: Text(warningSelectSpot)));
       return;
     }
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       if (!(info.canReport)) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('現在は投稿できません')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('現在は投稿できません')));
         return;
       }
     } catch (_) {}
@@ -1186,7 +1403,9 @@ class _MainPageState extends ConsumerState<MainPage> {
     );
     if (res == true) {
       // 投稿成功時、TidePage の投稿一覧を再読込
-      try { tidePageKey.currentState?.forceReloadPostList(); } catch (_) {}
+      try {
+        tidePageKey.currentState?.forceReloadPostList();
+      } catch (_) {}
     }
   }
 }
@@ -1194,7 +1413,8 @@ class _MainPageState extends ConsumerState<MainPage> {
 class _DetailTopAction extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _DetailTopAction({Key? key, required this.icon, required this.label}) : super(key: key);
+  const _DetailTopAction({Key? key, required this.icon, required this.label})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -1203,7 +1423,14 @@ class _DetailTopAction extends StatelessWidget {
       children: [
         Icon(icon, color: Colors.black87),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }
