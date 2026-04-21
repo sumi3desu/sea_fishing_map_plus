@@ -297,7 +297,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                'この円内で釣果がありますが、非公開です。\n釣り場をタップすると「釣り場詳細」画面に移動します。',
+                'この円内で釣果がありますが、非公開です。\n釣り場をタップすると「釣り場MAP」画面に移動します。',
                 style: TextStyle(color: Colors.black87, fontSize: 13),
               ),
             ),

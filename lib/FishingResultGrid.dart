@@ -353,6 +353,10 @@ class _FishingResultGridState extends State<FishingResultGrid> {
                         if (v) {
                           final verified = await _ensureEmailVerified();
                           if (!verified) return;
+                          if (!mounted) return;
+                          final ok = await Common.instance
+                              .confirmEnableFishingDiary(context);
+                          if (!ok) return;
                         }
                         await Common.instance.setFishingDiaryMode(v);
                       },

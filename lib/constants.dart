@@ -37,5 +37,5 @@ const int meshSize = 30;
 //
 // Message
 //
-final String warningSelectSpot = '釣り場詳細移動します。';
+final String warningSelectSpot = '釣り場MAPに移動します。';
 //final String warningCertificationMail = 'メール認証をお願いします。';

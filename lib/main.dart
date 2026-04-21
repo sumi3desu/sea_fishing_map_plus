@@ -1552,7 +1552,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                               }
                             }
                           } catch (_) {}
-                          return '釣り場詳細[' +
+                          return '釣り場MAP[' +
                               (prefName.isNotEmpty ? '$prefName ' : '') +
                               spotName +
                               ']';
@@ -1571,7 +1571,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                                 SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '釣り場詳細',
+                                    '釣り場MAP',
                                     style: TextStyle(color: Colors.white),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -1604,6 +1604,10 @@ class _MainPageState extends ConsumerState<MainPage> {
                                           if (res != true) return;
                                         }
                                       } catch (_) {}
+                                      if (!mounted) return;
+                                      final ok = await Common.instance
+                                          .confirmEnableFishingDiary(context);
+                                      if (!ok) return;
                                     }
                                     await Common.instance.setFishingDiaryMode(
                                       v,
@@ -1689,7 +1693,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                   ),
                   const BottomNavigationBarItem(
                     icon: Icon(Icons.place),
-                    label: '釣り場詳細',
+                    label: '釣り場MAP',
                   ),
                   const BottomNavigationBarItem(
                     icon: Icon(Icons.settings),

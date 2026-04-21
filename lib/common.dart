@@ -559,6 +559,99 @@ class Common extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> _shouldShowFishingDiaryIntro() async {
+    final prefs = await SharedPreferences.getInstance();
+    return !(prefs.getBool('hide_fishing_diary_intro') ?? false);
+  }
+
+  Future<void> _saveHideFishingDiaryIntro(bool hide) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hide_fishing_diary_intro', hide);
+  }
+
+  Future<bool> confirmEnableFishingDiary(BuildContext context) async {
+    if (!await _shouldShowFishingDiaryIntro()) return true;
+    if (!context.mounted) return false;
+    bool dontShowAgain = false;
+    final agreed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (dialogContext) => StatefulBuilder(
+            builder: (context, setLocalState) {
+              return AlertDialog(
+                titlePadding: EdgeInsets.zero,
+                title: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(28),
+                    topRight: Radius.circular(28),
+                  ),
+                  child: Container(
+                    color: const Color(0xFF1E90FF),
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                    child: const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '釣り日記とは',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    const Text('自分が投稿した釣果や釣り場だけ表示します。'),
+                  ],
+                ),
+                actions: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: CheckboxListTile(
+                          value: dontShowAgain,
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('今後表示しない'),
+                          onChanged: (v) {
+                            setLocalState(() {
+                              dontShowAgain = v ?? false;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop(true);
+                        },
+                        child: const Text('了解'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+    );
+    if (agreed == true) {
+      await _saveHideFishingDiaryIntro(dontShowAgain);
+      return true;
+    }
+    return false;
+  }
+
   void requestPostFeedReload() {
     postFeedReloadTick++;
     notifyListeners();

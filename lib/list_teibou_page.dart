@@ -830,6 +830,11 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       authPurposeLabel: '釣り日記',
                     );
                     if (!verified) return;
+                    if (!mounted) return;
+                    final ok = await Common.instance.confirmEnableFishingDiary(
+                      context,
+                    );
+                    if (!ok) return;
                   }
                   await Common.instance.setFishingDiaryMode(v);
                 },
