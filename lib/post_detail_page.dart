@@ -6,20 +6,23 @@ import 'providers/premium_state_notifier.dart' as prem;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'constants.dart';
-import 'dart:io';
+//import 'dart:io';
 import 'profile_edit_page.dart';
 import 'user_profile_page.dart';
 import 'sio_database.dart';
 import 'nearby_map_page.dart';
 import 'input_post_page.dart';
+import 'new_account_page.dart';
 import 'dart:math' as Maths;
 import 'appconfig.dart';
 import 'html_view_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'dart:io' show Platform;
+import 'log_print.dart';
+//import 'dart:io' show Platform;
 import 'main.dart';
-import 'constants.dart';
+//import 'constants.dart';
 import 'common.dart';
+import 'log_print.dart';
 
 class PostDetailPage extends ConsumerStatefulWidget {
   const PostDetailPage({super.key, required this.item});
@@ -241,19 +244,18 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       final pid = widget.item.postId;
       if (pid == null || pid <= 0) return;
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      // メール認証を要求（既存ポリシーを踏襲）
-      final email = (info.email).trim();
-      if (email.isEmpty) {
+      // 未認証なら他導線と同様にメール認証へ進める
+      if ((info.email).trim().isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '健全なコミュニティ維持のため、低評価にはメール認証が必要です。「設定」の「アカウント設定」を行なってください。',
-            ),
+        final res = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const NewAccountPage(authPurposeLabel: '低評価'),
           ),
         );
-        return;
+        if (res != true) return;
       }
+      final latest = await loadUserInfo() ?? await getOrInitUserInfo();
       // 既に低評価済みならダイアログなしで解除。未低評価の場合のみ理由入力を求める
       Map<String, String>? reasonData;
       if (_myUpDown == 0) {
@@ -279,7 +281,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
             },
             body: {
               'post_id': pid.toString(),
-              'user_id': info.userId.toString(),
+              'user_id': latest.userId.toString(),
               'action': 'regist',
               'up_down': '0',
               'reason': reason,
@@ -533,7 +535,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       } else if (ambiguous_method == 3) {
         final nearby20 = list.take(20).toList();
         if (nearby20.length <= 15) {
-          print(
+          logPrint(
             'ambiguous_method=3 spotId=$sid shape=unknown nearby20=${nearby20.length} action=no_cut',
           );
           points = nearby20;
@@ -556,12 +558,12 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
           final widthM = _dist(centerLat, minLng, centerLat, maxLng);
           final vertical = heightM >= widthM;
           final pattern = (sid % 3) + 1;
-          print(
+          logPrint(
             'ambiguous_method=3 spotId=$sid shape=${vertical ? 'vertical' : 'horizontal'} pattern=$pattern heightM=${heightM.toStringAsFixed(1)} widthM=${widthM.toStringAsFixed(1)}',
           );
           if (pattern == 3) {
             final removed = nearby20.skip(15).map((e) => e['id']).toList();
-            print(
+            logPrint(
               'ambiguous_method=3 action=nearest15_keep removedCount=${removed.length} removedIds=$removed',
             );
             points = nearby20.take(15).toList();
@@ -628,7 +630,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                 vertical
                     ? (pattern == 1 ? 'bottom_cut' : 'top_cut')
                     : (pattern == 1 ? 'left_cut' : 'right_cut');
-            print(
+            logPrint(
               'ambiguous_method=3 action=$primaryAction count=$primaryCutCount fallbackAction=$fallbackAction fallbackCount=$fallbackCutCount removedIds=$removedIds',
             );
             points =

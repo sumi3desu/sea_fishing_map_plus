@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'appconfig.dart';
 import 'constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,10 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
   String? _avatarUrl;
   String? _bgUrl;
   String? _nick;
+  String _xUsername = '';
+  String _instagramUsername = '';
+  bool _xPublic = false;
+  bool _instagramPublic = false;
   bool _loading = true;
   BannerAd? _bannerAd;
   late final TextEditingController _nickController;
@@ -68,17 +73,56 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
           final String? coverRel = data['cover_path'] as String?;
           if (avatarRel != null && avatarRel.isNotEmpty) {
             final ts = DateTime.now().millisecondsSinceEpoch;
-            _avatarUrl = base + avatarRel + '?ts=$ts';
+            _avatarUrl = '$base$avatarRel?ts=$ts';
           }
           if (coverRel != null && coverRel.isNotEmpty) {
             final ts = DateTime.now().millisecondsSinceEpoch;
-            _bgUrl = base + coverRel + '?ts=$ts';
+            _bgUrl = '$base$coverRel?ts=$ts';
           }
-          // 将来: ニックネームAPIがあればここで上書き
+        }
+      }
+    } catch (_) {}
+    try {
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_profile_fields.php',
+      );
+      final resp = await http
+          .post(uri, body: {'user_id': widget.userId.toString()})
+          .timeout(kHttpTimeout);
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['status'] == 'success') {
+          _nick = (data['nick_name']?.toString() ?? '').trim();
+          _nickController.text = _nick ?? '';
+          _xUsername = (data['x_username']?.toString() ?? '').trim();
+          _instagramUsername =
+              (data['instagram_username']?.toString() ?? '').trim();
+          _xPublic =
+              (data['x_public']?.toString() == '1' || data['x_public'] == true);
+          _instagramPublic =
+              (data['instagram_public']?.toString() == '1' ||
+                  data['instagram_public'] == true);
         }
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('URLを開けませんでした')));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('URLを開けませんでした')));
+    }
   }
 
   @override
@@ -107,8 +151,9 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                     builder: (context, ref, _) {
                       final isPremium =
                           ref.watch(prem.premiumStateProvider).isPremium;
-                      if (isPremium || _bannerAd == null)
+                      if (isPremium || _bannerAd == null) {
                         return const SizedBox.shrink();
+                      }
                       return Container(
                         alignment: Alignment.center,
                         width: _bannerAd!.size.width.toDouble(),
@@ -242,26 +287,75 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'ニックネーム',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _nickController,
-                                  maxLength: 12,
-                                  enabled: false,
-                                  readOnly: true,
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    counterText: '',
-                                    hintText: '12文字以内',
+                                _sectionTitle('ニックネーム'),
+                                const SizedBox(height: 12),
+                                _sectionCard(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      TextField(
+                                        controller: _nickController,
+                                        maxLength: 12,
+                                        enabled: false,
+                                        readOnly: true,
+                                        decoration: const InputDecoration(
+                                          border: OutlineInputBorder(),
+                                          counterText: '',
+                                          hintText: '12文字以内',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'ユーザーID: ${widget.userId}',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'ユーザーID: ${widget.userId}',
-                                  style: theme.textTheme.bodySmall,
+                                const SizedBox(height: 24),
+                                _sectionTitle('SNS'),
+                                const SizedBox(height: 12),
+                                _sectionCard(
+                                  child:
+                                      (_xPublic && _xUsername.isNotEmpty) ||
+                                              (_instagramPublic &&
+                                                  _instagramUsername.isNotEmpty)
+                                          ? Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (_xPublic &&
+                                                  _xUsername.isNotEmpty)
+                                                _buildSocialLinkButton(
+                                                  icon: Icons.alternate_email,
+                                                  title: 'X',
+                                                  subtitle: '@$_xUsername',
+                                                  url:
+                                                      'https://x.com/$_xUsername',
+                                                ),
+                                              if (_xPublic &&
+                                                  _xUsername.isNotEmpty &&
+                                                  _instagramPublic &&
+                                                  _instagramUsername.isNotEmpty)
+                                                const SizedBox(height: 12),
+                                              if (_instagramPublic &&
+                                                  _instagramUsername.isNotEmpty)
+                                                _buildSocialLinkButton(
+                                                  icon:
+                                                      Icons.camera_alt_outlined,
+                                                  title: 'Instagram',
+                                                  subtitle:
+                                                      '@$_instagramUsername',
+                                                  url:
+                                                      'https://www.instagram.com/$_instagramUsername/',
+                                                ),
+                                            ],
+                                          )
+                                          : Text(
+                                            '公開されているSNSはありません',
+                                            style: theme.textTheme.bodyMedium,
+                                          ),
                                 ),
                               ],
                             ),
@@ -273,6 +367,59 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                   ),
                 ],
               ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Row(
+      children: [
+        const Text('▶︎', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionCard({required Widget child}) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade400),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildSocialLinkButton({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String url,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: () => _openExternalUrl(url),
+        icon: Icon(icon),
+        label: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          alignment: Alignment.centerLeft,
+        ),
+      ),
     );
   }
 }

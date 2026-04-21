@@ -1,27 +1,36 @@
-import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:geocoding/geocoding.dart' as geo;
-import 'constants.dart';
-import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
-import 'appconfig.dart';
 import 'spot_apply_confirm_page.dart';
 import 'main.dart';
 
 class SpotApplyFormPage extends StatefulWidget {
-  const SpotApplyFormPage({super.key, required this.lat, required this.lng, this.editMode = false, this.initialKind, this.initialName, this.initialYomi, this.initialAddress, this.initialPrefName, this.initialPrivate, this.initialPortId, this.canModerate = false});
+  const SpotApplyFormPage({
+    super.key,
+    required this.lat,
+    required this.lng,
+    this.editMode = false,
+    this.initialKind,
+    this.initialName,
+    this.initialYomi,
+    this.initialAddress,
+    this.initialPrefName,
+    this.initialPrivate,
+    this.initialPortId,
+    this.applicantUserId,
+    this.canModerate = false,
+  });
   final double lat;
   final double lng;
   final bool editMode; // true のとき編集モード（タイトル差し替え）
   final String? initialKind;
   final String? initialName;
   final String? initialYomi;
-  final String? initialAddress;   // 都道府県を除いた住所
+  final String? initialAddress; // 都道府県を除いた住所
   final String? initialPrefName; // 都道府県名
-  final int? initialPrivate;     // 0/1
-  final int? initialPortId;      // 既存のport_id（編集時）
-  final bool canModerate;        // 承認/非承認を表示可能か（admin からの遷移時のみ true）
+  final int? initialPrivate; // 0/1
+  final int? initialPortId; // 既存のport_id（編集時）
+  final int? applicantUserId; // 申請者 user_id（admin 編集時も保持）
+  final bool canModerate; // 承認/非承認を表示可能か（admin からの遷移時のみ true）
 
   @override
   State<SpotApplyFormPage> createState() => _SpotApplyFormPageState();
@@ -39,7 +48,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   bool _loadingAddr = true;
   bool _submitting = false; // 住所取得・画面内送信は行わないため未使用
   String? _resultMessage; // 未使用（確認画面で表示）
-  bool? _resultOk;        // 未使用（確認画面で表示）
+  bool? _resultOk; // 未使用（確認画面で表示）
   bool _isAdmin = false;
 
   String _normalizeKind(String raw) {
@@ -67,15 +76,15 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
     }
   }
 
-  DropdownMenuItem<String> _kindMenuItem(String value, IconData icon, String label) {
+  DropdownMenuItem<String> _kindMenuItem(
+    String value,
+    IconData icon,
+    String label,
+  ) {
     return DropdownMenuItem<String>(
       value: value,
       child: Row(
-        children: [
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
+        children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(label)],
       ),
     );
   }
@@ -88,18 +97,28 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
       try {
         // 起動時に最新化済みのローカル情報のみ参照（フォーム表示時の再取得はしない）
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
-        if (mounted) setState(() { _isAdmin = ((info.role ?? '').toLowerCase() == 'admin'); });
+        if (mounted)
+          setState(() {
+            _isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+          });
       } catch (_) {}
     })();
     // 初期値が渡された場合はそれを採用し、住所逆引きはスキップ
     bool applied = false;
-    if (widget.initialKind != null || widget.initialName != null || widget.initialYomi != null || widget.initialAddress != null || widget.initialPrefName != null || widget.initialPrivate != null) {
-      if (widget.initialKind != null) _kind = _normalizeKind(widget.initialKind!);
+    if (widget.initialKind != null ||
+        widget.initialName != null ||
+        widget.initialYomi != null ||
+        widget.initialAddress != null ||
+        widget.initialPrefName != null ||
+        widget.initialPrivate != null) {
+      if (widget.initialKind != null)
+        _kind = _normalizeKind(widget.initialKind!);
       if (widget.initialName != null) _nameCtl.text = widget.initialName!;
       if (widget.initialYomi != null) _yomiCtl.text = widget.initialYomi!;
       if (widget.initialAddress != null) _address = widget.initialAddress;
       if (widget.initialPrefName != null) _prefName = widget.initialPrefName;
-      if (widget.initialPrivate != null) _private = (widget.initialPrivate == 1);
+      if (widget.initialPrivate != null)
+        _private = (widget.initialPrivate == 1);
       _loadingAddr = false;
       applied = true;
     }
@@ -109,27 +128,43 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   }
 
   Future<void> _reverseGeocode() async {
-    setState(() { _loadingAddr = true; _address = null; });
+    setState(() {
+      _loadingAddr = true;
+      _address = null;
+    });
     try {
       final list = await geo.placemarkFromCoordinates(widget.lat, widget.lng);
       if (list.isNotEmpty) {
         final p = list.first;
         final pref = (p.administrativeArea ?? '').trim();
         // 日本向けに町名・番地を優先して結合（都道府県は除外して保持）
-        final parts = <String?>[
-          p.locality,           // 市区町村
-          p.subLocality,        // 区・町域
-          p.thoroughfare,       // 丁目・通り
-          p.subThoroughfare,    // 番地
-        ].where((e) => (e ?? '').trim().isNotEmpty).map((e) => e!.trim()).toList();
-        setState(() { _prefName = pref.isNotEmpty ? pref : null; _address = parts.join(' '); });
+        final parts =
+            <String?>[
+                  p.locality, // 市区町村
+                  p.subLocality, // 区・町域
+                  p.thoroughfare, // 丁目・通り
+                  p.subThoroughfare, // 番地
+                ]
+                .where((e) => (e ?? '').trim().isNotEmpty)
+                .map((e) => e!.trim())
+                .toList();
+        setState(() {
+          _prefName = pref.isNotEmpty ? pref : null;
+          _address = parts.join(' ');
+        });
       } else {
-        setState(() { _address = '住所を取得できませんでした'; });
+        setState(() {
+          _address = '住所を取得できませんでした';
+        });
       }
     } catch (_) {
-      setState(() { _address = '住所を取得できませんでした'; });
+      setState(() {
+        _address = '住所を取得できませんでした';
+      });
     } finally {
-      setState(() { _loadingAddr = false; });
+      setState(() {
+        _loadingAddr = false;
+      });
     }
   }
 
@@ -140,17 +175,78 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SpotApplyConfirmPage(
-          kind: _kind,
-          name: _nameCtl.text.trim(),
-          yomi: _yomiCtl.text.trim(),
-          lat: widget.lat,
-          lng: widget.lng,
-          address: addr,
-          prefName: _prefName ?? '',
-          privateFlag: 0,
-          portId: widget.initialPortId,
-        ),
+        builder:
+            (_) => SpotApplyConfirmPage(
+              kind: _kind,
+              name: _nameCtl.text.trim(),
+              yomi: _yomiCtl.text.trim(),
+              lat: widget.lat,
+              lng: widget.lng,
+              address: addr,
+              prefName: _prefName ?? '',
+              privateFlag: 0,
+              portId: widget.initialPortId,
+              applicantUserId: widget.applicantUserId,
+            ),
+      ),
+    );
+  }
+
+  Future<void> _goModerationConfirm({
+    required String title,
+    required int? overrideFlag,
+    required String mailAction,
+  }) async {
+    if (!_formKey.currentState!.validate()) return;
+    final addr = (_address ?? '').toString();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => SpotApplyConfirmPage(
+              kind: _kind,
+              name: _nameCtl.text.trim(),
+              yomi: _yomiCtl.text.trim(),
+              lat: widget.lat,
+              lng: widget.lng,
+              address: addr,
+              prefName: _prefName ?? '',
+              privateFlag: _private ? 1 : 0,
+              portId: widget.initialPortId,
+              applicantUserId: widget.applicantUserId,
+              titleOverride: title,
+              submitLabel: 'メール送信',
+              overrideFlag: overrideFlag,
+              mailAction: mailAction,
+            ),
+      ),
+    );
+  }
+
+  Future<void> _goWithdrawConfirm() async {
+    if (!_formKey.currentState!.validate()) return;
+    final addr = (_address ?? '').toString();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => SpotApplyConfirmPage(
+              kind: _kind,
+              name: _nameCtl.text.trim(),
+              yomi: _yomiCtl.text.trim(),
+              lat: widget.lat,
+              lng: widget.lng,
+              address: addr,
+              prefName: _prefName ?? '',
+              privateFlag: 0,
+              portId: widget.initialPortId,
+              applicantUserId: widget.applicantUserId,
+              titleOverride: '申請取り下げ',
+              submitLabel: '申請取り下げ',
+              overrideFlag: -3,
+            ),
       ),
     );
   }
@@ -158,7 +254,11 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.editMode ? '釣り場申請編集' : '釣り場登録'), backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: Text(widget.editMode ? '釣り場申請編集' : '釣り場登録'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -169,11 +269,17 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
               children: [
                 // 公開/非公開選択は廃止（すべて公開として処理）
                 const SizedBox(height: 12),
-                const Text('釣り場種別', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '釣り場種別',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: (_kind.isEmpty || !_kinds.contains(_kind)) ? null : _kind,
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  value:
+                      (_kind.isEmpty || !_kinds.contains(_kind)) ? null : _kind,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
                   hint: const Text('選択してください'),
                   validator: (v) {
                     if (v == null || v.isEmpty) return '釣り場種別を選択してください';
@@ -189,12 +295,18 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                   onChanged: (v) => setState(() => _kind = v ?? ''),
                 ),
                 const SizedBox(height: 16),
-                const Text('釣り場名（32文字以内）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '釣り場名（32文字以内）',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _nameCtl,
                   maxLength: 32,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '例）〇〇港 南防波堤'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: '例）〇〇港 南防波堤',
+                  ),
                   validator: (v) {
                     final s = (v ?? '').trim();
                     if (s.isEmpty) return '釣り場名を入力してください';
@@ -202,11 +314,17 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                   },
                 ),
                 const SizedBox(height: 12),
-                const Text('釣り場名の読み方（ひらがな）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '釣り場名の読み方（ひらがな）',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
                 TextFormField(
                   controller: _yomiCtl,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'れい）まるまるこう みなみぼうはてい'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'れい）まるまるこう みなみぼうはてい',
+                  ),
                   validator: (v) {
                     final s = (v ?? '').trim();
                     if (s.isEmpty) return '読み方を入力してください';
@@ -216,102 +334,110 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 8),
-                const Text('長押しした位置（参照）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '長押しした位置（参照）',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
                 Text('緯度: ${_fmt(widget.lat)} / 経度: ${_fmt(widget.lng)}'),
                 const SizedBox(height: 8),
-                const Text('住所（参照）', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text(
+                  '住所（参照）',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
                 _loadingAddr
                     ? const Text('住所取得中...')
-                    : Text((() {
+                    : Text(
+                      (() {
                         final pref = (_prefName ?? '').trim();
                         final base = (_address ?? '').trim();
                         if (base.isEmpty) return base;
                         if (base == '住所を取得できませんでした') return base;
                         String short2(String s) {
-                          final parts = s.split(RegExp(r'\s+')).where((e) => e.trim().isNotEmpty).toList();
+                          final parts =
+                              s
+                                  .split(RegExp(r'\s+'))
+                                  .where((e) => e.trim().isNotEmpty)
+                                  .toList();
                           if (parts.isEmpty) return s;
                           final take = parts.take(2).join(' ');
                           return take;
                         }
+
                         final b2 = short2(base);
                         return pref.isNotEmpty ? '$pref $b2' : b2;
-                      })()),
+                      })(),
+                    ),
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
-                      child: widget.editMode && (widget.canModerate && _isAdmin)
-                          ? Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () async {
-                                      if (!_formKey.currentState!.validate()) return;
-                                      final addr = (_address ?? '').toString();
-                                      if (!mounted) return;
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => SpotApplyConfirmPage(
-                                            kind: _kind,
-                                            name: _nameCtl.text.trim(),
-                                            yomi: _yomiCtl.text.trim(),
-                                            lat: widget.lat,
-                                            lng: widget.lng,
-                                            address: addr,
-                                            prefName: _prefName ?? '',
-                                            privateFlag: _private ? 1 : 0,
-                                            portId: widget.initialPortId,
-                                            titleOverride: '承認',
-                                            submitLabel: '承認',
+                      child:
+                          widget.editMode && (widget.canModerate && _isAdmin)
+                              ? Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed:
+                                          () => _goModerationConfirm(
+                                            title: '確認',
+                                            overrideFlag: null,
+                                            mailAction: 'confirm',
+                                          ),
+                                      child: const Text('確認'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed:
+                                          () => _goModerationConfirm(
+                                            title: '承認',
                                             overrideFlag: 1,
+                                            mailAction: 'approve',
                                           ),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text('承認'),
+                                      child: const Text('承認'),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: () async {
-                                      if (!_formKey.currentState!.validate()) return;
-                                      final addr = (_address ?? '').toString();
-                                      if (!mounted) return;
-                                      await Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => SpotApplyConfirmPage(
-                                            kind: _kind,
-                                            name: _nameCtl.text.trim(),
-                                            yomi: _yomiCtl.text.trim(),
-                                            lat: widget.lat,
-                                            lng: widget.lng,
-                                            address: addr,
-                                            prefName: _prefName ?? '',
-                                            privateFlag: _private ? 1 : 0,
-                                            portId: widget.initialPortId,
-                                            titleOverride: '非承認',
-                                            submitLabel: '非承認',
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed:
+                                          () => _goModerationConfirm(
+                                            title: '否認',
                                             overrideFlag: -2,
+                                            mailAction: 'deny',
                                           ),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text('非承認'),
+                                      child: const Text('否認'),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            )
-                          : ElevatedButton(
-                              onPressed: _goConfirm,
-                              child: const Text('確認'),
-                            ),
+                                ],
+                              )
+                              : widget.editMode
+                              ? Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: _goWithdrawConfirm,
+                                      child: const Text('申請取り下げ'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed: _goConfirm,
+                                      child: const Text('確認'),
+                                    ),
+                                  ),
+                                ],
+                              )
+                              : ElevatedButton(
+                                onPressed: _goConfirm,
+                                child: const Text('確認'),
+                              ),
                     ),
                   ],
                 ),

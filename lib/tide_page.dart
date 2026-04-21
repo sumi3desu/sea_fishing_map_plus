@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show ConsumerStatefulWidget, ConsumerState;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'appconfig.dart';
 import 'constants.dart';
 import 'post_detail_page.dart';
-import 'input_post_page.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'common.dart';
@@ -25,6 +27,8 @@ import 'dart:ui' as ui;
 import 'package:geolocator/geolocator.dart';
 import 'spot_apply_form_page.dart';
 import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
+import 'new_account_page.dart';
+import 'providers/premium_state_notifier.dart' as prem;
 
 // 紺（潮汐画面の背景色）
 const Color _navyBg = Color(0xFF001F3F);
@@ -37,11 +41,7 @@ class TidePage extends StatefulWidget {
 }
 
 class TidePageState extends State<TidePage> {
-  // PageView 用のコントローラー。初期ページは 1000 とする（十分大きい数）
-  late final PageController _pageController;
-  // 基準となる日付（最初に読み込んだ tideDate を保持）
-  late DateTime _baseDate;
-  static const int initialPage = 1000;
+  int _lastStartApplyModeTick = Common.instance.startApplyModeTick;
   int _catchRefreshTick = 0;
   int _envRefreshTick = 0;
   final GlobalKey<_FishingInfoPaneState> _fishingPaneKey =
@@ -57,10 +57,6 @@ class TidePageState extends State<TidePage> {
   @override
   void initState() {
     super.initState();
-    // 基準日付を設定。通常、Common.instance.tideDate に初期値が入っている前提
-    _baseDate = Common.instance.tideDate;
-    _pageController = PageController(initialPage: initialPage);
-
     _initData();
 
     // タイマーをセット（60秒ごとに setState() して画面を更新）
@@ -81,31 +77,15 @@ class TidePageState extends State<TidePage> {
     }
 
     final common = Provider.of<Common>(context);
-    //print('TidePage> Provider');
     if (common.shouldJumpPage) {
-      /*print(
-        'TidePage> Provider=${common.tideDate.year}/${common.tideDate.month}/${common.tideDate.day}',
-      );*/
-      _baseDate = common.tideDate;
-      if (_pageController.hasClients) {
-        _pageController.jumpToPage(initialPage);
-      } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (_pageController.hasClients) {
-            _pageController.jumpToPage(initialPage);
-          }
-        });
-      }
-
-      await _initData2(_baseDate);
+      await _initData2(common.tideDate);
       common.shouldJumpPage = false;
     }
   }
 
   Future<void> _initData() async {
-    // 初回の潮汐データ取得（_baseDate を使う）
-    await Common.instance.getTide(true, _baseDate);
+    // 初回の潮汐データ取得
+    await Common.instance.getTide(true, Common.instance.tideDate);
     setState(() {});
   }
 
@@ -133,127 +113,39 @@ class TidePageState extends State<TidePage> {
     } catch (_) {}
   }
 
+  bool get isMapTabSelected => true;
+
+  Future<void> showMapTab() async {}
+
   @override
   void dispose() {
     _timer.cancel();
-    _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final common = Provider.of<Common>(context);
+    if (common.startApplyModeTick != _lastStartApplyModeTick) {
+      _lastStartApplyModeTick = common.startApplyModeTick;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || Common.instance.fishingDiaryMode) return;
+        await showMapTab();
+        if (!mounted) return;
+        await _fishingPaneKey.currentState?.enterApplyMode();
+      });
+    }
 
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final totalHeight = constraints.maxHeight;
-          const double tabBarHeight = kTextTabBarHeight; // 48
-          final double contentHeight = (totalHeight - tabBarHeight).clamp(
-            0,
-            totalHeight,
-          );
-
-          return DefaultTabController(
-            length: 2,
-            child: Column(
-              children: [
-                // タブバー（白背景、左にアイコン+テキスト）
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onHorizontalDragStart: (_) {},
-                  onHorizontalDragUpdate: (_) {},
-                  onHorizontalDragEnd: (_) {},
-                  child: Container(
-                    color: Colors.white,
-                    child: const TabBar(
-                      indicatorColor: Colors.black,
-                      labelColor: Colors.black,
-                      unselectedLabelColor: Colors.black54,
-                      tabs: [
-                        Tab(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.map),
-                              SizedBox(width: 6),
-                              Text('地図'),
-                            ],
-                          ),
-                        ),
-                        Tab(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.waves),
-                              SizedBox(width: 6),
-                              Text('潮汐'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      // 地図（全面表示）
-                      _FishingInfoPane(
-                        key: _fishingPaneKey,
-                        height: contentHeight,
-                      ),
-                      // 潮汐（スワイプ可能）
-                      _TideTab(height: contentHeight),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          return _FishingInfoPane(
+            key: _fishingPaneKey,
+            height: constraints.maxHeight,
           );
         },
       ),
     );
-  }
-}
-
-class _TideTab extends StatefulWidget {
-  const _TideTab({Key? key, required this.height}) : super(key: key);
-  final double height;
-  @override
-  State<_TideTab> createState() => _TideTabState();
-}
-
-class _TideTabState extends State<_TideTab> {
-  late final PageController _controller;
-  late DateTime _baseDate;
-  @override
-  void initState() {
-    super.initState();
-    _baseDate = Common.instance.tideDate;
-    _controller = PageController(initialPage: 1000);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // 日付変更画面などからの外部更新（shouldJumpPage）にのみ反応して基準日付を更新
-    final shouldJump = Provider.of<Common>(context).shouldJumpPage;
-    if (shouldJump) {
-      final cur = Common.instance.tideDate;
-      if (cur.year != _baseDate.year ||
-          cur.month != _baseDate.month ||
-          cur.day != _baseDate.day) {
-        _baseDate = cur;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (_controller.hasClients) {
-            _controller.jumpToPage(1000);
-          }
-        });
-      }
-    }
-    return _TideHomePage(controller: _controller, baseDate: _baseDate);
   }
 }
 
@@ -276,10 +168,10 @@ class _CatchTab extends StatelessWidget {
         // 固定の注意テキスト（スクロール対象外）
         SizedBox(
           height: rowHeight,
-          child: const ColoredBox(
+          child: ColoredBox(
             color: Colors.white,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -1368,6 +1260,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Set<int> _myCatchSpotIds = <int>{};
   int? _latestMyCatchSpotId;
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+  int _lastAmbiguousPlevel = ambiguous_plevel;
   // 潮汐オーバーレイ表示とスワイプ用
   bool _showTideOverlay = false;
   late PageController _tidePageController;
@@ -1380,6 +1273,27 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   gm.LatLng? _gmApplyPoint; // GoogleMap 用
   bool _applyMode = false; // 「釣り場申請」ボタン押下後の指定モード
   bool _isSatellite = false; // Google Maps 用 衛星表示トグル
+
+  Future<bool> _ensureEmailVerified({
+    bool returnToInputPost = false,
+    String? authPurposeLabel,
+  }) async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (info.email.trim().isNotEmpty) return true;
+    } catch (_) {}
+    if (!mounted) return false;
+    final res = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => NewAccountPage(
+              returnToInputPost: returnToInputPost,
+              authPurposeLabel: authPurposeLabel,
+            ),
+      ),
+    );
+    return res == true;
+  }
 
   void reloadPostList() {
     if (mounted)
@@ -1408,7 +1322,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             : Common.instance.tidePoint;
     String display = spotName;
     try {
-      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final rows = await _visibleTeibouRows();
       Map<String, dynamic>? row;
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -1441,10 +1355,38 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return display;
   }
 
+  bool _shouldHideOtherPendingSpotRow(Map<String, dynamic> row, int userId) {
+    final int? flag =
+        row['flag'] is int
+            ? row['flag'] as int
+            : int.tryParse(row['flag']?.toString() ?? '');
+    if (flag == -3) return true;
+    if (flag != -1) return false;
+    final int? ownerId =
+        row['user_id'] is int
+            ? row['user_id'] as int
+            : int.tryParse(row['user_id']?.toString() ?? '');
+    if (userId <= 0) return true;
+    return ownerId == null || ownerId != userId;
+  }
+
+  Future<List<Map<String, dynamic>>> _visibleTeibouRows() async {
+    final rows = await SioDatabase().getAllTeibouWithPrefecture();
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final uid = info.userId;
+      return rows
+          .where((r) => !_shouldHideOtherPendingSpotRow(r, uid))
+          .toList();
+    } catch (_) {
+      return rows.where((r) => !_shouldHideOtherPendingSpotRow(r, 0)).toList();
+    }
+  }
+
   Future<void> _onViewLongPress(double llat, double llng) async {
     if (Common.instance.fishingDiaryMode) return;
     try {
-      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final rows = await _visibleTeibouRows();
       double best = double.infinity;
       Map<String, dynamic>? bestRow;
       const double d2r = 3.141592653589793 / 180.0;
@@ -1454,7 +1396,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             r['flag'] is int
                 ? r['flag'] as int
                 : int.tryParse(r['flag']?.toString() ?? '');
-        if (flag == -2) continue; // 非承認は除外
+        if (flag == -2 || flag == -3) continue; // 非承認/取り下げは除外
         final dlat = _toDouble(r['latitude']);
         final dlng = _toDouble(r['longitude']);
         if (dlat == null || dlng == null) continue;
@@ -1505,6 +1447,151 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     } catch (_) {}
   }
 
+  Future<bool> _openSpotApplyEdit({
+    required Map<String, dynamic> row,
+    required double lat,
+    required double lng,
+    required String name,
+    required int? portId,
+  }) async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final bool isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+      final int? owner =
+          row['user_id'] is int
+              ? row['user_id'] as int
+              : int.tryParse(row['user_id']?.toString() ?? '');
+      if (!(isAdmin || (owner != null && owner == info.userId))) return false;
+      final prefName = (row['todoufuken_name'] ?? '').toString();
+      if (!mounted) return true;
+      final res = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) => SpotApplyFormPage(
+                lat: lat,
+                lng: lng,
+                editMode: true,
+                initialKind: (row['kubun'] ?? '').toString(),
+                initialName: name,
+                initialYomi:
+                    (row['j_yomi'] ?? row['furigana'] ?? '').toString(),
+                initialAddress: (row['address'] ?? '').toString(),
+                initialPrefName: prefName,
+                initialPrivate:
+                    (row['private'] is int)
+                        ? row['private'] as int
+                        : int.tryParse(row['private']?.toString() ?? '0'),
+                initialPortId: portId,
+                applicantUserId: owner,
+                canModerate: isAdmin,
+              ),
+        ),
+      );
+      if (res == true && mounted) {
+        setState(() {
+          _applyMode = false;
+          _applyPoint = null;
+          _gmApplyPoint = null;
+          try {
+            _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+          } catch (_) {}
+        });
+        return true;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _selectSpot({
+    required String name,
+    required double lat,
+    required double lng,
+    required int? portId,
+    required int? prefId,
+    required double radiusKm,
+  }) async {
+    String? np;
+    if (!_pointsLoading && _pointCoords.isNotEmpty) {
+      np = _nearestPointName(lat, lng);
+    }
+    if (np != null) {
+      Common.instance.tidePoint = np;
+      await Common.instance.savePoint(np);
+    }
+    await Common.instance.saveSelectedTeibou(
+      name,
+      np ?? (Common.instance.tidePoint),
+      id: portId,
+      lat: lat,
+      lng: lng,
+      prefId: prefId,
+    );
+    Common.instance.shouldJumpPage = true;
+    Common.instance.notify();
+    await _loadMarkers(
+      centerName: name,
+      lat: lat,
+      lng: lng,
+      radiusKm: radiusKm,
+    );
+    if (mounted) {
+      setState(() {
+        _sheetReloadTick++;
+      });
+    }
+    if (_safeSheetSize() <= 0.01) {
+      _recreateSheet(show: true);
+    } else {
+      _ensureSheetVisible(ifHiddenOnly: true);
+    }
+  }
+
+  Future<void> _handleSpotTap({
+    required bool isSelected,
+    required bool isPending,
+    required Map<String, dynamic> row,
+    required String name,
+    required double lat,
+    required double lng,
+    required int? portId,
+    required int? prefId,
+    required double radiusKm,
+  }) async {
+    if (!isSelected) {
+      await _selectSpot(
+        name: name,
+        lat: lat,
+        lng: lng,
+        portId: portId,
+        prefId: prefId,
+        radiusKm: radiusKm,
+      );
+      return;
+    }
+    if (_applyMode && isPending) {
+      final handled = await _openSpotApplyEdit(
+        row: row,
+        lat: lat,
+        lng: lng,
+        name: name,
+        portId: portId,
+      );
+      if (handled) return;
+    }
+    await _showCurrentSpotInfoDialog();
+  }
+
+  int? _rowPrefId(Map<String, dynamic>? row) {
+    if (row == null) return null;
+    return row['todoufuken_id'] is int
+        ? row['todoufuken_id'] as int
+        : int.tryParse(row['todoufuken_id']?.toString() ?? '') ??
+            int.tryParse(row['pref_id_from_port']?.toString() ?? '');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1528,6 +1615,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   void _onCommonChanged() {
+    if (Common.instance.fishingDiaryMode && _applyMode) {
+      setState(() {
+        _applyMode = false;
+        _applyPoint = null;
+        _gmApplyPoint = null;
+        try {
+          _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+        } catch (_) {}
+      });
+    }
     // 堤防選択が変わった可能性があるため再準備
     _prepare();
     // 再表示や選択変更時、非表示ならシートを下部に出す
@@ -1553,13 +1650,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final lat = Common.instance.selectedTeibouLat;
     final lng = Common.instance.selectedTeibouLng;
     final diaryModeChanged = _lastFishingDiaryMode != diaryMode;
+    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
     double useLat = lat;
     double useLng = lng;
     String useName = name;
     // 追加フォールバック: 緯度経度が未保存だが名前やIDが保存されている場合、DBから取得して補完
     if ((useLat == 0.0 && useLng == 0.0) && useName.isNotEmpty) {
       try {
-        final rows = await SioDatabase().getAllTeibouWithPrefecture();
+        final rows = await _visibleTeibouRows();
         Map<String, dynamic>? hit;
         try {
           final prefs = await SharedPreferences.getInstance();
@@ -1619,12 +1717,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (_lastLat != useLat ||
           _lastLng != useLng ||
           _lastName != useName ||
-          diaryModeChanged) {
+          diaryModeChanged ||
+          ambiguousChanged) {
         _center = LatLng(useLat, useLng);
         _lastLat = useLat;
         _lastLng = useLng;
         _lastName = useName;
         _lastFishingDiaryMode = diaryMode;
+        _lastAmbiguousPlevel = ambiguous_plevel;
         await _loadMarkers(
           centerName: useName,
           lat: useLat,
@@ -1675,12 +1775,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         if (_lastLat != fallbackLat ||
             _lastLng != fallbackLng ||
             _lastName != fallbackName ||
-            diaryModeChanged) {
+            diaryModeChanged ||
+            ambiguousChanged) {
           _center = LatLng(fallbackLat, fallbackLng);
           _lastLat = fallbackLat;
           _lastLng = fallbackLng;
           _lastName = fallbackName;
           _lastFishingDiaryMode = diaryMode;
+          _lastAmbiguousPlevel = ambiguous_plevel;
           await _loadMarkers(
             centerName: fallbackName,
             lat: fallbackLat,
@@ -1722,6 +1824,50 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         setState(() {});
       }
     }
+  }
+
+  Future<bool> enterApplyMode() async {
+    if (_applyMode) return true;
+    final verified = await _ensureEmailVerified(authPurposeLabel: '釣り場登録');
+    if (!verified) return false;
+    final bool newMode = true;
+    setState(() {
+      _applyMode = newMode;
+      _applyPoint = null;
+      _gmApplyPoint = null;
+      try {
+        _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+      } catch (_) {}
+    });
+    _lastLat = null;
+    _lastLng = null;
+    _lastName = '';
+    await _prepare();
+    return true;
+  }
+
+  Future<bool> exitApplyMode() async {
+    if (!_applyMode) return true;
+    setState(() {
+      _applyMode = false;
+      _applyPoint = null;
+      _gmApplyPoint = null;
+      try {
+        _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
+      } catch (_) {}
+    });
+    _lastLat = null;
+    _lastLng = null;
+    _lastName = '';
+    await _prepare();
+    return true;
+  }
+
+  Future<bool> toggleApplyMode() async {
+    if (_applyMode) {
+      return exitApplyMode();
+    }
+    return enterApplyMode();
   }
 
   Future<void> _initLocation() async {
@@ -1772,7 +1918,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     _gmMarkers.clear();
     _gmPolylines.clear();
     _gmCircles.clear();
-    final rows = await SioDatabase().getAllTeibouWithPrefecture();
+    final rows = await _visibleTeibouRows();
     var center = LatLng(lat, lng);
     double maxDkm = 0.0; // 外接円半径計算用
     // 中心マーカー（お気に入りなら拡大＆太字）
@@ -1839,13 +1985,69 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               ? centerRow['flag'] as int
               : int.tryParse(centerRow['flag']?.toString() ?? '');
       centerPending = (flag == -1);
-      centerRejected = (flag == -2);
+      centerRejected = (flag == -2 || flag == -3);
       final dlat1 = _toDouble(centerRow['latitude']);
       final dlng1 = _toDouble(centerRow['longitude']);
       if (dlat1 != null && dlng1 != null) {
         center = LatLng(dlat1, dlng1);
       }
       cn = (centerRow['port_name'] ?? cn).toString();
+    }
+    if (centerRow == null && rows.isNotEmpty) {
+      double best = double.infinity;
+      Map<String, dynamic>? bestRow;
+      const double d2r = 3.141592653589793 / 180.0;
+      final rlat = lat * d2r;
+      for (final r in rows) {
+        final dlat0 = _toDouble(r['latitude']);
+        final dlng0 = _toDouble(r['longitude']);
+        if (dlat0 == null || dlng0 == null) continue;
+        final d = _haversine(lat, lng, dlat0, dlng0, cosLat: rlat);
+        if (d < best) {
+          best = d;
+          bestRow = r;
+        }
+      }
+      if (bestRow != null) {
+        centerRow = bestRow;
+        centerPortId =
+            bestRow['port_id'] is int
+                ? bestRow['port_id'] as int
+                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+        final dlat1 = _toDouble(bestRow['latitude']);
+        final dlng1 = _toDouble(bestRow['longitude']);
+        if (dlat1 != null && dlng1 != null) {
+          center = LatLng(dlat1, dlng1);
+        }
+        cn = (bestRow['port_name'] ?? cn).toString();
+        final int? f =
+            bestRow['flag'] is int
+                ? bestRow['flag'] as int
+                : int.tryParse(bestRow['flag']?.toString() ?? '');
+        centerPending = (f == -1);
+        centerRejected = (f == -2 || f == -3);
+        try {
+          String? np;
+          if (!_pointsLoading && _pointCoords.isNotEmpty) {
+            np = _nearestPointName(center.latitude, center.longitude);
+          }
+          final int? prefId =
+              bestRow['todoufuken_id'] is int
+                  ? bestRow['todoufuken_id'] as int
+                  : int.tryParse(bestRow['todoufuken_id']?.toString() ?? '') ??
+                      int.tryParse(
+                        bestRow['pref_id_from_port']?.toString() ?? '',
+                      );
+          await Common.instance.saveSelectedTeibou(
+            cn,
+            np ?? (Common.instance.tidePoint),
+            id: centerPortId,
+            lat: center.latitude,
+            lng: center.longitude,
+            prefId: prefId,
+          );
+        } catch (_) {}
+      }
     }
     // フォールバック: 厳密一致で見つからなかった場合、選択IDや名前から再判定
     if (!centerPending && !centerRejected) {
@@ -1875,7 +2077,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   ? rr['flag'] as int
                   : int.tryParse(rr['flag']?.toString() ?? '');
           centerPending = (f == -1);
-          centerRejected = (f == -2);
+          centerRejected = (f == -2 || f == -3);
           centerPortId ??=
               rr['port_id'] is int
                   ? rr['port_id'] as int
@@ -1902,7 +2104,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             r['flag'] is int
                 ? r['flag'] as int
                 : int.tryParse(r['flag']?.toString() ?? '');
-        if (flag == -2) continue;
+        if (flag == -2 || flag == -3) continue;
         final dlat0 = _toDouble(r['latitude']);
         final dlng0 = _toDouble(r['longitude']);
         if (dlat0 == null || dlng0 == null) continue;
@@ -1979,8 +2181,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               ? r['flag'] as int
               : int.tryParse(r['flag']?.toString() ?? '');
       final bool isPending = flag == -1;
-      // 非承認は非表示
-      if (flag == -2) {
+      // 非承認/取り下げは非表示
+      if (flag == -2 || flag == -3) {
         continue;
       }
       final displayName = isPending ? '$name (申請中)' : name;
@@ -2017,99 +2219,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             point: LatLng(dlat, dlng),
             child: GestureDetector(
               onTap: () async {
-                // 申請中ピンを編集（申請者本人 or 管理者）
-                if (_applyMode && isPending) {
-                  try {
-                    final info =
-                        await loadUserInfo() ?? await getOrInitUserInfo();
-                    final bool isAdmin =
-                        ((info.role ?? '').toLowerCase() == 'admin');
-                    final int? owner =
-                        r['user_id'] is int
-                            ? r['user_id'] as int
-                            : int.tryParse(r['user_id']?.toString() ?? '');
-                    if (isAdmin || (owner != null && owner == info.userId)) {
-                      final prefName = (r['todoufuken_name'] ?? '').toString();
-                      if (!mounted) return;
-                      final res = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (_) => SpotApplyFormPage(
-                                lat: dlat,
-                                lng: dlng,
-                                editMode: true,
-                                initialKind: (r['kubun'] ?? '').toString(),
-                                initialName: name,
-                                initialYomi:
-                                    (r['j_yomi'] ?? r['furigana'] ?? '')
-                                        .toString(),
-                                initialAddress: (r['address'] ?? '').toString(),
-                                initialPrefName: prefName,
-                                initialPrivate:
-                                    (r['private'] is int)
-                                        ? r['private'] as int
-                                        : int.tryParse(
-                                          r['private']?.toString() ?? '0',
-                                        ),
-                                initialPortId: portId,
-                                canModerate: isAdmin,
-                              ),
-                        ),
-                      );
-                      if (res == true && mounted) {
-                        setState(() {
-                          _applyMode = false;
-                          _applyPoint = null;
-                          _gmApplyPoint = null;
-                          try {
-                            _gmMarkers.removeWhere(
-                              (m) => m.markerId.value == 'apply',
-                            );
-                          } catch (_) {}
-                        });
-                      }
-                      return;
-                    }
-                  } catch (_) {}
-                }
-                // 近隣ポイントへ選択切替（一覧と同じ挙動）
-                String? np;
-                if (!_pointsLoading && _pointCoords.isNotEmpty) {
-                  np = _nearestPointName(dlat, dlng);
-                }
-                if (np != null) {
-                  Common.instance.tidePoint = np;
-                  await Common.instance.savePoint(np);
-                }
-                await Common.instance.saveSelectedTeibou(
-                  name,
-                  np ?? (Common.instance.tidePoint),
-                  id: portId,
+                await _handleSpotTap(
+                  isSelected: isSameAsCenter,
+                  isPending: isPending,
+                  row: r,
+                  name: name,
                   lat: dlat,
                   lng: dlng,
+                  portId: portId,
                   prefId: prefId,
-                );
-                Common.instance.shouldJumpPage = true;
-                Common.instance.notify();
-                // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
-                // マーカーを再構築
-                await _loadMarkers(
-                  centerName: name,
-                  lat: dlat,
-                  lng: dlng,
                   radiusKm: radiusKm,
                 );
-                // 投稿一覧リロード。シートが非表示なら再表示、表示中はサイズ維持
-                if (mounted)
-                  setState(() {
-                    _sheetReloadTick++;
-                  });
-                if (_safeSheetSize() <= 0.01) {
-                  _recreateSheet(show: true);
-                } else {
-                  _ensureSheetVisible(ifHiddenOnly: true);
-                }
               },
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -2179,6 +2299,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           gm.Marker(
             markerId: gm.MarkerId('n${portId ?? name}'),
             position: gm.LatLng(dlat, dlng),
+            consumeTapEvents: true,
             infoWindow: gm.InfoWindow(
               title: displayName,
               snippet: () {
@@ -2190,6 +2311,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       return 'ユーザ申請中';
                     case -2:
                       return 'ユーザ申請非承認';
+                    case -3:
+                      return 'ユーザ申請取り下げ';
                     case 1:
                       return 'ユーザ登録承認ずみ';
                     default:
@@ -2222,106 +2345,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     )
                     : gm.BitmapDescriptor.defaultMarker,
             onTap: () async {
-              if (_applyMode && isPending) {
-                try {
-                  final info =
-                      await loadUserInfo() ?? await getOrInitUserInfo();
-                  final bool isAdmin =
-                      ((info.role ?? '').toLowerCase() == 'admin');
-                  final int? owner =
-                      r['user_id'] is int
-                          ? r['user_id'] as int
-                          : int.tryParse(r['user_id']?.toString() ?? '');
-                  if (isAdmin || (owner != null && owner == info.userId)) {
-                    final prefName = (r['todoufuken_name'] ?? '').toString();
-                    if (!mounted) return;
-                    final res = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => SpotApplyFormPage(
-                              lat: dlat,
-                              lng: dlng,
-                              editMode: true,
-                              initialKind: (r['kubun'] ?? '').toString(),
-                              initialName: name,
-                              initialYomi:
-                                  (r['j_yomi'] ?? r['furigana'] ?? '')
-                                      .toString(),
-                              initialAddress: (r['address'] ?? '').toString(),
-                              initialPrefName: prefName,
-                              initialPrivate:
-                                  (r['private'] is int)
-                                      ? r['private'] as int
-                                      : int.tryParse(
-                                        r['private']?.toString() ?? '0',
-                                      ),
-                              initialPortId: portId,
-                              canModerate: isAdmin,
-                            ),
-                      ),
-                    );
-                    if (res == true && mounted) {
-                      setState(() {
-                        _applyMode = false;
-                        _applyPoint = null;
-                        _gmApplyPoint = null;
-                        try {
-                          _gmMarkers.removeWhere(
-                            (m) => m.markerId.value == 'apply',
-                          );
-                        } catch (_) {}
-                      });
-                      try {
-                        await _loadMarkers(
-                          centerName: name,
-                          lat: dlat,
-                          lng: dlng,
-                          radiusKm: radiusKm,
-                        );
-                      } catch (_) {}
-                      if (mounted) setState(() {});
-                    }
-                    return;
-                  }
-                } catch (_) {}
-              }
-              // 近隣ポイントへ選択切替
-              String? np;
-              if (!_pointsLoading && _pointCoords.isNotEmpty) {
-                np = _nearestPointName(dlat, dlng);
-              }
-              if (np != null) {
-                Common.instance.tidePoint = np;
-                await Common.instance.savePoint(np);
-              }
-              await Common.instance.saveSelectedTeibou(
-                name,
-                np ?? (Common.instance.tidePoint),
-                id: portId,
+              await _handleSpotTap(
+                isSelected: isSameAsCenter,
+                isPending: isPending,
+                row: r,
+                name: name,
                 lat: dlat,
                 lng: dlng,
+                portId: portId,
                 prefId: prefId,
-              );
-              Common.instance.shouldJumpPage = true;
-              Common.instance.notify();
-              // カメラ移動は _onCommonChanged からの _prepare() に委ねる（重複移動を避ける）
-              // マーカー再構築
-              await _loadMarkers(
-                centerName: name,
-                lat: dlat,
-                lng: dlng,
                 radiusKm: radiusKm,
               );
-              if (mounted)
-                setState(() {
-                  _sheetReloadTick++;
-                });
-              if (_safeSheetSize() <= 0.01) {
-                _recreateSheet(show: true);
-              } else {
-                _ensureSheetVisible(ifHiddenOnly: true);
-              }
             },
             zIndex: 0,
           ),
@@ -2338,162 +2372,54 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           point: center,
           child: GestureDetector(
             onTap: () async {
-              if (_applyMode && centerPending) {
-                try {
-                  final info =
-                      await loadUserInfo() ?? await getOrInitUserInfo();
-                  final bool isAdmin =
-                      ((info.role ?? '').toLowerCase() == 'admin');
-                  // 対応する行を検索（port_id 最優先）
-                  Map<String, dynamic>? cr;
-                  if (centerPortId != null) {
-                    for (final r in rows) {
-                      final rid =
-                          r['port_id'] is int
-                              ? r['port_id'] as int
-                              : int.tryParse(r['port_id']?.toString() ?? '');
-                      if (rid == centerPortId) {
-                        cr = r;
-                        break;
-                      }
-                    }
-                  }
-                  if (cr == null) {
-                    for (final r in rows) {
-                      final n = (r['port_name'] ?? '').toString();
-                      final dlat0 = _toDouble(r['latitude']);
-                      final dlng0 = _toDouble(r['longitude']);
-                      if (dlat0 == null || dlng0 == null) continue;
-                      if ((n == centerName) ||
-                          ((dlat0 - lat).abs() < 1e-8 &&
-                              (dlng0 - lng).abs() < 1e-8)) {
-                        cr = r;
-                        break;
-                      }
-                    }
-                  }
-                  final int? owner =
-                      cr == null
-                          ? null
-                          : (cr['user_id'] is int
-                              ? cr['user_id'] as int
-                              : int.tryParse(cr['user_id']?.toString() ?? ''));
-                  if (isAdmin || (owner != null && owner == info.userId)) {
-                    final prefName =
-                        cr == null
-                            ? ''
-                            : (cr['todoufuken_name'] ?? '').toString();
-                    if (!mounted) return;
-                    final res = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => SpotApplyFormPage(
-                              lat: center.latitude,
-                              lng: center.longitude,
-                              editMode: true,
-                              initialKind:
-                                  cr == null
-                                      ? ''
-                                      : (cr['kubun'] ?? '').toString(),
-                              initialName: centerName,
-                              initialYomi:
-                                  cr == null
-                                      ? ''
-                                      : (cr['j_yomi'] ?? cr['furigana'] ?? '')
-                                          .toString(),
-                              initialAddress:
-                                  cr == null
-                                      ? ''
-                                      : (cr['address'] ?? '').toString(),
-                              initialPrefName: prefName,
-                              initialPrivate:
-                                  cr == null
-                                      ? 0
-                                      : ((cr['private'] is int)
-                                          ? cr['private'] as int
-                                          : int.tryParse(
-                                                cr['private']?.toString() ??
-                                                    '0',
-                                              ) ??
-                                              0),
-                              initialPortId:
-                                  cr == null
-                                      ? null
-                                      : (cr['port_id'] is int
-                                          ? cr['port_id'] as int
-                                          : int.tryParse(
-                                            cr['port_id']?.toString() ?? '',
-                                          )),
-                              canModerate: isAdmin,
-                            ),
-                      ),
-                    );
-                    if (res == true && mounted) {
-                      setState(() {
-                        _applyMode = false;
-                        _applyPoint = null;
-                        _gmApplyPoint = null;
-                        try {
-                          _gmMarkers.removeWhere(
-                            (m) => m.markerId.value == 'apply',
-                          );
-                        } catch (_) {}
-                      });
-                      try {
-                        await _loadMarkers(
-                          centerName: centerName,
-                          lat: center.latitude,
-                          lng: center.longitude,
-                          radiusKm: 30.0,
-                        );
-                      } catch (_) {}
-                      if (mounted) setState(() {});
-                    }
-                    return;
-                  }
-                } catch (_) {}
-              }
+              await _handleSpotTap(
+                isSelected: true,
+                isPending: centerPending,
+                row: centerRow ?? <String, dynamic>{},
+                name: centerName,
+                lat: center.latitude,
+                lng: center.longitude,
+                portId: centerPortId,
+                prefId: _rowPrefId(centerRow),
+                radiusKm: 30.0,
+              );
             },
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  onTap: _showCurrentSpotInfoDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 2),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (centerPortId != null &&
+                          _myCatchSpotIds.contains(centerPortId)) ...[
+                        _buildMyCatchBadge(),
+                        const SizedBox(width: 4),
                       ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (centerPortId != null &&
-                            _myCatchSpotIds.contains(centerPortId)) ...[
-                          _buildMyCatchBadge(),
-                          const SizedBox(width: 4),
-                        ],
-                        Flexible(
-                          child: Text(
-                            centerPending ? '$cn (申請中)' : cn,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              color: Colors.black87,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                      Flexible(
+                        child: Text(
+                          centerPending ? '$cn (申請中)' : cn,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w600,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 Icon(
@@ -2513,116 +2439,23 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         gm.Marker(
           markerId: const gm.MarkerId('c'),
           position: gm.LatLng(center.latitude, center.longitude),
+          consumeTapEvents: true,
           infoWindow: gm.InfoWindow(
             title: centerPending ? '$cn (申請中)' : cn,
             snippet: '中心',
           ),
           onTap: () async {
-            if (_applyMode && centerPending) {
-              try {
-                final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                final bool isAdmin =
-                    ((info.role ?? '').toLowerCase() == 'admin');
-                // port_id 最優先で検索
-                Map<String, dynamic>? cr;
-                if (centerPortId != null) {
-                  for (final r in rows) {
-                    final rid =
-                        r['port_id'] is int
-                            ? r['port_id'] as int
-                            : int.tryParse(r['port_id']?.toString() ?? '');
-                    if (rid == centerPortId) {
-                      cr = r;
-                      break;
-                    }
-                  }
-                }
-                if (cr == null) {
-                  for (final r in rows) {
-                    final n = (r['port_name'] ?? '').toString();
-                    final dlat0 = _toDouble(r['latitude']);
-                    final dlng0 = _toDouble(r['longitude']);
-                    if (dlat0 == null || dlng0 == null) continue;
-                    if ((n == centerName) ||
-                        ((dlat0 - lat).abs() < 1e-8 &&
-                            (dlng0 - lng).abs() < 1e-8)) {
-                      cr = r;
-                      break;
-                    }
-                  }
-                }
-                final int? owner =
-                    cr == null
-                        ? null
-                        : (cr['user_id'] is int
-                            ? cr['user_id'] as int
-                            : int.tryParse(cr['user_id']?.toString() ?? ''));
-                if (isAdmin || (owner != null && owner == info.userId)) {
-                  final prefName =
-                      cr == null
-                          ? ''
-                          : (cr['todoufuken_name'] ?? '').toString();
-                  if (!mounted) return;
-                  final res = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (_) => SpotApplyFormPage(
-                            lat: center.latitude,
-                            lng: center.longitude,
-                            editMode: true,
-                            initialKind:
-                                cr == null
-                                    ? ''
-                                    : (cr['kubun'] ?? '').toString(),
-                            initialName: centerName,
-                            initialYomi:
-                                cr == null
-                                    ? ''
-                                    : (cr['j_yomi'] ?? cr['furigana'] ?? '')
-                                        .toString(),
-                            initialAddress:
-                                cr == null
-                                    ? ''
-                                    : (cr['address'] ?? '').toString(),
-                            initialPrefName: prefName,
-                            initialPrivate:
-                                cr == null
-                                    ? 0
-                                    : ((cr['private'] is int)
-                                        ? cr['private'] as int
-                                        : int.tryParse(
-                                              cr['private']?.toString() ?? '0',
-                                            ) ??
-                                            0),
-                            initialPortId:
-                                cr == null
-                                    ? null
-                                    : (cr['port_id'] is int
-                                        ? cr['port_id'] as int
-                                        : int.tryParse(
-                                          cr['port_id']?.toString() ?? '',
-                                        )),
-                            canModerate: isAdmin,
-                          ),
-                    ),
-                  );
-                  if (res == true && mounted) {
-                    setState(() {
-                      _applyMode = false;
-                      _applyPoint = null;
-                      _gmApplyPoint = null;
-                      try {
-                        _gmMarkers.removeWhere(
-                          (m) => m.markerId.value == 'apply',
-                        );
-                      } catch (_) {}
-                    });
-                  }
-                  return;
-                }
-              } catch (_) {}
-            }
+            await _handleSpotTap(
+              isSelected: true,
+              isPending: centerPending,
+              row: centerRow ?? <String, dynamic>{},
+              name: centerName,
+              lat: center.latitude,
+              lng: center.longitude,
+              portId: centerPortId,
+              prefId: _rowPrefId(centerRow),
+              radiusKm: 30.0,
+            );
           },
           zIndex: 1000,
         ),
@@ -2897,7 +2730,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   // 釣り場名の上部オーバーレイは廃止（選択ピン上のラベルで代替）
                   // 左上（同じY位置）にモード表示バッジ
                   Positioned(
-                    top: 70,
+                    top: 8,
                     right: 8,
                     child: GestureDetector(
                       onTap: _showModeInfoDialog,
@@ -2932,12 +2765,41 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.info_outline,
-                              size: 16,
-                              color: Colors.black54,
-                            ),
+                            if (_applyMode) ...[
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () async {
+                                  await exitApplyMode();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.9),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.black26),
+                                  ),
+                                  child: const Text(
+                                    'キャンセル',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ] else ...[
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: Colors.black54,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -3291,6 +3153,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       );
     }
 
+    if (baseMap != 2) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -3299,67 +3165,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // お気に入り：ブックマーク
-          item(
-            icon: const Icon(Icons.bookmark_border, color: Colors.black87),
-            label: 'お気に入り',
-            onTap: () => _onToggleFavorite(context),
-          ),
-          // 釣り場申請：長押し案内
           item(
             icon: Icon(
-              Icons.add_location_alt,
-              color: _applyMode ? Colors.deepPurple : Colors.black87,
+              _isSatellite ? Icons.satellite_alt : Icons.satellite_alt_outlined,
+              color: Colors.black87,
             ),
-            label: _applyMode ? '釣り場登録中...' : '釣り場登録',
-            onTap: () {
-              // 先に新しいモードを決定してから setState に渡す
-              final bool newMode = !_applyMode;
-              setState(() {
-                _applyMode = newMode;
-                if (!newMode) {
-                  // 申請モード解除時は申請ピンを消す
-                  _applyPoint = null;
-                  _gmApplyPoint = null;
-                  try {
-                    _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
-                  } catch (_) {}
-                }
-              });
-              /*
-              if (newMode) {
-                final messenger = ScaffoldMessenger.maybeOf(context);
-                messenger?.showSnackBar(
-                  const SnackBar(
-                    content: Text('新規釣り場申請したいポイントを長押ししてください'),
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-              }
-*/
-            },
+            label: '衛星表示',
+            onTap:
+                () => setState(() {
+                  _isSatellite = !_isSatellite;
+                }),
           ),
-          // 経路表示：車
-          item(
-            icon: const Icon(Icons.directions_car, color: Colors.black87),
-            label: '経路表示',
-            onTap: () => _onOpenRoute(context),
-          ),
-          // 衛星表示（Google Maps のみ表示）
-          if (baseMap == 2)
-            item(
-              icon: Icon(
-                _isSatellite
-                    ? Icons.satellite_alt
-                    : Icons.satellite_alt_outlined,
-                color: Colors.black87,
-              ),
-              label: '衛星表示',
-              onTap:
-                  () => setState(() {
-                    _isSatellite = !_isSatellite;
-                  }),
-            ),
         ],
       ),
     );
@@ -3394,6 +3210,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       // 現在の登録状態を判定
       final favs = await SioDatabase().getFavoriteTeibouIds();
       final isFav = favs.contains(portId);
+      if (!isFav) {
+        final verified = await _ensureEmailVerified(authPurposeLabel: 'お気に入り');
+        if (!verified) return;
+      }
       if (isFav) {
         await SioDatabase().removeFavoriteTeibou(portId);
       } else {
@@ -3760,7 +3580,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           Common.instance.selectedTeibouName.isNotEmpty
               ? Common.instance.selectedTeibouName
               : Common.instance.tidePoint;
-      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final rows = await _visibleTeibouRows();
       Map<String, dynamic>? row;
       // 1) ID優先（保存済みの selected_teibou_id）
       try {
@@ -3872,6 +3692,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             return 'ユーザ申請中';
           case -2:
             return 'ユーザ申請非承認';
+          case -3:
+            return 'ユーザ申請取り下げ';
           case 1:
             return 'ユーザ登録承認ずみ';
           default:
@@ -3904,6 +3726,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       } catch (_) {}
 
       if (!mounted) return;
+      final pageContext = context;
       showDialog(
         context: context,
         barrierDismissible: true,
@@ -3914,16 +3737,59 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _infoRow('都道府県', prefName),
-                  const SizedBox(height: 6),
-                  _infoRow(
-                    '釣り場名',
-                    (() {
-                      final base =
-                          yomi.isNotEmpty ? '$spotName（$yomi）' : spotName;
-                      return (flag == -1) ? '$base (申請中)' : base;
-                    })(),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(pageContext, rootNavigator: true).pop();
+                          Future.microtask(
+                            () => Navigator.of(pageContext).push(
+                              MaterialPageRoute(
+                                builder: (_) => const _TideStandalonePage(),
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          shape: const StadiumBorder(),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                        ),
+                        icon: const Icon(Icons.waves, size: 18),
+                        label: const Text(
+                          '潮汐',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          (() {
+                            final base = spotName;
+                            return (flag == -1) ? '$base (申請中)' : base;
+                          })(),
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  const SizedBox(height: 8),
+                  if (yomi.isNotEmpty) ...[
+                    _infoRow('よみがな', yomi),
+                    const SizedBox(height: 6),
+                  ],
+                  _infoRow('都道府県', prefName),
                   const SizedBox(height: 6),
                   _infoRow('種別', kubunLabel),
                   const SizedBox(height: 6),
@@ -3941,6 +3807,40 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     (ownerId != null)
                         ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)'
                         : '−',
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(
+                              pageContext,
+                              rootNavigator: true,
+                            ).pop();
+                            Future.microtask(
+                              () => _onToggleFavorite(pageContext),
+                            );
+                          },
+                          icon: const Icon(Icons.bookmark_border, size: 18),
+                          label: const Text('お気に入り'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(
+                              pageContext,
+                              rootNavigator: true,
+                            ).pop();
+                            Future.microtask(() => _onOpenRoute(pageContext));
+                          },
+                          icon: const Icon(Icons.directions_car, size: 18),
+                          label: const Text('経路表示'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -4051,7 +3951,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final fallbackId = _latestMyCatchSpotId;
     if (fallbackId == null || fallbackId <= 0) return;
     try {
-      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final rows = await _visibleTeibouRows();
       Map<String, dynamic>? hit;
       for (final r in rows) {
         final rid =
@@ -4090,14 +3990,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Future<_DiaryViewport?> _buildDiaryViewport() async {
     if (_myCatchSpotIds.isEmpty) return null;
     try {
-      final rows = await SioDatabase().getAllTeibouWithPrefecture();
+      final rows = await _visibleTeibouRows();
       final points = <LatLng>[];
       for (final r in rows) {
         final int? flag =
             r['flag'] is int
                 ? r['flag'] as int
                 : int.tryParse(r['flag']?.toString() ?? '');
-        if (flag == -2) continue;
+        if (flag == -2 || flag == -3) continue;
         final int? portId =
             r['port_id'] is int
                 ? r['port_id'] as int
@@ -4206,7 +4106,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
     // 近隣はDBから半径30kmで再取得して簡易注釈
     try {
-      final rows = SioDatabase().getAllTeibouWithPrefecture();
+      final rows = _visibleTeibouRows();
       rows.then((list) {
         if (!mounted || _center == null) return;
         final lat = _center!.latitude;
@@ -4264,6 +4164,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   String _mode = 'catch'; // 'catch' or 'env'
   String _lastCommonMode = 'catch';
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+  int _lastAmbiguousPlevel = ambiguous_plevel;
   int? _myUserId;
   int? _selectedSpotId;
 
@@ -4307,11 +4208,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   void _onCommonModeChanged() {
     final cm = Common.instance.postListMode;
     final diaryEnabled = Common.instance.fishingDiaryMode;
+    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
     final modeChanged = cm != _lastCommonMode;
     final diaryChanged = diaryEnabled != _lastFishingDiaryMode;
-    if (!modeChanged && !diaryChanged) return;
+    if (!modeChanged && !diaryChanged && !ambiguousChanged) return;
     _lastCommonMode = cm;
     _lastFishingDiaryMode = diaryEnabled;
+    _lastAmbiguousPlevel = ambiguous_plevel;
     if (mounted) {
       setState(() {
         _mode = cm;
@@ -4456,61 +4359,22 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    // 左端: ＋ 投稿 ボタン（アイコンなし、全角プラス）
-                    OutlinedButton(
-                      onPressed: () async {
-                        final posted = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder:
-                                (_) => InputPost(
-                                  initialType:
-                                      _mode == 'catch' ? 'catch' : 'env',
-                                ),
-                          ),
-                        );
-                        if (posted == true) {
-                          if (!mounted) return;
-                          setState(() {
-                            _items.clear();
-                            _page = 1;
-                            _hasMore = true;
-                            _loading = false;
-                          });
-                          await _loadFirst();
-                        }
-                      },
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                      ),
-                      child: const Text(
-                        '＋ 投稿',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    // 中央: 投稿一覧（中央寄せ）
-                    const Expanded(
-                      child: Center(
-                        child: Text(
-                          '投稿一覧',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    const Center(
+                      child: Text(
+                        '投稿一覧',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                    // 右端: セグメント（釣果/環境）を右寄せで
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 0),
-                      child: Align(
-                        alignment: Alignment.centerRight,
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 0),
                         child: CupertinoSegmentedControl<String>(
                           groupValue: _mode,
                           padding: const EdgeInsets.all(0),
@@ -4533,11 +4397,9 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                           onValueChanged: (val) {
                             setState(() {
                               _mode = val;
-                              // 現在の選択をアプリ起動中は維持
                               try {
                                 Common.instance.setPostListMode(val);
                               } catch (_) {}
-                              // モード切替時は一覧をリセットして再取得
                               _items.clear();
                               _page = 1;
                               _hasMore = true;
@@ -4743,31 +4605,160 @@ class _AppleMapsPanel extends StatelessWidget {
 }
 
 // 地図上部の「潮汐」アクションから開く簡易ページ
-class _TideStandalonePage extends StatelessWidget {
+class _TideStandalonePage extends ConsumerStatefulWidget {
   const _TideStandalonePage({Key? key}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('潮汐'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final h = constraints.maxHeight;
-          return _SlidingContent(
-            key: ValueKey(
-              'tide-standalone-${Common.instance.tideDate.toIso8601String()}',
-            ),
-            tidePoint: Common.instance.tidePoint,
-            teibouName: Common.instance.selectedTeibouName,
-            nearestPoint: Common.instance.selectedTeibouNearestPoint,
-            tideDate: Common.instance.tideDate,
-            availableHeight: h,
-          );
+  ConsumerState<_TideStandalonePage> createState() =>
+      _TideStandalonePageState();
+}
+
+class _TideStandalonePageState extends ConsumerState<_TideStandalonePage> {
+  static const int _standaloneInitialPage = 1000;
+  BannerAd? _bannerAd;
+  late final PageController _pageController;
+  late DateTime _baseDate;
+  bool _syncingDate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _baseDate = Common.instance.tideDate;
+    _pageController = PageController(initialPage: _standaloneInitialPage);
+  }
+
+  void _loadBanner() {
+    _bannerAd?.dispose();
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: 'ca-app-pub-3940256099942544/2934735716',
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (mounted) setState(() {});
         },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+        },
+      ),
+      request: const AdRequest(),
+    )..load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final common = Provider.of<Common>(context);
+    final premiumState = ref.watch(prem.premiumStateProvider);
+    final isPremium = premiumState.isPremium;
+    if (!premiumState.isLoading && !isPremium && _bannerAd == null) {
+      _loadBanner();
+    }
+    if (!_syncingDate && common.shouldJumpPage) {
+      final targetDate = common.tideDate;
+      _syncingDate = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _baseDate = targetDate;
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_standaloneInitialPage);
+        }
+        common.shouldJumpPage = false;
+        _syncingDate = false;
+        setState(() {});
+      });
+    }
+    return Scaffold(
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        child:
+            premiumState.isLoading
+                ? Column(
+                  children: [
+                    Container(
+                      height: kToolbarHeight,
+                      width: double.infinity,
+                      color: Colors.black,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            left: 4,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                          const Text(
+                            '潮汐',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Expanded(
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  ],
+                )
+                : Column(
+                  children: [
+                    if (!isPremium && _bannerAd != null)
+                      Container(
+                        alignment: Alignment.center,
+                        width: _bannerAd!.size.width.toDouble(),
+                        height: _bannerAd!.size.height.toDouble(),
+                        child: AdWidget(ad: _bannerAd!),
+                      ),
+                    Container(
+                      height: kToolbarHeight,
+                      width: double.infinity,
+                      color: Colors.black,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Positioned(
+                            left: 4,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                          const Text(
+                            '潮汐',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _TideHomePage(
+                        controller: _pageController,
+                        baseDate: _baseDate,
+                      ),
+                    ),
+                  ],
+                ),
       ),
     );
   }
@@ -5014,10 +5005,12 @@ class _SlidingContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 受け取った availableHeight をそのまま使用（タブは上位で差し引き済み）
-    // 上段(情報パネル)は画面高の50%、中央に5%の隙間、下段(グラフ)は45%
-    double topHeight = availableHeight * 0.50; // 約50%
+    // 上段(情報パネル)は45%、中央に5%の隙間、下段(グラフ)は45%、最下部に5%の余白
+    double topHeight = availableHeight * 0.45; // 約45%
     double gapHeight = availableHeight * 0.05; // 約5%
-    double graphHeight = availableHeight - topHeight - gapHeight; // 残り（約45%）
+    double graphHeight = availableHeight * 0.45; // 約45%
+    double bottomGapHeight =
+        availableHeight - topHeight - gapHeight - graphHeight; // 約5%
     return Column(
       children: [
         // 上部：メインコンテンツ（釣り場情報、画像、日付など）
@@ -5501,6 +5494,8 @@ class _SlidingContent extends StatelessWidget {
             ],
           ),
         ),
+        if (bottomGapHeight > 0)
+          Container(height: bottomGapHeight, color: _navyBg),
       ],
     );
   }

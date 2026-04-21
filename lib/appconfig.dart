@@ -25,5 +25,5 @@ class AppConfig {
   Color buttonBackgroundColor = Colors.greenAccent;
   Color buttonForegroundColor = Colors.black;
 
-  String baseUrl = "https://www.bouzer.jp/siowadou_pro/";
+  String baseUrl = "https://www.bouzer.jp/seafishingmap/";
 }

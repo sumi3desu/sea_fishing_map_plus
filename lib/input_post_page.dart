@@ -384,11 +384,26 @@ class _InputPostState extends ConsumerState<InputPost> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const NewAccountPage(returnToInputPost: true),
+            builder:
+                (_) => const NewAccountPage(
+                  returnToInputPost: true,
+                  authPurposeLabel: '投稿',
+                ),
           ),
         );
         // 登録画面から戻ったら自動投稿を試行
         await _tryAutoSubmitAfterAuth();
+        return;
+      }
+    } catch (_) {}
+    try {
+      final latest = await _loadLatestUserInfoForPosting();
+      final blockedMessage = _resolvePostBlockedMessage(latest);
+      if (blockedMessage != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(blockedMessage)));
         return;
       }
     } catch (_) {}
@@ -440,6 +455,7 @@ class _InputPostState extends ConsumerState<InputPost> {
       }
       final resp = await req.send();
       final status = resp.statusCode;
+      final httpResp = await http.Response.fromStream(resp);
       if (status == 200) {
         try {
           Common.instance.clearPostDraft();
@@ -449,13 +465,66 @@ class _InputPostState extends ConsumerState<InputPost> {
         ).showSnackBar(const SnackBar(content: Text('投稿を送信しました')));
         if (mounted) Navigator.pop(context, true);
       } else {
+        String message = '投稿送信に失敗しました (HTTP $status)';
+        try {
+          final j = jsonDecode(httpResp.body);
+          final serverMessage =
+              (j is Map) ? (j['message']?.toString() ?? '') : '';
+          if (serverMessage.isNotEmpty) {
+            message = serverMessage;
+          }
+        } catch (_) {}
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('投稿送信に失敗しました (HTTP $status)')));
+        ).showSnackBar(SnackBar(content: Text(message)));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<UserInfo> _loadLatestUserInfoForPosting() async {
+    final local = await loadUserInfo() ?? await getOrInitUserInfo();
+    try {
+      final remote = await getUserInfoFromServer(uuid: local.uuid, email: null);
+      final merged = local.copyWith(
+        userId: remote.userId != 0 ? remote.userId : local.userId,
+        email: remote.email.isNotEmpty ? remote.email : local.email,
+        uuid: remote.uuid.isNotEmpty ? remote.uuid : local.uuid,
+        status: remote.status.isNotEmpty ? remote.status : local.status,
+        createdAt:
+            remote.createdAt.isNotEmpty ? remote.createdAt : local.createdAt,
+        nickName: remote.nickName ?? local.nickName,
+        reportsBlocked: remote.reportsBlocked,
+        reportsBlockedUntil: remote.reportsBlockedUntil,
+        reportsBlockedReason: remote.reportsBlockedReason,
+        postsBlocked: remote.postsBlocked,
+        postsBlockedUntil: remote.postsBlockedUntil,
+        postsBlockedReason: remote.postsBlockedReason,
+        role: remote.role ?? local.role,
+        canReport: remote.canReport,
+        photoUrl: remote.photoUrl ?? local.photoUrl,
+        photoVersion: remote.photoVersion ?? local.photoVersion,
+        clearReportsBlockedUntil: remote.reportsBlockedUntil == null,
+        clearReportsBlockedReason: remote.reportsBlockedReason == null,
+        clearPostsBlockedUntil: remote.postsBlockedUntil == null,
+        clearPostsBlockedReason: remote.postsBlockedReason == null,
+      );
+      await saveUserInfo(merged);
+      return merged;
+    } catch (_) {
+      return local;
+    }
+  }
+
+  String? _resolvePostBlockedMessage(UserInfo info) {
+    if (info.postsBlocked == 1) {
+      return '投稿の送信は停止中です。不適切な利用が確認されました。';
+    }
+    final until = info.postsBlockedUntil?.trim() ?? '';
+    final lower = until.toLowerCase();
+    if (until.isEmpty || lower == 'null' || lower == '0') return null;
+    return '投稿の送信は一時停止中です。不適切な利用が確認されました。';
   }
 
   Future<void> _saveEdit() async {

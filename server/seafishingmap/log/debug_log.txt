@@ -1,0 +1,51 @@
+get_version_list.php userId[0]
+get_kubun.php userId[]
+get_teibou.php
+get_version_list.php userId[0]
+get_teibou.php
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_teibou.php
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+get_teibou.php
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]
+get_version_list.php userId[100]
+get_kubun.php userId[]
+get_teibou.php
+get_version_list.php userId[100]
+get_user_info.php uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4] email[]
+sql[SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+                  FROM user
+                 WHERE delete_flg = 0
+                   AND uuid = ?] uuid[b1b5b0d7-5000-44cd-badd-630f336dd9a4]

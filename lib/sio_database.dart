@@ -73,20 +73,28 @@ class SioDatabase extends ChangeNotifier {
 
     // 互換のため不足カラムを追加（存在すれば無視）
     try {
-      await db.execute('ALTER TABLE teibou ADD COLUMN flag INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE teibou ADD COLUMN flag INTEGER NOT NULL DEFAULT 0',
+      );
     } catch (_) {}
     try {
-      await db.execute('ALTER TABLE teibou ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE teibou ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
+      );
     } catch (_) {}
     try {
       await db.execute('ALTER TABLE teibou ADD COLUMN registrant_name TEXT');
     } catch (_) {}
     try {
       // SQLite では DATETIME を TEXT として扱う（サーバは CURRENT_TIMESTAMP）
-      await db.execute("ALTER TABLE teibou ADD COLUMN create_at TEXT NOT NULL DEFAULT (datetime('now'))");
+      await db.execute(
+        "ALTER TABLE teibou ADD COLUMN create_at TEXT NOT NULL DEFAULT (datetime('now'))",
+      );
     } catch (_) {}
     try {
-      await db.execute('ALTER TABLE teibou ADD COLUMN private INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE teibou ADD COLUMN private INTEGER NOT NULL DEFAULT 0',
+      );
     } catch (_) {}
 
     await db.execute('''
@@ -150,19 +158,19 @@ class SioDatabase extends ChangeNotifier {
 
   Future<void> addFavoriteTeibou(int portId) async {
     final db = await database;
-    await db.insert(
-      'favorite_teibou',
-      {
-        'port_id': portId,
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('favorite_teibou', {
+      'port_id': portId,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> removeFavoriteTeibou(int portId) async {
     final db = await database;
-    await db.delete('favorite_teibou', where: 'port_id = ?', whereArgs: [portId]);
+    await db.delete(
+      'favorite_teibou',
+      where: 'port_id = ?',
+      whereArgs: [portId],
+    );
   }
 
   // バージョン2: 主キー制約の追加（既存テーブルを移行）
@@ -170,7 +178,8 @@ class SioDatabase extends ChangeNotifier {
     await db.transaction((txn) async {
       // teibou: PRIMARY KEY(port_id)
       final teibouExists = await _tableExists(txn, 'teibou');
-      final hasTeibouPk = teibouExists && await _hasPrimaryKeyOn(txn, 'teibou', ['port_id']);
+      final hasTeibouPk =
+          teibouExists && await _hasPrimaryKeyOn(txn, 'teibou', ['port_id']);
       if (!teibouExists) {
         // 旧テーブルがない場合は新規作成のみ
         await txn.execute('''
@@ -212,7 +221,9 @@ class SioDatabase extends ChangeNotifier {
 
       // todoufuken: PRIMARY KEY(todoufuken_id)
       final todoufukenExists = await _tableExists(txn, 'todoufuken');
-      final hasTodoufukenPk = todoufukenExists && await _hasPrimaryKeyOn(txn, 'todoufuken', ['todoufuken_id']);
+      final hasTodoufukenPk =
+          todoufukenExists &&
+          await _hasPrimaryKeyOn(txn, 'todoufuken', ['todoufuken_id']);
       if (!todoufukenExists) {
         await txn.execute('''
           CREATE TABLE IF NOT EXISTS todoufuken (
@@ -237,7 +248,9 @@ class SioDatabase extends ChangeNotifier {
 
       // version: PRIMARY KEY(user_id, name)
       final versionExists = await _tableExists(txn, 'version');
-      final hasVersionPk = versionExists && await _hasPrimaryKeyOn(txn, 'version', ['user_id', 'name']);
+      final hasVersionPk =
+          versionExists &&
+          await _hasPrimaryKeyOn(txn, 'version', ['user_id', 'name']);
       if (!versionExists) {
         await txn.execute('''
           CREATE TABLE IF NOT EXISTS version (
@@ -266,12 +279,16 @@ class SioDatabase extends ChangeNotifier {
     });
   }
 
-  Future<bool> _hasPrimaryKeyOn(DatabaseExecutor db, String table, List<String> pkColumns) async {
+  Future<bool> _hasPrimaryKeyOn(
+    DatabaseExecutor db,
+    String table,
+    List<String> pkColumns,
+  ) async {
     try {
       final rows = await db.rawQuery('PRAGMA table_info($table)');
       if (rows.isEmpty) return false;
       final Map<String, int> pkMap = {
-        for (final row in rows) (row['name'] as String): (row['pk'] as int)
+        for (final row in rows) (row['name'] as String): (row['pk'] as int),
       };
       for (final col in pkColumns) {
         if (!(pkMap[col] != null && pkMap[col]! > 0)) return false;
@@ -320,11 +337,16 @@ class SioDatabase extends ChangeNotifier {
     });
   }
 
-  Future<bool> _columnExists(DatabaseExecutor db, String table, String column) async {
+  Future<bool> _columnExists(
+    DatabaseExecutor db,
+    String table,
+    String column,
+  ) async {
     try {
       final rows = await db.rawQuery('PRAGMA table_info($table)');
       for (final row in rows) {
-        if ((row['name'] as String).toLowerCase() == column.toLowerCase()) return true;
+        if ((row['name'] as String).toLowerCase() == column.toLowerCase())
+          return true;
       }
       return false;
     } catch (_) {
@@ -359,13 +381,6 @@ class SioDatabase extends ChangeNotifier {
       where: 'prefecture = ? AND point_name = ?',
       whereArgs: [prefecture, pointName],
     );
-    int cnt = await countFavorites();
-  }
-
-  Future<void> removeAll() async {
-    final db = await database;
-    await db.delete('favorite_tbl');
-    notifyListeners();
     int cnt = await countFavorites();
   }
 
@@ -429,5 +444,4 @@ class SioDatabase extends ChangeNotifier {
       SELECT todoufuken_id, todoufuken_name, chihou_name FROM todoufuken
     ''');
   }
-
 }

@@ -1,0 +1,90 @@
+import 'dart:convert';
+import 'package:sqflite/sqflite.dart';
+import 'cache_question.dart.txt';
+import 'sql_db.dart';
+
+class CacheQuestionRepository {
+  ///
+  /// 指定のキャッシュをDB保存（既に存在する場合は上書き）
+  /// 
+  static Future<void> save(CacheQuestion cache) async {
+    final db = await openLocalDb();
+    final jsonStr = json.encode(cache.listQuestions);
+      //print("insert to Cache");
+      await db.insert('question_cache', {
+        'nendo_id': cache.nendoId,
+        'mode': cache.mode,
+        'output_order': cache.outputOrder,
+        'subject_index': cache.subjectIndex,
+        'pin_only': cache.pinOnly ? 1 : 0,
+        'readed_idx': cache.getIndex(),
+        'list_questions': jsonStr,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+     
+      );
+  }
+
+  /// 条件一致のキャッシュを削除
+  static Future<void> deleteOne({
+    required int nendoId,
+    required int mode,
+    required int outputOrder,
+    required int subjectIndex,
+    required bool pinOnly,
+  }) async {
+    final db = await openLocalDb();
+    await db.delete(
+      'question_cache',
+      where: '''
+        nendo_id = ? AND mode = ? AND output_order = ? AND
+        subject_index = ? AND pin_only = ?
+      ''',
+      whereArgs: [nendoId, mode, outputOrder, subjectIndex, pinOnly ? 1 : 0],
+    );
+  }
+
+  /// 全キャッシュ削除
+  static Future<void> deleteAll() async {
+  //  final db = await openLocalDb();
+  //  await db.delete('question_cache');
+    final db = await openLocalDb();
+    // 1. 既存テーブルを削除
+    //await db.execute('DROP TABLE IF EXISTS question_cache');
+    //await createQuestionCache(db);
+
+  }
+  ///
+  /// キャッシュテーブルからキャッシュを読み込みメモリ展開
+  /// 
+  static Future<List<CacheQuestion>> loadAll() async {
+    //'*** loadAll ***');
+
+    try{
+
+    final db = await openLocalDb();
+    final rows = await db.query('question_cache');
+
+    return rows.map((row) {
+      // JSON 文字列 → List<dynamic>（各要素は Map<String,dynamic>）
+      final decoded = json.decode(row['list_questions'] as String);
+      final listQuestions =
+          (decoded as List<dynamic>)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+
+      return CacheQuestion(
+        nendoId: row['nendo_id'] as int,
+        mode: row['mode'] as int,
+        outputOrder: row['output_order'] as int,
+        subjectIndex: row['subject_index'] as int,
+        pinOnly: (row['pin_only'] as int) == 1,
+        readedIdx: row['readed_idx'] as int,
+        listQuestions: listQuestions,
+      );
+    }).toList();
+    } catch(e){
+      return [];
+    }
+  }
+}

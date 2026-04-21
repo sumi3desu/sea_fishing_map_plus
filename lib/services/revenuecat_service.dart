@@ -7,11 +7,32 @@ class RevenueCatService {
 
   static bool _configured = false;
   static Completer<void>? _readyCompleter;
+  static String? _currentAppUserId;
 
-  static Future<void> configure({
-    required String appUserId,
-  }) async {
+  static Future<void> configure({required String appUserId}) async {
     await Purchases.setLogLevel(kReleaseMode ? LogLevel.info : LogLevel.debug);
+
+    if (_configured) {
+      if (_currentAppUserId == appUserId) {
+        _readyCompleter ??= Completer<void>()..complete();
+        return;
+      }
+      try {
+        await Purchases.logIn(appUserId);
+        _currentAppUserId = appUserId;
+        if (_readyCompleter == null || _readyCompleter!.isCompleted) {
+          _readyCompleter = Completer<void>();
+        }
+        _readyCompleter!.complete();
+        return;
+      } catch (e) {
+        if (_readyCompleter == null || _readyCompleter!.isCompleted) {
+          _readyCompleter = Completer<void>();
+        }
+        _readyCompleter!.completeError(e);
+        rethrow;
+      }
+    }
 
     final configuration = PurchasesConfiguration(iosApiKey)
       ..appUserID = appUserId;
@@ -19,10 +40,17 @@ class RevenueCatService {
     try {
       await Purchases.configure(configuration);
       _configured = true;
-      _readyCompleter?..complete();
+      _currentAppUserId = appUserId;
+      if (_readyCompleter == null || _readyCompleter!.isCompleted) {
+        _readyCompleter = Completer<void>();
+      }
+      _readyCompleter!.complete();
     } catch (e) {
       // 失敗時も後続に通知
-      _readyCompleter?..completeError(e);
+      if (_readyCompleter == null || _readyCompleter!.isCompleted) {
+        _readyCompleter = Completer<void>();
+      }
+      _readyCompleter!.completeError(e);
       rethrow;
     }
   }
@@ -30,7 +58,9 @@ class RevenueCatService {
   static bool get isConfigured => _configured;
 
   // 他所から安全に待機するためのユーティリティ（タイムアウト指定可能）
-  static Future<void> waitUntilConfigured({Duration timeout = const Duration(seconds: 5)}) async {
+  static Future<void> waitUntilConfigured({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     if (_configured) return;
     _readyCompleter ??= Completer<void>();
     try {

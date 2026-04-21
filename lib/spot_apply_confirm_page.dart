@@ -11,7 +11,23 @@ import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
 import 'new_account_page.dart';
 
 class SpotApplyConfirmPage extends StatefulWidget {
-  const SpotApplyConfirmPage({super.key, required this.kind, required this.name, required this.yomi, required this.lat, required this.lng, required this.address, required this.prefName, required this.privateFlag, this.titleOverride, this.submitLabel, this.overrideFlag, this.portId});
+  const SpotApplyConfirmPage({
+    super.key,
+    required this.kind,
+    required this.name,
+    required this.yomi,
+    required this.lat,
+    required this.lng,
+    required this.address,
+    required this.prefName,
+    required this.privateFlag,
+    this.titleOverride,
+    this.submitLabel,
+    this.overrideFlag,
+    this.portId,
+    this.applicantUserId,
+    this.mailAction,
+  });
 
   final String kind; // gyoko/teibou/surf/kako/iso
   final String name;
@@ -22,9 +38,11 @@ class SpotApplyConfirmPage extends StatefulWidget {
   final String prefName; // 都道府県名（一致すればtodoufuken_idへ）
   final int privateFlag; // 0:公開, 1:非公開
   final String? titleOverride; // 確認/承認/非承認
-  final String? submitLabel;   // 申請/承認/非承認
-  final int? overrideFlag;     // null: 通常申請、1:承認、-2:非承認
-  final int? portId;           // 既存のport_id（編集時）
+  final String? submitLabel; // 申請/承認/非承認/申請取り下げ
+  final int? overrideFlag; // null: 通常申請、1:承認、-2:非承認、-3:申請取り下げ
+  final int? portId; // 既存のport_id（編集時）
+  final int? applicantUserId; // 編集対象の申請者 user_id
+  final String? mailAction; // confirm / approve / deny
 
   @override
   State<SpotApplyConfirmPage> createState() => _SpotApplyConfirmPageState();
@@ -35,6 +53,39 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
   String? _resultMessage;
   bool? _resultOk;
   bool _emailVerified = false;
+  final TextEditingController _reasonCtl = TextEditingController();
+
+  bool get _isWithdraw => widget.overrideFlag == -3;
+  bool get _needsMail => widget.mailAction != null;
+  bool get _needsReason =>
+      widget.mailAction == 'confirm' ||
+      widget.mailAction == 'deny' ||
+      widget.mailAction == 'approve';
+  bool get _canSkipMail => widget.mailAction == 'confirm';
+
+  String get _reasonLabel {
+    switch (widget.mailAction) {
+      case 'deny':
+        return '否認理由';
+      case 'approve':
+        return '承認メッセージ';
+      default:
+        return '編集理由';
+    }
+  }
+
+  String get _successMessage {
+    switch (widget.mailAction) {
+      case 'confirm':
+        return '編集内容を反映し、メールを送信しました';
+      case 'approve':
+        return '承認し、メールを送信しました';
+      case 'deny':
+        return '否認し、メールを送信しました';
+      default:
+        return _isWithdraw ? '申請を取り下げました' : '申請を受け付けました';
+    }
+  }
 
   String _kindLabel(String k) {
     switch (k) {
@@ -53,8 +104,20 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
     }
   }
 
-  Future<void> _submit() async {
-    setState(() { _submitting = true; _resultMessage = null; _resultOk = null; });
+  Future<void> _submit({bool sendMail = true}) async {
+    final reason = _reasonCtl.text.trim();
+    if (sendMail && _needsReason && reason.isEmpty) {
+      setState(() {
+        _resultOk = false;
+        _resultMessage = '理由を入力してください';
+      });
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _resultMessage = null;
+      _resultOk = null;
+    });
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       // 都道府県名からIDを引く
@@ -64,9 +127,10 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
         for (final r in rows) {
           final name = (r['todoufuken_name'] ?? '').toString();
           if (name == widget.prefName) {
-            todoufukenId = r['todoufuken_id'] is int
-                ? r['todoufuken_id'] as int
-                : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+            todoufukenId =
+                r['todoufuken_id'] is int
+                    ? r['todoufuken_id'] as int
+                    : int.tryParse(r['todoufuken_id']?.toString() ?? '');
             break;
           }
         }
@@ -83,12 +147,22 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
               'lat': widget.lat.toString(),
               'lng': widget.lng.toString(),
               'address': widget.address,
-              'user_id': info.userId.toString(),
+              'user_id': (widget.applicantUserId ?? info.userId).toString(),
               'private': widget.privateFlag.toString(),
-              if (widget.portId != null && widget.portId! > 0) 'port_id': widget.portId.toString(),
-              if (widget.overrideFlag != null) 'flag': widget.overrideFlag.toString(),
-              if (todoufukenId != null) 'todoufuken_id': todoufukenId.toString(),
-              'platform': Platform.isIOS ? 'ios' : (Platform.isAndroid ? 'android' : 'other'),
+              if (widget.portId != null && widget.portId! > 0)
+                'port_id': widget.portId.toString(),
+              if (widget.overrideFlag != null)
+                'flag': widget.overrideFlag.toString(),
+              if (_needsMail && sendMail) 'mail_action': widget.mailAction!,
+              if (_needsMail && sendMail) 'mail_reason': reason,
+              if (_needsMail && sendMail)
+                'actor_user_id': info.userId.toString(),
+              if (todoufukenId != null)
+                'todoufuken_id': todoufukenId.toString(),
+              'platform':
+                  Platform.isIOS
+                      ? 'ios'
+                      : (Platform.isAndroid ? 'android' : 'other'),
             },
           )
           .timeout(kHttpTimeout);
@@ -98,15 +172,20 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
       if (resp.statusCode == 200) {
         try {
           final data = jsonDecode(resp.body);
-          final result = (data is Map) ? (data['result']?.toString() ?? '') : '';
+          final result =
+              (data is Map) ? (data['result']?.toString() ?? '') : '';
           if (result == 'success') {
             ok = true;
-            msg = '申請を受け付けました';
+            msg = (!sendMail && _canSkipMail) ? '編集内容を反映しました' : _successMessage;
             // 新規port_idを受領したら保存
             final pid = (data is Map) ? data['port_id'] : null;
-            if (pid is int) newPortId = pid; else if (pid is String) newPortId = int.tryParse(pid);
+            if (pid is int)
+              newPortId = pid;
+            else if (pid is String)
+              newPortId = int.tryParse(pid);
           } else {
-            final reason = (data is Map) ? (data['reason']?.toString() ?? '') : '';
+            final reason =
+                (data is Map) ? (data['reason']?.toString() ?? '') : '';
             msg = reason.isNotEmpty ? reason : '申請に失敗しました';
           }
         } catch (_) {
@@ -116,14 +195,20 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
         msg = '通信に失敗しました（${resp.statusCode}）';
       }
       if (!mounted) return;
-      setState(() { _resultOk = ok; _resultMessage = msg; });
+      setState(() {
+        _resultOk = ok;
+        _resultMessage = msg;
+      });
 
       if (ok) {
         // ローカルDBにも即時反映
         try {
           final db = await SioDatabase().database;
           final row = <String, Object?>{
-            'port_id': (widget.portId != null && widget.portId! > 0) ? widget.portId! : (newPortId ?? 0),
+            'port_id':
+                (widget.portId != null && widget.portId! > 0)
+                    ? widget.portId!
+                    : (newPortId ?? 0),
             'port_name': widget.name,
             'furigana': widget.yomi,
             'j_yomi': widget.yomi,
@@ -134,17 +219,24 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
             'note': '',
             'flag': widget.overrideFlag ?? -1,
             'private': widget.privateFlag,
-            'user_id': info.userId,
+            'user_id': widget.applicantUserId ?? info.userId,
             'create_at': DateTime.now().toIso8601String(),
           };
-          await db.insert('teibou', row, conflictAlgorithm: ConflictAlgorithm.replace);
+          await db.insert(
+            'teibou',
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         } catch (_) {}
         // 共通状態にも反映して地図へ戻ったときに表示を更新
         try {
           await Common.instance.saveSelectedTeibou(
             widget.name,
             Common.instance.tidePoint,
-            id: (widget.portId != null && widget.portId! > 0) ? widget.portId! : newPortId,
+            id:
+                (widget.portId != null && widget.portId! > 0)
+                    ? widget.portId!
+                    : newPortId,
             lat: widget.lat,
             lng: widget.lng,
             prefId: todoufukenId,
@@ -156,7 +248,12 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
         // スナックバー表示→地図へ戻る（2段戻る）
         final messenger = ScaffoldMessenger.maybeOf(context);
         messenger?.showSnackBar(
-          const SnackBar(content: Text('申請を受け付けました'), duration: Duration(seconds: 2)),
+          SnackBar(
+            content: Text(
+              (!sendMail && _canSkipMail) ? '編集内容を反映しました' : _successMessage,
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
         await Future.delayed(const Duration(milliseconds: 800));
         if (!mounted) return;
@@ -166,10 +263,30 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
       }
     } catch (_) {
       if (!mounted) return;
-      setState(() { _resultOk = false; _resultMessage = '送信中にエラーが発生しました'; });
+      setState(() {
+        _resultOk = false;
+        _resultMessage = '送信中にエラーが発生しました';
+      });
     } finally {
-      if (mounted) setState(() { _submitting = false; });
+      if (mounted)
+        setState(() {
+          _submitting = false;
+        });
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.mailAction == 'approve') {
+      _reasonCtl.text = '釣り場申請を承認しました。ご申請ありがとうございました。';
+    }
+  }
+
+  @override
+  void dispose() {
+    _reasonCtl.dispose();
+    super.dispose();
   }
 
   @override
@@ -179,77 +296,156 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
       try {
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
         final verified = (info.email.trim().isNotEmpty);
-        if (mounted && verified != _emailVerified) setState(() => _emailVerified = verified);
+        if (mounted && verified != _emailVerified)
+          setState(() => _emailVerified = verified);
       } catch (_) {}
     })();
     return Scaffold(
-      appBar: AppBar(title: Text(widget.titleOverride ?? '確認'), backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: Text(widget.titleOverride ?? '確認'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _row('タイトル', '釣り場登録'),
-          const SizedBox(height: 8),
-          _row('釣り場種別', _kindLabel(widget.kind)),
-          const SizedBox(height: 8),
-          _row('公開/非公開', widget.privateFlag == 1 ? '非公開' : '公開'),
-          const SizedBox(height: 8),
-          _row('釣り場名', widget.name),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _row('タイトル', _isWithdraw ? '申請取り下げ' : '釣り場登録'),
+              const SizedBox(height: 8),
+              _row('釣り場種別', _kindLabel(widget.kind)),
+              const SizedBox(height: 8),
+              _row('公開/非公開', widget.privateFlag == 1 ? '非公開' : '公開'),
+              const SizedBox(height: 8),
+              _row('釣り場名', widget.name),
               const SizedBox(height: 8),
               _row('読み方', widget.yomi),
               const SizedBox(height: 8),
-              _row('緯度/経度', '緯度: ${_fmt(widget.lat)} / 経度: ${_fmt(widget.lng)}'),
+              _row(
+                '緯度/経度',
+                '緯度: ${_fmt(widget.lat)} / 経度: ${_fmt(widget.lng)}',
+              ),
               const SizedBox(height: 8),
-              _row('住所', widget.address.isNotEmpty ? widget.address : '（住所を取得できませんでした）'),
+              _row(
+                '住所',
+                widget.address.isNotEmpty ? widget.address : '（住所を取得できませんでした）',
+              ),
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 12),
-              if (!_emailVerified) ...[
+              if (!_needsMail && !_emailVerified && !_isWithdraw) ...[
                 const Text(
                   '※ 釣り場申請は「メール認証」が必要です。申請ボタンを押すと「メール認証」を行います。',
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 8),
               ],
+              if (_needsReason) ...[
+                Text(
+                  _reasonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _reasonCtl,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText:
+                        widget.mailAction == 'deny'
+                            ? '否認理由を入力してください'
+                            : (widget.mailAction == 'approve'
+                                ? '承認時に送るメッセージを入力してください'
+                                : '編集理由を入力してください'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _submitting ? null : () => Navigator.pop(context),
+                      onPressed:
+                          _submitting ? null : () => Navigator.pop(context),
                       child: const Text('戻る'),
                     ),
                   ),
                   const SizedBox(width: 12),
+                  if (_canSkipMail) ...[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _submitting
+                                ? null
+                                : () async {
+                                  await _submit(sendMail: false);
+                                },
+                        child: const Text('メール送信しない'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _submitting
-                          ? null
-                          : () async {
-                              // 未認証ならアカウント登録へ遷移し、戻ってきてから改めて送信
-                              try {
-                                final info = await loadUserInfo() ?? await getOrInitUserInfo();
-                                if ((info.email).trim().isEmpty) {
-                                  final res = await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const NewAccountPage(returnToInputPost: true)),
-                                  );
-                                  // 戻ってきたら認証状態を再確認
-                                  try {
-                                    final after = await loadUserInfo() ?? await getOrInitUserInfo();
-                                    final verified = (after.email.trim().isNotEmpty);
-                                    if (mounted) setState(() => _emailVerified = verified);
-                                    if (!verified) return;
-                                  } catch (_) { return; }
+                      onPressed:
+                          _submitting
+                              ? null
+                              : () async {
+                                if (_needsMail) {
+                                  await _submit(sendMail: true);
+                                  return;
                                 }
-                              } catch (_) {}
-                              // 認証済みなら送信
-                              await _submit();
-                            },
-                      child: _submitting
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(widget.submitLabel ?? '申請'),
+                                if (_isWithdraw) {
+                                  await _submit(sendMail: true);
+                                  return;
+                                }
+                                // 未認証ならアカウント登録へ遷移し、戻ってきてから改めて送信
+                                try {
+                                  final info =
+                                      await loadUserInfo() ??
+                                      await getOrInitUserInfo();
+                                  if ((info.email).trim().isEmpty) {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => const NewAccountPage(
+                                              returnToInputPost: true,
+                                              authPurposeLabel: '釣り場登録',
+                                            ),
+                                      ),
+                                    );
+                                    // 戻ってきたら認証状態を再確認
+                                    try {
+                                      final after =
+                                          await loadUserInfo() ??
+                                          await getOrInitUserInfo();
+                                      final verified =
+                                          (after.email.trim().isNotEmpty);
+                                      if (mounted)
+                                        setState(
+                                          () => _emailVerified = verified,
+                                        );
+                                      if (!verified) return;
+                                    } catch (_) {
+                                      return;
+                                    }
+                                  }
+                                } catch (_) {}
+                                // 認証済みなら送信
+                                await _submit(sendMail: true);
+                              },
+                      child:
+                          _submitting
+                              ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : Text(widget.submitLabel ?? '申請'),
                     ),
                   ),
                 ],
@@ -258,7 +454,10 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
                 const SizedBox(height: 12),
                 Text(
                   _resultMessage!,
-                  style: TextStyle(color: (_resultOk == true) ? Colors.green : Colors.red, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: (_resultOk == true) ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ],

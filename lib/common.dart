@@ -530,6 +530,8 @@ class Common extends ChangeNotifier {
   int listCenterTick = 0; // 釣り場一覧で再センタリングの要求カウンタ
   // 釣り場一覧から釣り場詳細タブへのナビゲーション要求カウンタ
   int navigateToTideTick = 0;
+  int postFeedReloadTick = 0;
+  int startApplyModeTick = 0;
   SioInfo oneDaySioInfoAlt = SioInfo();
 
   // 投稿一覧の表示モード（'catch' or 'env'）。アプリ起動中のみ保持。
@@ -554,6 +556,31 @@ class Common extends ChangeNotifier {
     fishingDiaryMode = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('fishing_diary_mode', enabled);
+    notifyListeners();
+  }
+
+  void requestPostFeedReload() {
+    postFeedReloadTick++;
+    notifyListeners();
+  }
+
+  void requestStartApplyMode() {
+    startApplyModeTick++;
+    notifyListeners();
+  }
+
+  Future<void> loadAmbiguousPlevel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt('ambiguous_plevel');
+    ambiguous_plevel = (v == 0) ? 0 : kDefaultAmbiguousPlevel;
+  }
+
+  Future<void> setAmbiguousPlevel(int value) async {
+    final normalized = (value == 0) ? 0 : 1;
+    if (ambiguous_plevel == normalized) return;
+    ambiguous_plevel = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('ambiguous_plevel', normalized);
     notifyListeners();
   }
 
@@ -601,7 +628,14 @@ class Common extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveSelectedTeibou(String name, String nearestPoint, {int? id, double? lat, double? lng, int? prefId}) async {
+  Future<void> saveSelectedTeibou(
+    String name,
+    String nearestPoint, {
+    int? id,
+    double? lat,
+    double? lng,
+    int? prefId,
+  }) async {
     selectedTeibouName = name;
     selectedTeibouNearestPoint = nearestPoint;
     if (lat != null) selectedTeibouLat = lat;
@@ -619,7 +653,8 @@ class Common extends ChangeNotifier {
   Future<void> loadSelectedTeibou() async {
     final prefs = await SharedPreferences.getInstance();
     selectedTeibouName = prefs.getString('selected_teibou_name') ?? '';
-    selectedTeibouNearestPoint = prefs.getString('selected_teibou_nearest_point') ?? '';
+    selectedTeibouNearestPoint =
+        prefs.getString('selected_teibou_nearest_point') ?? '';
     selectedTeibouLat = prefs.getDouble('selected_teibou_lat') ?? 0.0;
     selectedTeibouLng = prefs.getDouble('selected_teibou_lng') ?? 0.0;
     selectedTeibouPrefId = prefs.getInt('selected_teibou_pref_id') ?? 0;
@@ -655,16 +690,23 @@ class Common extends ChangeNotifier {
   Future<bool> selectTeibouById(int portId) async {
     try {
       final db = await sioDb.database;
-      final rows = await db.query('teibou', where: 'port_id = ?', whereArgs: [portId], limit: 1);
+      final rows = await db.query(
+        'teibou',
+        where: 'port_id = ?',
+        whereArgs: [portId],
+        limit: 1,
+      );
       if (rows.isEmpty) return false;
       final r = rows.first;
       final name = (r['port_name'] ?? '').toString();
-      final lat = (r['latitude'] is num)
-          ? (r['latitude'] as num).toDouble()
-          : double.tryParse(r['latitude']?.toString() ?? '');
-      final lng = (r['longitude'] is num)
-          ? (r['longitude'] as num).toDouble()
-          : double.tryParse(r['longitude']?.toString() ?? '');
+      final lat =
+          (r['latitude'] is num)
+              ? (r['latitude'] as num).toDouble()
+              : double.tryParse(r['latitude']?.toString() ?? '');
+      final lng =
+          (r['longitude'] is num)
+              ? (r['longitude'] as num).toDouble()
+              : double.tryParse(r['longitude']?.toString() ?? '');
       if (lat == null || lng == null) return false;
 
       // 都道府県IDの特定（拡張テーブルから逆引き）
@@ -672,14 +714,16 @@ class Common extends ChangeNotifier {
       try {
         final extRows = await SioDatabase().getAllTeibouWithPrefecture();
         for (final er in extRows) {
-          final rid = er['port_id'] is int
-              ? er['port_id'] as int
-              : int.tryParse(er['port_id']?.toString() ?? '');
+          final rid =
+              er['port_id'] is int
+                  ? er['port_id'] as int
+                  : int.tryParse(er['port_id']?.toString() ?? '');
           if (rid == portId) {
-            prefId = er['todoufuken_id'] is int
-                ? er['todoufuken_id'] as int
-                : int.tryParse(er['todoufuken_id']?.toString() ?? '')
-                    ?? int.tryParse(er['pref_id_from_port']?.toString() ?? '');
+            prefId =
+                er['todoufuken_id'] is int
+                    ? er['todoufuken_id'] as int
+                    : int.tryParse(er['todoufuken_id']?.toString() ?? '') ??
+                        int.tryParse(er['pref_id_from_port']?.toString() ?? '');
             break;
           }
         }
@@ -690,7 +734,14 @@ class Common extends ChangeNotifier {
       if (nearestPoint == null) return false;
       tidePoint = nearestPoint;
       await savePoint(nearestPoint);
-      await saveSelectedTeibou(name, nearestPoint, id: portId, lat: lat, lng: lng, prefId: prefId);
+      await saveSelectedTeibou(
+        name,
+        nearestPoint,
+        id: portId,
+        lat: lat,
+        lng: lng,
+        prefId: prefId,
+      );
       notify();
       return true;
     } catch (_) {
@@ -700,7 +751,8 @@ class Common extends ChangeNotifier {
 
   // まだ漁港が未設定の場合、現在地から最寄りの堤防＋最寄り潮汐ポイントを自動設定
   Future<void> setupNearestByLocationIfUnset() async {
-    if (selectedTeibouName.isNotEmpty || selectedTeibouNearestPoint.isNotEmpty) {
+    if (selectedTeibouName.isNotEmpty ||
+        selectedTeibouNearestPoint.isNotEmpty) {
       return; // 既に設定済み
     }
     // 位置サービスと権限チェック
@@ -722,7 +774,9 @@ class Common extends ChangeNotifier {
       return;
     }
 
-    final Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    final Position pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
     final double clat = pos.latitude;
     final double clng = pos.longitude;
 
@@ -736,11 +790,17 @@ class Common extends ChangeNotifier {
         final lng = _toDouble(r['longitude']);
         if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) continue;
         final d = _haversineKm(clat, clng, lat, lng);
-        if (d < best) { best = d; bestRow = r; }
+        if (d < best) {
+          best = d;
+          bestRow = r;
+        }
       }
       if (bestRow == null) return;
       final name = (bestRow['port_name'] ?? '').toString();
-      final bid = bestRow['port_id'] is int ? bestRow['port_id'] as int : int.tryParse(bestRow['port_id']?.toString() ?? '');
+      final bid =
+          bestRow['port_id'] is int
+              ? bestRow['port_id'] as int
+              : int.tryParse(bestRow['port_id']?.toString() ?? '');
       final plat = _toDouble(bestRow['latitude']) ?? 0.0;
       final plng = _toDouble(bestRow['longitude']) ?? 0.0;
 
@@ -769,15 +829,18 @@ class Common extends ChangeNotifier {
       final file = row[1];
       // 国内(01〜47)のみ対象
       if (file.isEmpty || file.length < 2) continue;
-      final prefix = int.tryParse(file.substring(0,2));
+      final prefix = int.tryParse(file.substring(0, 2));
       if (prefix == null || prefix < 1 || prefix > 47) continue;
       final info = SioInfo();
       try {
         final ok = await getPortData(file, info);
         if (!ok) continue;
         final d = _haversineKm(lat, lng, info.lat, info.lang);
-        if (d < best) { best = d; bestName = name; }
-      } catch (_){
+        if (d < best) {
+          best = d;
+          bestName = name;
+        }
+      } catch (_) {
         continue;
       }
     }
@@ -789,8 +852,10 @@ class Common extends ChangeNotifier {
     const double d2r = pi / 180.0;
     final dLat = (lat2 - lat1) * d2r;
     final dLon = (lon2 - lon1) * d2r;
-    final a = sin(dLat/2)*sin(dLat/2) + cos(lat1*d2r)*cos(lat2*d2r)*sin(dLon/2)*sin(dLon/2);
-    final c = 2 * atan2(sqrt(a), sqrt(1-a));
+    final a =
+        sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * d2r) * cos(lat2 * d2r) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
     return R * c;
   }
 
@@ -815,42 +880,66 @@ class Common extends ChangeNotifier {
 
       // 優先1: 静岡県(22)で port_name が「田子漁港」と一致
       for (final r in rows) {
-        final pid = r['todoufuken_id'] is int ? r['todoufuken_id'] as int : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+        final pid =
+            r['todoufuken_id'] is int
+                ? r['todoufuken_id'] as int
+                : int.tryParse(r['todoufuken_id']?.toString() ?? '');
         final name = (r['port_name'] ?? '').toString();
-        if (pid == 22 && name == '田子漁港' && valid(r)) { pick = r; break; }
+        if (pid == 22 && name == '田子漁港' && valid(r)) {
+          pick = r;
+          break;
+        }
       }
       // 優先2: 静岡県(22)で port_name に「田子」を含む
       if (pick == null) {
         for (final r in rows) {
-          final pid = r['todoufuken_id'] is int ? r['todoufuken_id'] as int : int.tryParse(r['todoufuken_id']?.toString() ?? '');
+          final pid =
+              r['todoufuken_id'] is int
+                  ? r['todoufuken_id'] as int
+                  : int.tryParse(r['todoufuken_id']?.toString() ?? '');
           final name = (r['port_name'] ?? '').toString();
-          if (pid == 22 && name.contains('田子') && valid(r)) { pick = r; break; }
+          if (pid == 22 && name.contains('田子') && valid(r)) {
+            pick = r;
+            break;
+          }
         }
       }
       // 優先3: port_name が「田子漁港」
       if (pick == null) {
         for (final r in rows) {
           final name = (r['port_name'] ?? '').toString();
-          if (name == '田子漁港' && valid(r)) { pick = r; break; }
+          if (name == '田子漁港' && valid(r)) {
+            pick = r;
+            break;
+          }
         }
       }
       // 優先4: port_name に「田子」を含む
       if (pick == null) {
         for (final r in rows) {
           final name = (r['port_name'] ?? '').toString();
-          if (name.contains('田子') && valid(r)) { pick = r; break; }
+          if (name.contains('田子') && valid(r)) {
+            pick = r;
+            break;
+          }
         }
       }
       // 最後: 最初の有効な堤防
       if (pick == null) {
         for (final r in rows) {
-          if (valid(r)) { pick = r; break; }
+          if (valid(r)) {
+            pick = r;
+            break;
+          }
         }
       }
       if (pick == null) return;
 
       final name = (pick['port_name'] ?? '').toString();
-      final bid = pick['port_id'] is int ? pick['port_id'] as int : int.tryParse(pick['port_id']?.toString() ?? '');
+      final bid =
+          pick['port_id'] is int
+              ? pick['port_id'] as int
+              : int.tryParse(pick['port_id']?.toString() ?? '');
       final plat = _toDouble(pick['latitude']) ?? 0.0;
       final plng = _toDouble(pick['longitude']) ?? 0.0;
       final nearestPoint = await _findNearestTidePoint(plat, plng);
@@ -1120,9 +1209,15 @@ class Common extends ChangeNotifier {
 
     // Android は geo: 優先。iOS は comgooglemaps:// を試し、ダメなら https。
     if (Platform.isAndroid) {
-      final Uri geoUri = Uri.parse('geo:$latitude,$longitude?q=$latitude,$longitude&z=$zoom');
-      final Uri geoUriFallback = Uri.parse('geo:0,0?q=$latitude,$longitude&z=$zoom');
-      final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom');
+      final Uri geoUri = Uri.parse(
+        'geo:$latitude,$longitude?q=$latitude,$longitude&z=$zoom',
+      );
+      final Uri geoUriFallback = Uri.parse(
+        'geo:0,0?q=$latitude,$longitude&z=$zoom',
+      );
+      final Uri webUri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom',
+      );
 
       if (await canLaunchUrl(geoUri)) {
         await launchUrl(geoUri, mode: LaunchMode.externalApplication);
@@ -1135,8 +1230,12 @@ class Common extends ChangeNotifier {
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
       return;
     } else if (Platform.isIOS) {
-      final Uri appUri = Uri.parse('comgooglemaps://?q=$latitude,$longitude&zoom=$zoom');
-      final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom');
+      final Uri appUri = Uri.parse(
+        'comgooglemaps://?q=$latitude,$longitude&zoom=$zoom',
+      );
+      final Uri webUri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom',
+      );
       if (await canLaunchUrl(appUri)) {
         await launchUrl(appUri, mode: LaunchMode.externalApplication);
       } else {
@@ -1145,7 +1244,9 @@ class Common extends ChangeNotifier {
       return;
     } else {
       // 他プラットフォームは https で外部ブラウザ
-      final Uri webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom');
+      final Uri webUri = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude&zoom=$zoom',
+      );
       await launchUrl(webUri, mode: LaunchMode.externalApplication);
     }
   }
@@ -1155,7 +1256,9 @@ class Common extends ChangeNotifier {
     final double longitude = roundTo5Digits(lng);
 
     final Uri appleMapsUri = Uri.parse('maps://?q=$latitude,$longitude');
-    final Uri fallbackUri = Uri.parse('https://maps.apple.com/?q=$latitude,$longitude');
+    final Uri fallbackUri = Uri.parse(
+      'https://maps.apple.com/?q=$latitude,$longitude',
+    );
 
     if (await canLaunchUrl(appleMapsUri)) {
       await launchUrl(appleMapsUri, mode: LaunchMode.externalApplication);
@@ -1769,8 +1872,14 @@ class Common extends ChangeNotifier {
     oneDaySioInfoAlt.dayTideCnt = sioInfo.dayTideCnt;
     oneDaySioInfoAlt.peakTide = List<SioPoint>.from(sioInfo.peakTide);
     oneDaySioInfoAlt.peakTideCnt = sioInfo.peakTideCnt;
-    oneDaySioInfoAlt.pSunRise = SunPoint(hh: sioInfo.pSunRise.hh, mm: sioInfo.pSunRise.mm);
-    oneDaySioInfoAlt.pSunSet = SunPoint(hh: sioInfo.pSunSet.hh, mm: sioInfo.pSunSet.mm);
+    oneDaySioInfoAlt.pSunRise = SunPoint(
+      hh: sioInfo.pSunRise.hh,
+      mm: sioInfo.pSunRise.mm,
+    );
+    oneDaySioInfoAlt.pSunSet = SunPoint(
+      hh: sioInfo.pSunSet.hh,
+      mm: sioInfo.pSunSet.mm,
+    );
   }
 
   Future<void> computeAltTideForSelected(DateTime tideDate) async {
@@ -1937,8 +2046,8 @@ class Common extends ChangeNotifier {
       gZt = 135.0;
     }
 
-  // 1日潮汐 ?
-  if (oneday == true) {
+    // 1日潮汐 ?
+    if (oneday == true) {
       tideOneDay(Common.instance.gSioInfo);
 
       setOneDaySio(Common.instance.gSioInfo);
@@ -2626,14 +2735,13 @@ class Common extends ChangeNotifier {
 
   // サーバーにユーザー登録を依頼する処理
   Future<Map<String, dynamic>> sendmail(
-      String email, String authenticationNumber) async {
+    String email,
+    String authenticationNumber,
+  ) async {
     // 指定メールに指定認証番号を送信
     final response = await http.post(
       Uri.parse('${AppConfig.instance.baseUrl}send_number.php'),
-      body: {
-        'mail': email,
-        'authenticationNumber': authenticationNumber,
-      },
+      body: {'mail': email, 'authenticationNumber': authenticationNumber},
     );
 
     if (response.statusCode == 200) {
@@ -2641,7 +2749,8 @@ class Common extends ChangeNotifier {
       return json.decode(response.body);
     } else {
       throw Exception(
-          'Failed to register user. Status code: ${response.statusCode}');
+        'Failed to register user. Status code: ${response.statusCode}',
+      );
     }
   }
 
@@ -2653,21 +2762,22 @@ class Common extends ChangeNotifier {
 
   // 推奨パターンチェック用の正規表現
   bool isValidPassword(String password) {
-  /*  // 8文字以上で、大文字・小文字・数字・特殊文字(@$!%*?&#)をそれぞれ最低1文字含む
+    /*  // 8文字以上で、大文字・小文字・数字・特殊文字(@$!%*?&#)をそれぞれ最低1文字含む
     final RegExp passwordRegExp = RegExp(
         r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$');
     return passwordRegExp.hasMatch(password);
     */
     return true;
   }
+
   // サーバーにユーザー登録を依頼する処理
-  Future<Map<String, dynamic>> checkRegistUser(String email, String uuid) async {
+  Future<Map<String, dynamic>> checkRegistUser(
+    String email,
+    String uuid,
+  ) async {
     final response = await http.post(
       Uri.parse('${AppConfig.instance.baseUrl}user_check.php'),
-      body: {
-        'mail': email,
-        'uuid': uuid,
-      },
+      body: {'mail': email, 'uuid': uuid},
     );
 
     if (response.statusCode == 200) {
@@ -2677,22 +2787,20 @@ class Common extends ChangeNotifier {
       throw Exception(json.decode(response.body)['reason']);
     } else {
       throw Exception(
-          'Failed to register user. Status code: ${response.statusCode}');
+        'Failed to register user. Status code: ${response.statusCode}',
+      );
     }
   }
-
 
   // 選択された行を特定するための GlobalKey を用意
   final GlobalKey selectedKey = GlobalKey();
   // 確認コード取得 6桁のランダムな数値を返す
-  String getRandomNumber()
-  {
+  String getRandomNumber() {
     Random random = Random();
     int number = random.nextInt(1000000); // 0から999999までの整数を生成
     String authenticationNumber = number.toString().padLeft(6, '0');
-    return authenticationNumber;   
+    return authenticationNumber;
   }
-
 }
 
 /// 10kmメッシュの整数グリッド座標

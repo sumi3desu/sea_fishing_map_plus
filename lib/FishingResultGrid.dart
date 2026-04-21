@@ -8,9 +8,11 @@ import 'sio_database.dart';
 import 'sync_service.dart';
 import 'main.dart';
 import 'common.dart';
+import 'log_print.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'new_account_page.dart';
 
 class FishingResultGrid extends StatefulWidget {
   const FishingResultGrid({super.key});
@@ -32,6 +34,22 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   bool _metaReady = false; // 都道府県/釣り場名とadminの準備完了
   final Map<int, String> _imgTsByPost = {}; // キャッシュバスター（編集後の差し替え用）
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+  int _lastAmbiguousPlevel = ambiguous_plevel;
+  int _lastPostFeedReloadTick = Common.instance.postFeedReloadTick;
+
+  Future<bool> _ensureEmailVerified() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (info.email.trim().isNotEmpty) return true;
+    } catch (_) {}
+    if (!mounted) return false;
+    final res = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const NewAccountPage(authPurposeLabel: '釣り日記'),
+      ),
+    );
+    return res == true;
+  }
 
   @override
   void initState() {
@@ -64,8 +82,20 @@ class _FishingResultGridState extends State<FishingResultGrid> {
 
   void _onCommonChanged() {
     final enabled = Common.instance.fishingDiaryMode;
-    if (_lastFishingDiaryMode == enabled) return;
+    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
+    final postFeedChanged =
+        _lastPostFeedReloadTick != Common.instance.postFeedReloadTick;
+    if (_lastFishingDiaryMode == enabled &&
+        !ambiguousChanged &&
+        !postFeedChanged) {
+      return;
+    }
     _lastFishingDiaryMode = enabled;
+    _lastAmbiguousPlevel = ambiguous_plevel;
+    _lastPostFeedReloadTick = Common.instance.postFeedReloadTick;
+    logPrint(
+      'FishingResultGrid reload trigger diaryMode=$enabled ambiguous=$ambiguous_plevel feedTick=${Common.instance.postFeedReloadTick}',
+    );
     _loadFirst();
   }
 
@@ -76,7 +106,7 @@ class _FishingResultGridState extends State<FishingResultGrid> {
     super.dispose();
   }
 
-  Future<List<_PostGridItem>> _fetch({required int page}) async {
+  Future<_FetchResult> _fetch({required int page}) async {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
       final uri = Uri.parse(
@@ -96,6 +126,9 @@ class _FishingResultGridState extends State<FishingResultGrid> {
         _myUserId ??= uid;
         if (uid > 0) body['user_id'] = uid.toString();
       }
+      logPrint(
+        'FishingResultGrid fetch page=$page diaryMode=${Common.instance.fishingDiaryMode} body=${body.entries.map((e) => '${e.key}=${e.value}').join('&')}',
+      );
       final resp = await http
           .post(
             uri,
@@ -103,7 +136,9 @@ class _FishingResultGridState extends State<FishingResultGrid> {
             headers: const {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
           )
           .timeout(kHttpTimeout);
-      if (resp.statusCode != 200) return [];
+      if (resp.statusCode != 200) {
+        return const _FetchResult(items: [], rawCount: 0);
+      }
       final data = jsonDecode(resp.body);
       List rows;
       if (data is Map && data['status'] == 'success') {
@@ -111,7 +146,7 @@ class _FishingResultGridState extends State<FishingResultGrid> {
       } else if (data is List) {
         rows = data;
       } else {
-        return [];
+        return const _FetchResult(items: [], rawCount: 0);
       }
       final list =
           rows
@@ -122,15 +157,33 @@ class _FishingResultGridState extends State<FishingResultGrid> {
                 ),
               )
               .toList();
+      final sampleItems = list
+          .take(5)
+          .map(
+            (e) =>
+                '${e.postId?.toString() ?? 'null'}:u${e.userId?.toString() ?? 'null'}',
+          )
+          .join(',');
+      final uniqueUserIds = list.map((e) => e.userId).whereType<int>().toSet();
+      logPrint(
+        'FishingResultGrid fetch result page=$page count=${list.length} uniqueUserIds=${uniqueUserIds.length} sampleItems=[$sampleItems]',
+      );
       // 画像ありのみ
-      return list.where((e) => (e.thumbUrl ?? e.imageUrl) != null).toList();
+      return _FetchResult(
+        items: list.where((e) => (e.thumbUrl ?? e.imageUrl) != null).toList(),
+        rawCount: list.length,
+      );
     } catch (_) {
-      return [];
+      logPrint('FishingResultGrid fetch failed page=$page');
+      return const _FetchResult(items: [], rawCount: 0);
     }
   }
 
   Future<void> _loadFirst() async {
     if (!mounted) return;
+    logPrint(
+      'FishingResultGrid loadFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguous_plevel',
+    );
     setState(() {
       _items.clear();
       _page = 1;
@@ -143,15 +196,28 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     if (!mounted) return;
+    logPrint('FishingResultGrid loadMore start page=$_page');
     setState(() => _loading = true);
-    final rows = await _fetch(page: _page);
+    final result = await _fetch(page: _page);
     if (!mounted) return;
     setState(() {
-      _items.addAll(rows);
-      _hasMore = rows.length >= kPostPageSize;
+      _items.addAll(result.items);
+      _hasMore = result.rawCount >= kPostPageSize;
       _page += 1;
       _loading = false;
     });
+    logPrint(
+      'FishingResultGrid loadMore end nextPage=$_page hasMore=$_hasMore itemCount=${_items.length} rawCount=${result.rawCount}',
+    );
+  }
+
+  void _maybeLoadMoreFromScroll(ScrollMetrics metrics) {
+    if (metrics.extentAfter < 300 && !_loading && _hasMore) {
+      logPrint(
+        'FishingResultGrid scroll trigger extentAfter=${metrics.extentAfter.toStringAsFixed(1)} page=$_page hasMore=$_hasMore',
+      );
+      _loadMore();
+    }
   }
 
   Future<void> _ensurePrefMap() async {
@@ -208,21 +274,25 @@ class _FishingResultGridState extends State<FishingResultGrid> {
             );
             role = (refreshed.role ?? role).toLowerCase();
             // 保存しておく（他画面でも反映）
-            final updated = UserInfo(
+            final updated = info.copyWith(
               userId: refreshed.userId,
               email: refreshed.email,
               uuid: info.uuid,
               status: refreshed.status,
               createdAt: refreshed.createdAt,
-              refreshToken: info.refreshToken,
               nickName: refreshed.nickName ?? info.nickName,
-              reportsBlocked: info.reportsBlocked,
-              reportsBlockedUntil: info.reportsBlockedUntil,
-              reportsBlockedReason: info.reportsBlockedReason,
+              reportsBlocked: refreshed.reportsBlocked,
+              reportsBlockedUntil: refreshed.reportsBlockedUntil,
+              reportsBlockedReason: refreshed.reportsBlockedReason,
+              postsBlocked: refreshed.postsBlocked,
+              postsBlockedUntil: refreshed.postsBlockedUntil,
+              postsBlockedReason: refreshed.postsBlockedReason,
               role: role,
-              canReport: info.canReport,
-              photoUrl: info.photoUrl,
-              photoVersion: info.photoVersion,
+              canReport: refreshed.canReport,
+              clearReportsBlockedUntil: refreshed.reportsBlockedUntil == null,
+              clearReportsBlockedReason: refreshed.reportsBlockedReason == null,
+              clearPostsBlockedUntil: refreshed.postsBlockedUntil == null,
+              clearPostsBlockedReason: refreshed.postsBlockedReason == null,
             );
             await saveUserInfo(updated);
           } catch (_) {}
@@ -279,7 +349,13 @@ class _FishingResultGridState extends State<FishingResultGrid> {
                     child: FilterChip(
                       showCheckmark: false,
                       selected: Common.instance.fishingDiaryMode,
-                      onSelected: (v) => Common.instance.setFishingDiaryMode(v),
+                      onSelected: (v) async {
+                        if (v) {
+                          final verified = await _ensureEmailVerified();
+                          if (!verified) return;
+                        }
+                        await Common.instance.setFishingDiaryMode(v);
+                      },
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: const VisualDensity(
                         horizontal: -2.5,
@@ -328,6 +404,7 @@ class _FishingResultGridState extends State<FishingResultGrid> {
                         builder: (context) {
                           if (_items.isEmpty && !_loading) {
                             return ListView(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               children: const [
                                 SizedBox(height: 120),
                                 Center(
@@ -393,22 +470,29 @@ class _FishingResultGridState extends State<FishingResultGrid> {
                               prev = pattern;
                             }
                           }
-                          return ListView.builder(
-                            controller: _sc,
-                            padding: const EdgeInsets.all(pad),
-                            itemCount: groups.length + (_hasMore ? 1 : 0),
-                            itemBuilder: (context, gi) {
-                              if (gi >= groups.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              }
-                              final g = groups[gi];
-                              return _buildGroup(g, cell, gap);
+                          return NotificationListener<ScrollNotification>(
+                            onNotification: (notification) {
+                              _maybeLoadMoreFromScroll(notification.metrics);
+                              return false;
                             },
+                            child: ListView.builder(
+                              controller: _sc,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.all(pad),
+                              itemCount: groups.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (context, gi) {
+                                if (gi >= groups.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+                                }
+                                final g = groups[gi];
+                                return _buildGroup(g, cell, gap);
+                              },
+                            ),
                           );
                         },
                       ),
@@ -485,6 +569,12 @@ class _MosaicGroup {
   final int pattern; // 2..4
   final List<_PostGridItem> items;
   _MosaicGroup({required this.pattern, required this.items});
+}
+
+class _FetchResult {
+  final List<_PostGridItem> items;
+  final int rawCount;
+  const _FetchResult({required this.items, required this.rawCount});
 }
 
 extension _MosaicBuilders on _FishingResultGridState {

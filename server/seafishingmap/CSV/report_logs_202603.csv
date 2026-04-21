@@ -1,0 +1,19 @@
+user_id,app,platform,from,category,title,contact,details,created_at,ip,ua
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=40の確認のお願い,,イタズラっぽい,"2026-03-26 14:02:20",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=36の確認のお願い,,こんなに連れますか？,"2026-03-26 14:03:06",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=39の確認のお願い,,かなかなかなか,"2026-03-26 15:53:38",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=43の確認のお願い,,"料理した内容の写メ
+いらない","2026-03-26 20:03:18",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=34の確認のお願い,,関係ない写メ,"2026-03-26 20:04:06",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,settings,要望,要望です,matsuzaki@micro.jp,詳細です,"2026-03-27 00:52:00",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=40の確認のお願い,ai@bouzer.jp,"詳細ですけど、何か
+どうですか？","2026-03-27 00:53:19",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=40の確認のお願い,,詳細登録です,"2026-03-27 01:01:28",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=40の確認のお願い,,テスト,"2026-03-27 01:01:49",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,settings,要望,テスト,,詳細,"2026-03-27 01:04:55",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,settings,要望,ですと,,詳細テスト,"2026-03-27 01:06:09",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=43の確認のお願い,,詳細はたたたた,"2026-03-27 01:09:44",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=43の確認のお願い,,なななな,"2026-03-27 01:10:03",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,settings,要望,テスト,,テスト詳細,"2026-03-27 01:10:35",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=49の確認のお願い,,確認,"2026-03-27 01:36:14",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+97,1.0.0+1,ios,post_detail,確認のお願い,投稿ID=34の確認のお願い,,テスト,"2026-03-28 03:48:59",59.138.215.165,"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"

@@ -10,10 +10,20 @@ import 'common.dart';
 import 'error_message.dart';
 import 'appconfig.dart';
 import 'main.dart';
+import 'log_print.dart';
 
 class NewAccountPage extends ConsumerStatefulWidget {
-  const NewAccountPage({super.key, this.returnToInputPost = false});
+  const NewAccountPage({
+    super.key,
+    this.returnToInputPost = false,
+    this.initialEmail,
+    this.recoveryMode = false,
+    this.authPurposeLabel,
+  });
   final bool returnToInputPost;
+  final String? initialEmail;
+  final bool recoveryMode;
+  final String? authPurposeLabel;
 
   @override
   _NewAccountPageState createState() => _NewAccountPageState();
@@ -39,6 +49,60 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _mailaddressController.text = widget.initialEmail?.trim() ?? '';
+  }
+
+  String _purposeLeadText() {
+    switch (widget.authPurposeLabel?.trim()) {
+      case '投稿':
+        return '「投稿」するためにはアカウント登録を行なってください。';
+      case 'お気に入り':
+        return '「お気に入り」の登録をするためにはアカウント登録を行なってください。';
+      case '釣り日記':
+        return '「釣り日記」状態にするためにはアカウント登録を行なってください。';
+      case '釣り場登録':
+        return '「釣り場登録」をするためにはアカウント登録を行なってください。';
+      case '低評価':
+        return '「低評価」をするためにはアカウント登録を行なってください。';
+      default:
+        return 'アカウントを登録すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができます。';
+    }
+  }
+
+  String _topCardMessage() {
+    if (widget.recoveryMode) {
+      return '以前利用していたメールアドレスで確認コード認証を行うと、以前のアカウントへ戻せます。';
+    }
+    final label = widget.authPurposeLabel?.trim() ?? '';
+    if (label.isNotEmpty) {
+      return '${_purposeLeadText()}\nメールアドレスとニックネームを入力し、届いたメールの認証コードを入力してください。';
+    }
+    return _purposeLeadText();
+  }
+
+  String _subMessage() {
+    if (widget.recoveryMode) {
+      return '同じメールアドレスで認証すると、以前のユーザIDを優先して復元します。';
+    }
+    switch (widget.authPurposeLabel?.trim()) {
+      case '投稿':
+        return 'この画面でアカウント登録を行うと、そのまま「投稿」の操作へ戻れます。';
+      case 'お気に入り':
+        return 'この画面でアカウント登録を行うと、そのまま「お気に入り」の登録へ戻れます。';
+      case '釣り日記':
+        return 'この画面でアカウント登録を行うと、そのまま「釣り日記」状態へ切り替えられます。';
+      case '釣り場登録':
+        return 'この画面でアカウント登録を行うと、そのまま「釣り場登録」の操作へ戻れます。';
+      case '低評価':
+        return 'この画面でアカウント登録を行うと、そのまま「低評価」の操作へ戻れます。';
+      default:
+        return 'アカウントの登録を行うことで機種変更時にもお気に入り(釣り場)の引き継ぎができます。';
+    }
   }
 
   // 「登録」ボタン押下時の処理
@@ -75,7 +139,7 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
     // パスワード入力・検証は廃止
 
     // 全てのチェックをパスした場合、登録処理を実行
-    print("Registration successful for email: $email");
+    logPrint("Registration successful for email: $email");
 
     try {
       // CheckRegistUser でサーバーにチェックを依頼（UUID 同送）
@@ -110,12 +174,14 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
         // 既存ユーザ・仮登録の場合はサーバから正規のUUIDを取得して保存（再インストール対策）
         if (result == 'registed' ||
             result == 'registered' ||
-            result == 'temporary') {
+            result == 'temporary' ||
+            result == 'not_match_uuid' ||
+            reasonText.contains('機種変')) {
           try {
             final server = await getUserInfoFromServerByEmail(email);
             if (server != null) {
               final current = await loadUserInfo() ?? await getOrInitUserInfo();
-              final merged = UserInfo(
+              final merged = current.copyWith(
                 userId: server.userId != 0 ? server.userId : current.userId,
                 email: email,
                 uuid: server.uuid.isNotEmpty ? server.uuid : current.uuid,
@@ -125,8 +191,21 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
                     server.createdAt.isNotEmpty
                         ? server.createdAt
                         : current.createdAt,
-                refreshToken: current.refreshToken,
                 nickName: current.nickName,
+                reportsBlocked: server.reportsBlocked,
+                reportsBlockedUntil: server.reportsBlockedUntil,
+                reportsBlockedReason: server.reportsBlockedReason,
+                postsBlocked: server.postsBlocked,
+                postsBlockedUntil: server.postsBlockedUntil,
+                postsBlockedReason: server.postsBlockedReason,
+                role: server.role ?? current.role,
+                canReport: server.canReport,
+                photoUrl: server.photoUrl ?? current.photoUrl,
+                photoVersion: server.photoVersion ?? current.photoVersion,
+                clearReportsBlockedUntil: server.reportsBlockedUntil == null,
+                clearReportsBlockedReason: server.reportsBlockedReason == null,
+                clearPostsBlockedUntil: server.postsBlockedUntil == null,
+                clearPostsBlockedReason: server.postsBlockedReason == null,
               );
               await saveUserInfo(merged);
             }
@@ -257,11 +336,11 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
                     color: Colors.white,
                     onPressed: () => Navigator.of(context).maybePop(),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Center(
                       child: Text(
-                        'アカウント設定',
-                        style: TextStyle(
+                        widget.recoveryMode ? 'アカウント復元' : 'アカウント設定',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -289,11 +368,11 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(color: Colors.grey.shade400),
                         ),
-                        child: const Padding(
-                          padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                           child: Text(
-                            'アカウントを登録すると、機種変更やアプリの再インストール時にお気に入り(釣り場)の引き継ぎができます。',
-                            style: TextStyle(fontSize: 13, height: 1.5),
+                            _topCardMessage(),
+                            style: const TextStyle(fontSize: 13, height: 1.5),
                           ),
                         ),
                       ),
@@ -321,11 +400,11 @@ class _NewAccountPageState extends ConsumerState<NewAccountPage> {
                         ),
                       ),
                       // ADDED: アカウント登録の案内文（メール入力と次へボタンの間に表示）
-                      const Align(
+                      Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'アカウントの登録を行うことで機種変更時にもお気に入り(釣り場)の引き継ぎができます。',
-                          style: TextStyle(
+                          _subMessage(),
+                          style: const TextStyle(
                             fontSize: 13.0,
                             color: Colors.black87,
                             height: 1.4,

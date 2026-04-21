@@ -25,10 +25,18 @@ class ProfileEditPage extends ConsumerStatefulWidget {
 
 class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
   final TextEditingController _nickController = TextEditingController();
+  final TextEditingController _xController = TextEditingController();
+  final TextEditingController _instagramController = TextEditingController();
   bool _saving = false;
   bool _isEditing = false;
   bool _dirty = false;
   String _initialNick = '';
+  String _initialX = '';
+  String _initialInstagram = '';
+  bool _xPublic = false;
+  bool _instagramPublic = false;
+  bool _initialXPublic = false;
+  bool _initialInstagramPublic = false;
   final ImagePicker _picker = ImagePicker();
   XFile? _pickedImage;
   XFile? _pickedBgImage;
@@ -54,20 +62,60 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
       String nn = info?.nickName ?? '';
       _remotePhotoUrl = info?.photoUrl;
       // フォールバック: 旧保存領域（SharedPreferences）
+      final prefs = await SharedPreferences.getInstance();
       if (nn.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
         nn = prefs.getString('profile_nick_name') ?? '';
       }
+      _xController.text = prefs.getString('profile_x_username') ?? '';
+      _instagramController.text =
+          prefs.getString('profile_instagram_username') ?? '';
+      _xPublic = prefs.getBool('profile_x_public') ?? false;
+      _instagramPublic = prefs.getBool('profile_instagram_public') ?? false;
+      _initialX = _xController.text;
+      _initialInstagram = _instagramController.text;
+      _initialXPublic = _xPublic;
+      _initialInstagramPublic = _instagramPublic;
       // 背景画像のローカルパス
       try {
-        final prefs = await SharedPreferences.getInstance();
         _bgLocalPath = prefs.getString('profile_bg_path');
       } catch (_) {}
       _nickController.text = nn;
       _initialNick = _nickController.text;
       setState(() {});
+      await _fetchProfileFields();
       // サーバーに保存されている最新のプロフィール画像/背景画像の取得
       await _fetchRemoteImages();
+    } catch (_) {}
+  }
+
+  Future<void> _fetchProfileFields() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (info.userId <= 0) return;
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}get_profile_fields.php',
+      );
+      final resp = await http
+          .post(uri, body: {'user_id': info.userId.toString()})
+          .timeout(kHttpTimeout);
+      if (resp.statusCode != 200) return;
+      final data = jsonDecode(resp.body);
+      if (data is! Map || data['status'] != 'success') return;
+      if (!mounted) return;
+      setState(() {
+        _xController.text = (data['x_username']?.toString() ?? '').trim();
+        _instagramController.text =
+            (data['instagram_username']?.toString() ?? '').trim();
+        _xPublic =
+            (data['x_public']?.toString() == '1' || data['x_public'] == true);
+        _instagramPublic =
+            (data['instagram_public']?.toString() == '1' ||
+                data['instagram_public'] == true);
+        _initialX = _xController.text;
+        _initialInstagram = _instagramController.text;
+        _initialXPublic = _xPublic;
+        _initialInstagramPublic = _instagramPublic;
+      });
     } catch (_) {}
   }
 
@@ -91,6 +139,9 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
   @override
   void dispose() {
     _bannerAd?.dispose();
+    _nickController.dispose();
+    _xController.dispose();
+    _instagramController.dispose();
     super.dispose();
   }
 
@@ -382,6 +433,10 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
       _isEditing = true;
       _dirty = false;
       _initialNick = _nickController.text;
+      _initialX = _xController.text;
+      _initialInstagram = _instagramController.text;
+      _initialXPublic = _xPublic;
+      _initialInstagramPublic = _instagramPublic;
     });
   }
 
@@ -389,6 +444,12 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
     if (_pickedImage != null) return true;
     if (_pickedBgImage != null) return true;
     if (_nickController.text.trim() != _initialNick.trim()) return true;
+    if (_xController.text.trim() != _initialX.trim()) return true;
+    if (_instagramController.text.trim() != _initialInstagram.trim()) {
+      return true;
+    }
+    if (_xPublic != _initialXPublic) return true;
+    if (_instagramPublic != _initialInstagramPublic) return true;
     return _dirty;
   }
 
@@ -423,6 +484,10 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
       _isEditing = false;
       _dirty = false;
       _nickController.text = _initialNick;
+      _xController.text = _initialX;
+      _instagramController.text = _initialInstagram;
+      _xPublic = _initialXPublic;
+      _instagramPublic = _initialInstagramPublic;
       _pickedImage = null;
       _pickedBgImage = null;
     });
@@ -433,24 +498,36 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
     try {
       var nn = _nickController.text.trim();
       if (nn.length > 12) nn = nn.substring(0, 12);
+      var xName = _xController.text.trim();
+      if (xName.length > 15) xName = xName.substring(0, 15);
+      var instaName = _instagramController.text.trim();
+      if (instaName.length > 30) instaName = instaName.substring(0, 30);
       // 1) ローカル保存（表示用途のフォールバック）
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('profile_nick_name', nn);
-      // 2) サーバへ反映（ニックネーム）
+      await prefs.setString('profile_x_username', xName);
+      await prefs.setBool('profile_x_public', _xPublic);
+      await prefs.setString('profile_instagram_username', instaName);
+      await prefs.setBool('profile_instagram_public', _instagramPublic);
+      // 2) サーバへ反映（ニックネーム/SNS）
       try {
         final info = await loadUserInfo() ?? await getOrInitUserInfo();
         await http
             .post(
-              Uri.parse('${AppConfig.instance.baseUrl}user_regist.php'),
+              Uri.parse(
+                '${AppConfig.instance.baseUrl}update_profile_fields.php',
+              ),
               headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Accept': 'application/json, text/plain, */*',
               },
               body: {
-                'uuid': info.uuid,
                 'user_id': info.userId.toString(),
                 'nick_name': nn,
-                'action': 'update_nick',
+                'x_username': xName,
+                'x_public': _xPublic ? '1' : '0',
+                'instagram_username': instaName,
+                'instagram_public': _instagramPublic ? '1' : '0',
               },
             )
             .timeout(kHttpTimeout);
@@ -507,13 +584,7 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
       // 3) UserInfo にも反映（サーバURLを優先。なければローカルfile://、それもなければ現状維持）
       try {
         final current = await loadUserInfo() ?? await getOrInitUserInfo();
-        final updated = UserInfo(
-          userId: current.userId,
-          email: current.email,
-          uuid: current.uuid,
-          status: current.status,
-          createdAt: current.createdAt,
-          refreshToken: current.refreshToken,
+        final updated = current.copyWith(
           nickName: nn,
           photoUrl: remoteAvatarUrl ?? newPhotoUrl ?? current.photoUrl,
           photoVersion: newPhotoVer ?? current.photoVersion,
@@ -521,6 +592,14 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
         await saveUserInfo(updated);
         _remotePhotoUrl = updated.photoUrl;
       } catch (_) {}
+      _initialNick = nn;
+      _nickController.text = nn;
+      _initialX = xName;
+      _xController.text = xName;
+      _initialInstagram = instaName;
+      _instagramController.text = instaName;
+      _initialXPublic = _xPublic;
+      _initialInstagramPublic = _instagramPublic;
       if (!mounted) return;
       Navigator.pop(context, nn);
     } catch (_) {
@@ -639,7 +718,7 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
               ),
             ),
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -820,30 +899,73 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'ニックネーム',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _nickController,
-                      maxLength: 12,
-                      enabled: _isEditing,
-                      readOnly: !_isEditing,
-                      onChanged: (_) => _dirty = true,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        counterText: '',
-                        hintText: '12文字以内',
+                    _sectionTitle('ニックネーム'),
+                    const SizedBox(height: 12),
+                    _sectionCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            controller: _nickController,
+                            maxLength: 12,
+                            enabled: _isEditing,
+                            readOnly: !_isEditing,
+                            onChanged: (_) => _dirty = true,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              counterText: '',
+                              hintText: '1から12文字',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            '本名など個人情報は入力しないでください（投稿時に表示されます）',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    // 注意書き（ニックネームの直下に配置）
-                    const Text(
-                      '本名など個人情報は入力しないでください（投稿時に表示されます）',
-                      style: TextStyle(fontSize: 12.5, color: Colors.black87),
+                    const SizedBox(height: 24),
+                    _sectionTitle('SNS'),
+                    const SizedBox(height: 12),
+                    _sectionCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSocialField(
+                            label: 'X ユーザネーム',
+                            controller: _xController,
+                            isPublic: _xPublic,
+                            maxLength: 15,
+                            hintText: '1から15文字',
+                            onChanged:
+                                (v) => setState(() {
+                                  _xPublic = v;
+                                  _dirty = true;
+                                }),
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(height: 1),
+                          const SizedBox(height: 16),
+                          _buildSocialField(
+                            label: 'Instagram ユーザネーム',
+                            controller: _instagramController,
+                            isPublic: _instagramPublic,
+                            maxLength: 30,
+                            hintText: '1から30文字',
+                            onChanged:
+                                (v) => setState(() {
+                                  _instagramPublic = v;
+                                  _dirty = true;
+                                }),
+                          ),
+                        ],
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -851,6 +973,85 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Row(
+      children: [
+        const Text('▶︎', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionCard({required Widget child}) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade400),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildSocialField({
+    required String label,
+    required TextEditingController controller,
+    required bool isPublic,
+    required int maxLength,
+    required String hintText,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: IgnorePointer(
+            ignoring: !_isEditing,
+            child: CupertinoSlidingSegmentedControl<bool>(
+              groupValue: isPublic,
+              children: const {
+                false: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text('非公開'),
+                ),
+                true: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text('公開'),
+                ),
+              },
+              onValueChanged: (bool? v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: controller,
+          maxLength: maxLength,
+          enabled: _isEditing,
+          readOnly: !_isEditing,
+          onChanged: (_) => _dirty = true,
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            counterText: '',
+            hintText: hintText,
+          ),
+        ),
+      ],
     );
   }
 }

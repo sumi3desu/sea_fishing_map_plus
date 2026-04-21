@@ -14,6 +14,8 @@ import 'common.dart';
 import 'sio_info.dart';
 import 'nearby_map_page.dart';
 import 'package:geolocator/geolocator.dart';
+import 'log_print.dart';
+import 'new_account_page.dart';
 
 class ListTeibouPage extends StatefulWidget {
   const ListTeibouPage({super.key});
@@ -68,6 +70,27 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   final Map<int, _MySpotSummary> _mySpotSummaryById = {};
   Set<int> _myCatchSpotIds = <int>{};
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+
+  Future<bool> _ensureEmailVerified({
+    bool returnToInputPost = false,
+    String? authPurposeLabel,
+  }) async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (info.email.trim().isNotEmpty) return true;
+    } catch (_) {}
+    if (!mounted) return false;
+    final res = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (_) => NewAccountPage(
+              returnToInputPost: returnToInputPost,
+              authPurposeLabel: authPurposeLabel,
+            ),
+      ),
+    );
+    return res == true;
+  }
 
   @override
   void initState() {
@@ -386,12 +409,42 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     );
   }
 
+  bool _shouldHideOtherPendingSpotRow(Map<String, dynamic> row, int userId) {
+    final flag =
+        row['flag'] is int
+            ? row['flag'] as int
+            : int.tryParse(row['flag']?.toString() ?? '');
+    if (flag == -3) return true;
+    if (flag != -1) return false;
+    final ownerId =
+        row['user_id'] is int
+            ? row['user_id'] as int
+            : int.tryParse(row['user_id']?.toString() ?? '');
+    if (userId <= 0) return true;
+    return ownerId == null || ownerId != userId;
+  }
+
+  Future<List<Map<String, dynamic>>> _filterHiddenOwnPendingRows(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final uid = info.userId;
+      return rows
+          .where((r) => !_shouldHideOtherPendingSpotRow(r, uid))
+          .toList();
+    } catch (_) {
+      return rows.where((r) => !_shouldHideOtherPendingSpotRow(r, 0)).toList();
+    }
+  }
+
   Future<void> _load() async {
     final db = SioDatabase();
-    final rows = await db.getAllTeibouWithPrefecture();
+    final rawRows = await db.getAllTeibouWithPrefecture();
+    final rows = await _filterHiddenOwnPendingRows(rawRows);
     final prefs = await db.getTodoufukenAll();
-    print('teibou rows: ${rows.length}');
-    print('todoufuken rows: ${prefs.length}');
+    logPrint('teibou rows: ${rows.length}');
+    logPrint('todoufuken rows: ${prefs.length}');
 
     final map = <String, Set<int>>{};
     _prefNameById.clear();
@@ -771,7 +824,15 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
               child: FilterChip(
                 showCheckmark: false,
                 selected: Common.instance.fishingDiaryMode,
-                onSelected: (v) => Common.instance.setFishingDiaryMode(v),
+                onSelected: (v) async {
+                  if (v) {
+                    final verified = await _ensureEmailVerified(
+                      authPurposeLabel: '釣り日記',
+                    );
+                    if (!verified) return;
+                  }
+                  await Common.instance.setFishingDiaryMode(v);
+                },
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: const VisualDensity(
                   horizontal: -2.5,
@@ -1305,6 +1366,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                   );
                 }
               } else {
+                final verified = await _ensureEmailVerified(
+                  authPurposeLabel: 'お気に入り',
+                );
+                if (!verified) return;
                 await SioDatabase().addFavoriteTeibou(portId);
                 _favoriteIds.add(portId);
                 // リモートへも登録（失敗は無視）

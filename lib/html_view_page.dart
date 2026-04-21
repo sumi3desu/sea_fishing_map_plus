@@ -31,6 +31,18 @@ class _HtmlViewPageState extends State<HtmlViewPage> {
           ..setJavaScriptMode(JavaScriptMode.unrestricted)
           ..setNavigationDelegate(
             NavigationDelegate(
+              onNavigationRequest: (request) {
+                final url = request.url;
+                if (url.startsWith('app://close')) {
+                  if (_isMounted) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_isMounted) Navigator.of(context).maybePop();
+                    });
+                  }
+                  return NavigationDecision.prevent;
+                }
+                return NavigationDecision.navigate;
+              },
               onPageStarted: (url) {
                 _currentUrl = url;
               },

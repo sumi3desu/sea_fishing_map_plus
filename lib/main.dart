@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'setting_page.dart';
 import 'FishingResultGrid.dart';
 //import 'info_page.dart';
-import 'info_screen.dart';
+//import 'info_screen.dart.txt';
 // import 'set_date_page.dart'; // 日付タブは廃止（Tide ページ内のボタンから遷移）
 import 'tide_page.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -23,7 +23,7 @@ import 'common.dart';
 import 'list_teibou_page.dart';
 import 'test_debug_print.dart';
 import 'setting_data.dart';
-import 'cache_question.dart';
+import 'cache_question.dart.txt';
 import 'sio_database.dart';
 import 'sync_service.dart';
 import 'appconfig.dart';
@@ -33,8 +33,10 @@ import 'sql_db.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'db_rebuild_screen.dart';
 import 'input_post_page.dart';
+import 'new_account_page.dart';
 import 'services/revenuecat_service.dart';
 import 'providers/premium_state_notifier.dart' as prem;
+import 'log_print.dart';
 
 /// 初回データのダウンロードをユーザーに確認してから実行する共通関数
 Future<void> confirmAndDownloadInitialData({
@@ -102,6 +104,7 @@ void main() async {
 
   // ユーザ情報初期化（UUID発行＋サーバ問い合わせ）
   final userInfo = await getOrInitUserInfo();
+  AppConfig.instance.mail = userInfo.email;
 
   // ローカルDB初期化
   await SioDatabase().initialize();
@@ -120,6 +123,7 @@ void main() async {
   // 共通状態の初期化
   await Common.instance.loadSelectedTeibou();
   await Common.instance.loadFishingDiaryMode();
+  await Common.instance.loadAmbiguousPlevel();
   if (Common.instance.selectedTeibouNearestPoint.isNotEmpty) {
     Common.instance.tidePoint = Common.instance.selectedTeibouNearestPoint;
     await Common.instance.savePoint(Common.instance.selectedTeibouNearestPoint);
@@ -209,7 +213,12 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 // SharedPreferencesの保存キー
-const String userInfoKey = 'user_info_siowadou_pro_key';
+const String userInfoKey = 'user_info_seafishingmap_key';
+const String userRefreshTokenKey = 'user_refresh_token_seafishingmap_key';
+const String lastVerifiedUserIdKey = 'last_verified_user_id_seafishingmap_key';
+const String lastVerifiedEmailKey = 'last_verified_email_seafishingmap_key';
+const String dismissedRecoveryPromptKey =
+    'dismissed_account_recovery_prompt_seafishingmap_key';
 
 /// 質問一覧を保持する StateProvider
 final questionsProvider = StateProvider<List<Map<String, dynamic>>>(
@@ -243,7 +252,7 @@ final isEmailRegisteredProvider = Provider<bool>((ref) {
 });
 
 /// キャッシュリスト StateProvider
-final cacheQuestionProvider = StateProvider<List<CacheQuestion>>((ref) => []);
+//final cacheQuestionProvider = StateProvider<List<CacheQuestion>>((ref) => []);
 
 /*
 class UserInfo {
@@ -299,6 +308,9 @@ class UserInfo {
   final int reportsBlocked; // 1=恒久ブロック, 0=なし
   final String? reportsBlockedUntil; // 一時ブロック解除日時 (JST 文字列 or null)
   final String? reportsBlockedReason; // 理由メモ
+  final int postsBlocked; // 1=恒久ブロック, 0=なし
+  final String? postsBlockedUntil; // 一時ブロック解除日時 (JST 文字列 or null)
+  final String? postsBlockedReason; // 理由メモ
   final String? role; // 権限(user,admin)
   final bool canReport; // 送信可否（サーバ算出）
   // プロフィール画像
@@ -316,6 +328,9 @@ class UserInfo {
     this.reportsBlocked = 0,
     this.reportsBlockedUntil,
     this.reportsBlockedReason,
+    this.postsBlocked = 0,
+    this.postsBlockedUntil,
+    this.postsBlockedReason,
     this.role,
     this.canReport = true,
     this.photoUrl,
@@ -340,6 +355,16 @@ class UserInfo {
                 : 0),
     reportsBlockedUntil: json['reports_blocked_until'] as String?,
     reportsBlockedReason: json['reports_blocked_reason'] as String?,
+    postsBlocked:
+        (json['posts_blocked'] is int)
+            ? json['posts_blocked'] as int
+            : ((json['posts_blocked'] is bool)
+                ? ((json['posts_blocked'] as bool) ? 1 : 0)
+                : (json['posts_blocked'] is String)
+                ? int.tryParse(json['posts_blocked'] as String) ?? 0
+                : 0),
+    postsBlockedUntil: json['posts_blocked_until'] as String?,
+    postsBlockedReason: json['posts_blocked_reason'] as String?,
     role: json['role'] as String?,
     canReport:
         (json['can_report'] is bool)
@@ -369,16 +394,76 @@ class UserInfo {
       'reports_blocked_until': reportsBlockedUntil,
     if (reportsBlockedReason != null)
       'reports_blocked_reason': reportsBlockedReason,
+    'posts_blocked': postsBlocked,
+    if (postsBlockedUntil != null) 'posts_blocked_until': postsBlockedUntil,
+    if (postsBlockedReason != null) 'posts_blocked_reason': postsBlockedReason,
     if (role != null) 'role': role,
     'can_report': canReport,
     if (photoUrl != null) 'profile_image_url': photoUrl,
     if (photoVersion != null) 'profile_image_version': photoVersion,
   };
+
+  UserInfo copyWith({
+    int? userId,
+    String? email,
+    String? uuid,
+    String? status,
+    String? createdAt,
+    String? refreshToken,
+    String? nickName,
+    int? reportsBlocked,
+    String? reportsBlockedUntil,
+    String? reportsBlockedReason,
+    int? postsBlocked,
+    String? postsBlockedUntil,
+    String? postsBlockedReason,
+    String? role,
+    bool? canReport,
+    String? photoUrl,
+    int? photoVersion,
+    bool clearRefreshToken = false,
+    bool clearReportsBlockedUntil = false,
+    bool clearReportsBlockedReason = false,
+    bool clearPostsBlockedUntil = false,
+    bool clearPostsBlockedReason = false,
+  }) => UserInfo(
+    userId: userId ?? this.userId,
+    email: email ?? this.email,
+    uuid: uuid ?? this.uuid,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    refreshToken:
+        clearRefreshToken ? null : (refreshToken ?? this.refreshToken),
+    nickName: nickName ?? this.nickName,
+    reportsBlocked: reportsBlocked ?? this.reportsBlocked,
+    reportsBlockedUntil:
+        clearReportsBlockedUntil
+            ? null
+            : (reportsBlockedUntil ?? this.reportsBlockedUntil),
+    reportsBlockedReason:
+        clearReportsBlockedReason
+            ? null
+            : (reportsBlockedReason ?? this.reportsBlockedReason),
+    postsBlocked: postsBlocked ?? this.postsBlocked,
+    postsBlockedUntil:
+        clearPostsBlockedUntil
+            ? null
+            : (postsBlockedUntil ?? this.postsBlockedUntil),
+    postsBlockedReason:
+        clearPostsBlockedReason
+            ? null
+            : (postsBlockedReason ?? this.postsBlockedReason),
+    role: role ?? this.role,
+    canReport: canReport ?? this.canReport,
+    photoUrl: photoUrl ?? this.photoUrl,
+    photoVersion: photoVersion ?? this.photoVersion,
+  );
 }
 
 /// UserInfo をセキュアストレージに保存する
 Future<void> saveUserInfo(UserInfo info) async {
   await _secure.write(key: userInfoKey, value: jsonEncode(info.toJson()));
+  await syncSavedRefreshToken(info.refreshToken);
 }
 
 /// ユーザ情報を非同期に読み込むプロバイダ
@@ -409,7 +494,25 @@ Future<UserInfo> getUserInfoFromServer({
         status: data['status'] as String,
         createdAt: data['createdAt'] as String,
         nickName: (data['nick_name'] ?? data['nickName']) as String?,
+        reportsBlocked:
+            (data['reports_blocked'] is int)
+                ? data['reports_blocked'] as int
+                : int.tryParse(data['reports_blocked']?.toString() ?? '') ?? 0,
+        reportsBlockedUntil: data['reports_blocked_until'] as String?,
+        reportsBlockedReason: data['reports_blocked_reason'] as String?,
+        postsBlocked:
+            (data['posts_blocked'] is int)
+                ? data['posts_blocked'] as int
+                : int.tryParse(data['posts_blocked']?.toString() ?? '') ?? 0,
+        postsBlockedUntil: data['posts_blocked_until'] as String?,
+        postsBlockedReason: data['posts_blocked_reason'] as String?,
         role: (data['role'] as String?),
+        canReport:
+            (data['can_report'] is bool)
+                ? data['can_report'] as bool
+                : ((data['can_report'] is int)
+                    ? ((data['can_report'] as int) != 0)
+                    : true),
       );
     } else {
       throw Exception('get_user_info.php が失敗しました: ${data['status']}');
@@ -427,6 +530,59 @@ Future<UserInfo?> getUserInfoFromServerByEmail(String email) async {
     return ui;
   } catch (_) {
     return null;
+  }
+}
+
+Future<UserInfo?> getUserInfoFromServerByRefreshToken(
+  String refreshToken,
+) async {
+  final token = refreshToken.trim();
+  if (token.isEmpty) return null;
+
+  final uri = Uri.parse('${AppConfig.instance.baseUrl}restore_user.php');
+  try {
+    final resp = await http.post(uri, body: {'refresh_token': token});
+    final data = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200 && data['status'] == 'success') {
+      return UserInfo(
+        userId: data['userId'] as int,
+        email: data['email'] as String,
+        uuid: data['uuid'] as String,
+        status: data['status'] as String,
+        createdAt: data['createdAt'] as String,
+        refreshToken:
+            (data['refresh_token'] ?? token).toString().isNotEmpty
+                ? (data['refresh_token'] ?? token).toString()
+                : null,
+        nickName: (data['nick_name'] ?? data['nickName']) as String?,
+        reportsBlocked:
+            (data['reports_blocked'] is int)
+                ? data['reports_blocked'] as int
+                : int.tryParse(data['reports_blocked']?.toString() ?? '') ?? 0,
+        reportsBlockedUntil: data['reports_blocked_until'] as String?,
+        reportsBlockedReason: data['reports_blocked_reason'] as String?,
+        postsBlocked:
+            (data['posts_blocked'] is int)
+                ? data['posts_blocked'] as int
+                : int.tryParse(data['posts_blocked']?.toString() ?? '') ?? 0,
+        postsBlockedUntil: data['posts_blocked_until'] as String?,
+        postsBlockedReason: data['posts_blocked_reason'] as String?,
+        role: data['role'] as String?,
+        canReport:
+            (data['can_report'] is bool)
+                ? data['can_report'] as bool
+                : ((data['can_report'] is int)
+                    ? ((data['can_report'] as int) != 0)
+                    : true),
+      );
+    }
+    if (resp.statusCode == 200 && data['status'] == 'not_found') {
+      return null;
+    }
+    throw Exception('restore_user.php が失敗しました: ${data['status']}');
+  } catch (e) {
+    testDebugPrint('refresh_token 復元エラー: $e');
+    rethrow;
   }
 }
 
@@ -449,6 +605,26 @@ Future<UserInfo> getOrInitUserInfo() async {
   final existing = await loadUserInfo();
   if (existing != null) return existing;
 
+  final savedRefreshToken = await loadSavedRefreshToken();
+  if (savedRefreshToken != null && savedRefreshToken.isNotEmpty) {
+    try {
+      final restored = await getUserInfoFromServerByRefreshToken(
+        savedRefreshToken,
+      );
+      if (restored != null) {
+        await saveUserInfo(restored);
+        if (restored.email.trim().isNotEmpty && restored.userId > 0) {
+          await saveLastVerifiedAccount(
+            userId: restored.userId,
+            email: restored.email,
+          );
+        }
+        return restored;
+      }
+      await clearSavedRefreshToken();
+    } catch (_) {}
+  }
+
   // 2) UUID を新規発行（ユーザ情報に格納して保存）
   final uuid = const Uuid().v4();
 
@@ -463,6 +639,16 @@ Future<UserInfo> getOrInitUserInfo() async {
       status: serverData.status,
       createdAt: serverData.createdAt,
       nickName: serverData.nickName,
+      reportsBlocked: serverData.reportsBlocked,
+      reportsBlockedUntil: serverData.reportsBlockedUntil,
+      reportsBlockedReason: serverData.reportsBlockedReason,
+      postsBlocked: serverData.postsBlocked,
+      postsBlockedUntil: serverData.postsBlockedUntil,
+      postsBlockedReason: serverData.postsBlockedReason,
+      role: serverData.role,
+      canReport: serverData.canReport,
+      photoUrl: serverData.photoUrl,
+      photoVersion: serverData.photoVersion,
     );
   } catch (_) {
     // オフライン等で取得できない場合はローカル用に暫定作成し、後で上書きされる前提で続行
@@ -492,7 +678,9 @@ Future<UserInfo?> loadUserInfo() async {
   if (secured != null && secured.isNotEmpty) {
     try {
       final Map<String, dynamic> data = jsonDecode(secured);
-      return UserInfo.fromJson(data);
+      final info = UserInfo.fromJson(data);
+      await syncSavedRefreshToken(info.refreshToken);
+      return info;
     } catch (_) {}
   }
   // SharedPreferences からの移行
@@ -502,11 +690,70 @@ Future<UserInfo?> loadUserInfo() async {
     try {
       await _secure.write(key: userInfoKey, value: legacy);
       final Map<String, dynamic> data = jsonDecode(legacy);
-      return UserInfo.fromJson(data);
+      final info = UserInfo.fromJson(data);
+      await syncSavedRefreshToken(info.refreshToken);
+      return info;
     } catch (_) {}
   }
   return null;
 }
+
+Future<String?> loadSavedRefreshToken() async {
+  final token = await _secure.read(key: userRefreshTokenKey);
+  final trimmed = token?.trim() ?? '';
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+Future<void> clearSavedRefreshToken() async {
+  await _secure.delete(key: userRefreshTokenKey);
+}
+
+Future<void> syncSavedRefreshToken(String? refreshToken) async {
+  final token = refreshToken?.trim() ?? '';
+  if (token.isEmpty) {
+    await clearSavedRefreshToken();
+    return;
+  }
+  await _secure.write(key: userRefreshTokenKey, value: token);
+}
+
+Future<void> saveLastVerifiedAccount({
+  required int userId,
+  required String email,
+}) async {
+  final trimmed = email.trim();
+  final prefs = await SharedPreferences.getInstance();
+  if (userId <= 0 || trimmed.isEmpty) {
+    await prefs.remove(lastVerifiedUserIdKey);
+    await prefs.remove(lastVerifiedEmailKey);
+    await prefs.remove(dismissedRecoveryPromptKey);
+    return;
+  }
+  await prefs.setInt(lastVerifiedUserIdKey, userId);
+  await prefs.setString(lastVerifiedEmailKey, trimmed);
+  await prefs.remove(dismissedRecoveryPromptKey);
+}
+
+Future<Map<String, dynamic>?> loadLastVerifiedAccount() async {
+  final prefs = await SharedPreferences.getInstance();
+  final userId = prefs.getInt(lastVerifiedUserIdKey) ?? 0;
+  final email = (prefs.getString(lastVerifiedEmailKey) ?? '').trim();
+  if (userId <= 0 || email.isEmpty) return null;
+  return {'userId': userId, 'email': email};
+}
+
+Future<void> saveDismissedRecoveryPrompt(String signature) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(dismissedRecoveryPromptKey, signature);
+}
+
+Future<String?> loadDismissedRecoveryPrompt() async {
+  final prefs = await SharedPreferences.getInstance();
+  final sig = prefs.getString(dismissedRecoveryPromptKey)?.trim() ?? '';
+  return sig.isEmpty ? null : sig;
+}
+
+enum _CreateAction { catchPost, envPost, newSpot }
 
 class MainPage extends ConsumerStatefulWidget {
   const MainPage({super.key, required this.title, this.initialIndex = 0});
@@ -538,6 +785,7 @@ class _MainPageState extends ConsumerState<MainPage> {
   int _lastNavigateToTideTick = 0;
   // 起動時の最寄り自動選択（未選択時）の実行フラグ
   bool _didStartupAutoSelect = false;
+  bool _accountRecoveryPromptShown = false;
 
   void _onItemTapped(int index) {
     // 中央の「投稿」アイテムは FAB と同じ動作に割り当てる
@@ -619,6 +867,9 @@ class _MainPageState extends ConsumerState<MainPage> {
 
     // 起動時にユーザ情報(特に role)を最新化して保存（各画面の表示整合性のため）
     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshUserRole());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybePromptAccountRecovery(),
+    );
     // すでに同意済みで初回データが未準備なら、確認なしで自動実行
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
@@ -644,6 +895,97 @@ class _MainPageState extends ConsumerState<MainPage> {
         final refreshed = await getUserInfoFromServer(uuid: info.uuid);
         await saveUserInfo(refreshed);
       } catch (_) {}
+    } catch (_) {}
+  }
+
+  Future<int?> _fetchMySpotCount(int userId) async {
+    if (userId <= 0) return null;
+    try {
+      final resp = await http.post(
+        Uri.parse('${AppConfig.instance.baseUrl}get_my_spot_list.php'),
+        body: {'user_id': userId.toString()},
+      );
+      if (resp.statusCode != 200) return null;
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (data['status'] != 'success') return null;
+      final rows = data['rows'] as List?;
+      return rows?.length ?? 0;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _maybePromptAccountRecovery() async {
+    if (!mounted || _accountRecoveryPromptShown) return;
+    try {
+      final current = await loadUserInfo() ?? await getOrInitUserInfo();
+      final currentEmail = current.email.trim();
+      if (current.userId <= 0 || currentEmail.isEmpty) return;
+
+      final baseline = await loadLastVerifiedAccount();
+      if (baseline == null) {
+        final mySpotCount = await _fetchMySpotCount(current.userId);
+        if ((mySpotCount ?? 0) > 0) {
+          await saveLastVerifiedAccount(
+            userId: current.userId,
+            email: currentEmail,
+          );
+        }
+        return;
+      }
+
+      final baselineUserId = (baseline['userId'] as int?) ?? 0;
+      final baselineEmail = (baseline['email'] as String?)?.trim() ?? '';
+      if (baselineUserId <= 0 ||
+          baselineEmail.isEmpty ||
+          baselineEmail != currentEmail ||
+          baselineUserId == current.userId) {
+        return;
+      }
+
+      final signature = '$baselineUserId:${current.userId}:$currentEmail';
+      final dismissed = await loadDismissedRecoveryPrompt();
+      if (dismissed == signature) return;
+
+      _accountRecoveryPromptShown = true;
+      if (!mounted) return;
+      final shouldRecover =
+          await showDialog<bool>(
+            context: context,
+            builder:
+                (ctx) => AlertDialog(
+                  title: const Text('アカウント復元'),
+                  content: const Text(
+                    '以前の投稿や釣り場情報が見つからないため、別のアカウント状態になっている可能性があります。\n\nアカウント復元を行うと、以前のメール認証済みアカウントに戻せます。',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('閉じる'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('アカウント復元'),
+                    ),
+                  ],
+                ),
+          ) ??
+          false;
+
+      if (shouldRecover) {
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder:
+                (_) => NewAccountPage(
+                  initialEmail: currentEmail,
+                  recoveryMode: true,
+                ),
+          ),
+        );
+      } else {
+        await saveDismissedRecoveryPrompt(signature);
+      }
     } catch (_) {}
   }
 
@@ -1060,7 +1402,7 @@ class _MainPageState extends ConsumerState<MainPage> {
           setState(() {});
         },
         onAdFailedToLoad: (ad, error) {
-          print('Ad failed to load: ${error.code} ${error.message}');
+          logPrint('Ad failed to load: ${error.code} ${error.message}');
           ad.dispose();
           // エラーハンドリング（例：ログ出力）
         },
@@ -1242,9 +1584,31 @@ class _MainPageState extends ConsumerState<MainPage> {
                                 child: FilterChip(
                                   showCheckmark: false,
                                   selected: common.fishingDiaryMode,
-                                  onSelected:
-                                      (v) => Common.instance
-                                          .setFishingDiaryMode(v),
+                                  onSelected: (v) async {
+                                    if (v) {
+                                      try {
+                                        final info =
+                                            await loadUserInfo() ??
+                                            await getOrInitUserInfo();
+                                        if (info.email.trim().isEmpty) {
+                                          if (!mounted) return;
+                                          final res = await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder:
+                                                  (_) => const NewAccountPage(
+                                                    authPurposeLabel: '釣り日記',
+                                                  ),
+                                            ),
+                                          );
+                                          if (res != true) return;
+                                        }
+                                      } catch (_) {}
+                                    }
+                                    await Common.instance.setFishingDiaryMode(
+                                      v,
+                                    );
+                                  },
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: const VisualDensity(
@@ -1371,7 +1735,106 @@ class _MainPageState extends ConsumerState<MainPage> {
   }
 
   Future<void> _onPressCreatePost() async {
-    // 釣り場未選択のときは投稿画面へ遷移させない
+    if (_selectedIndex != 2) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(SnackBar(content: Text(warningSelectSpot)));
+      if (mounted) {
+        setState(() {
+          _selectedIndex = 2;
+        });
+      }
+      await Future<void>.delayed(Duration.zero);
+      try {
+        await tidePageKey.currentState?.showMapTab();
+      } catch (_) {}
+      return;
+    }
+    final action = await showModalBottomSheet<_CreateAction>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        Widget tile({
+          required Widget icon,
+          required String label,
+          required _CreateAction action,
+        }) {
+          return InkWell(
+            onTap: () => Navigator.of(sheetContext).pop(action),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  SizedBox(width: 56, child: Center(child: icon)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(label, style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              tile(
+                icon: const Text('🐟', style: TextStyle(fontSize: 22)),
+                label: '釣り場の釣果の投稿',
+                action: _CreateAction.catchPost,
+              ),
+              tile(
+                icon: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.local_parking, color: Colors.black87, size: 20),
+                    SizedBox(width: 4),
+                    Icon(Icons.wc, color: Colors.black87, size: 20),
+                  ],
+                ),
+                label: '釣り場の環境の投稿',
+                action: _CreateAction.envPost,
+              ),
+              tile(
+                icon: const Icon(
+                  Icons.add_location_alt_outlined,
+                  color: Colors.black87,
+                  size: 20,
+                ),
+                label: '新しい釣り場の登録',
+                action: _CreateAction.newSpot,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == null) return;
+    switch (action) {
+      case _CreateAction.catchPost:
+        await _openPostInput('catch');
+        break;
+      case _CreateAction.envPost:
+        await _openPostInput('env');
+        break;
+      case _CreateAction.newSpot:
+        await _openNewSpotRegistration();
+        break;
+    }
+  }
+
+  Future<void> _openPostInput(String initType) async {
     final hasSelection =
         (Common.instance.selectedTeibouName.isNotEmpty ||
             Common.instance.selectedTeibouLat != 0.0 ||
@@ -1383,30 +1846,105 @@ class _MainPageState extends ConsumerState<MainPage> {
     }
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      if (!(info.canReport)) {
+      if (info.email.trim().isEmpty) {
+        if (!mounted) return;
+        final res = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (_) => const NewAccountPage(
+                  returnToInputPost: true,
+                  authPurposeLabel: '投稿',
+                ),
+          ),
+        );
+        if (res != true) return;
+      }
+    } catch (_) {}
+    try {
+      final local = await loadUserInfo() ?? await getOrInitUserInfo();
+      UserInfo info = local;
+      try {
+        final remote = await getUserInfoFromServer(
+          uuid: local.uuid,
+          email: null,
+        );
+        info = local.copyWith(
+          userId: remote.userId != 0 ? remote.userId : local.userId,
+          email: remote.email.isNotEmpty ? remote.email : local.email,
+          uuid: remote.uuid.isNotEmpty ? remote.uuid : local.uuid,
+          status: remote.status.isNotEmpty ? remote.status : local.status,
+          createdAt:
+              remote.createdAt.isNotEmpty ? remote.createdAt : local.createdAt,
+          nickName: remote.nickName ?? local.nickName,
+          reportsBlocked: remote.reportsBlocked,
+          reportsBlockedUntil: remote.reportsBlockedUntil,
+          reportsBlockedReason: remote.reportsBlockedReason,
+          postsBlocked: remote.postsBlocked,
+          postsBlockedUntil: remote.postsBlockedUntil,
+          postsBlockedReason: remote.postsBlockedReason,
+          role: remote.role ?? local.role,
+          canReport: remote.canReport,
+          photoUrl: remote.photoUrl ?? local.photoUrl,
+          photoVersion: remote.photoVersion ?? local.photoVersion,
+          clearReportsBlockedUntil: remote.reportsBlockedUntil == null,
+          clearReportsBlockedReason: remote.reportsBlockedReason == null,
+          clearPostsBlockedUntil: remote.postsBlockedUntil == null,
+          clearPostsBlockedReason: remote.postsBlockedReason == null,
+        );
+        await saveUserInfo(info);
+      } catch (_) {}
+      String? blockMessage;
+      if (info.postsBlocked == 1) {
+        blockMessage = '投稿の送信は停止中です。不適切な利用が確認されました。';
+      } else if (_hasEffectiveBlockedUntil(info.postsBlockedUntil)) {
+        blockMessage = '投稿の送信は一時停止中です。不適切な利用が確認されました。';
+      }
+      if (blockMessage != null) {
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('現在は投稿できません')));
+        ).showSnackBar(SnackBar(content: Text(blockMessage)));
         return;
       }
     } catch (_) {}
     if (!mounted) return;
-    String initType = 'catch';
-    try {
-      final mode = Common.instance.postListMode;
-      initType = (mode == 'env') ? 'env' : 'catch';
-    } catch (_) {}
     final res = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => InputPost(initialType: initType)),
     );
     if (res == true) {
-      // 投稿成功時、TidePage の投稿一覧を再読込
+      try {
+        Common.instance.requestPostFeedReload();
+      } catch (_) {}
       try {
         tidePageKey.currentState?.forceReloadPostList();
       } catch (_) {}
     }
+  }
+
+  Future<void> _openNewSpotRegistration() async {
+    if (Common.instance.fishingDiaryMode) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('釣り日記状態では釣り場登録できません。釣り日記をOFFにしてください。')),
+      );
+      return;
+    }
+    if (_selectedIndex != 2) {
+      if (!mounted) return;
+      setState(() {
+        _selectedIndex = 2;
+      });
+    }
+    Common.instance.requestStartApplyMode();
+  }
+
+  bool _hasEffectiveBlockedUntil(String? raw) {
+    final t = raw?.trim() ?? '';
+    if (t.isEmpty) return false;
+    final lower = t.toLowerCase();
+    return lower != 'null' && lower != '0';
   }
 }
 

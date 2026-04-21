@@ -142,15 +142,9 @@ class _EditAccountPageState extends ConsumerState<EditAccountPage> {
         final data = json.decode(resp.body);
         if (data is Map && data['result'] == 'OK') {
           // ローカルも未登録に降格
-          final updated = UserInfo(
-            userId: info.userId,
-            email: '',
-            uuid: info.uuid,
-            status: info.status,
-            createdAt: info.createdAt,
-            refreshToken: null,
-          );
+          final updated = info.copyWith(email: '', clearRefreshToken: true);
           await saveUserInfo(updated);
+          await saveLastVerifiedAccount(userId: 0, email: '');
           // 設定画面へ反映
           ref.invalidate(userInfoProvider);
           if (!mounted) return;
