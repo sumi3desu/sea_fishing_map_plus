@@ -242,6 +242,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
             prefId: todoufukenId,
           );
           Common.instance.shouldJumpPage = true;
+          Common.instance.requestTeibouReload();
           Common.instance.notify();
         } catch (_) {}
 

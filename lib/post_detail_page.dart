@@ -828,6 +828,26 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
         });
   }
 
+  void _openDelete() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder:
+                (_) => _DeletePostPage(
+                  item: widget.item,
+                  currentTitle: _currentTitle ?? widget.item.title ?? '',
+                  currentDetail: _currentDetail ?? widget.item.detail ?? '',
+                ),
+          ),
+        )
+        .then((res) {
+          if (!mounted) return;
+          if (res is Map && res['deleted'] == true) {
+            Navigator.pop(context, res);
+          }
+        });
+  }
+
   Future<void> _prepareNickName() async {
     // まずはサーバから受け取ったニックネームがあれば優先
     final initial = (widget.item.nickName ?? '').trim();
@@ -1097,6 +1117,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
           'updated': _updated,
           'clearedImage': _imageCleared,
           'postId': widget.item.postId,
+          'deleted': false,
         };
         if (_newImagePath != null) map['image_path'] = _newImagePath;
         if (_newThumbPath != null) map['thumb_path'] = _newThumbPath;
@@ -1130,80 +1151,85 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
               Container(
                 height: kToolbarHeight,
                 color: AppConfig.instance.appBarBackgroundColor,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final nearbyLabel = _canEdit ? '釣れた場所' : '釣れたエリア';
-                    return Row(
-                      children: [
-                        BackButton(
-                          color: AppConfig.instance.appBarForegroundColor,
-                          onPressed: () {
-                            final map = {
-                              'updated': _updated,
-                              'clearedImage': _imageCleared,
-                              'postId': widget.item.postId,
-                            };
-                            if (_newImagePath != null)
-                              map['image_path'] = _newImagePath;
-                            if (_newThumbPath != null)
-                              map['thumb_path'] = _newThumbPath;
-                            Navigator.pop(context, map);
-                          },
+                child: Row(
+                  children: [
+                    BackButton(
+                      color: AppConfig.instance.appBarForegroundColor,
+                      onPressed: () {
+                        final map = {
+                          'updated': _updated,
+                          'clearedImage': _imageCleared,
+                          'postId': widget.item.postId,
+                          'deleted': false,
+                        };
+                        if (_newImagePath != null)
+                          map['image_path'] = _newImagePath;
+                        if (_newThumbPath != null)
+                          map['thumb_path'] = _newThumbPath;
+                        Navigator.pop(context, map);
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    const Expanded(
+                      child: Text(
+                        '投稿詳細',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.left,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(width: 4),
-                        const Expanded(
-                          child: Text(
-                            '投稿詳細',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      ),
+                    ),
+                    if (widget.item.showNearbyButton &&
+                        (widget.item.spotId ?? 0) > 0 &&
+                        ambiguous_plevel != 0)
+                      TextButton.icon(
+                        onPressed: _openNearbyMap,
+                        icon: const Icon(Icons.map),
+                        label: Text(_canEdit ? '釣れた場所' : '釣れたエリア'),
+                        style: TextButton.styleFrom(
+                          foregroundColor:
+                              AppConfig.instance.appBarForegroundColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          visualDensity: VisualDensity.compact,
                         ),
-                        if (widget.item.showNearbyButton &&
-                            (widget.item.spotId ?? 0) > 0 &&
-                            ambiguous_plevel != 0)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: TextButton.icon(
-                              onPressed: _openNearbyMap,
-                              icon: const Icon(Icons.map),
-                              label: Text(nearbyLabel),
-                              style: TextButton.styleFrom(
-                                foregroundColor:
-                                    AppConfig.instance.appBarForegroundColor,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ),
-                        if (_canEdit)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: TextButton.icon(
-                              onPressed: _openEdit,
-                              icon: const Icon(Icons.edit),
-                              label: const Text('編集'),
-                              style: TextButton.styleFrom(
-                                foregroundColor:
-                                    AppConfig.instance.appBarForegroundColor,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+                      ),
+                  ],
                 ),
               ),
+              if (_canEdit)
+                Container(
+                  height: 44,
+                  width: double.infinity,
+                  color: const Color(0xFF0D47A1),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _openEdit,
+                        icon: const Icon(Icons.edit),
+                        label: const Text('編集'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _openDelete,
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('削除'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               const Divider(height: 1),
               Expanded(
                 child: SingleChildScrollView(
@@ -1530,4 +1556,318 @@ class PostDetailItem {
     this.spotId,
     this.showNearbyButton = false,
   });
+}
+
+class _DeletePostPage extends ConsumerStatefulWidget {
+  const _DeletePostPage({
+    required this.item,
+    required this.currentTitle,
+    required this.currentDetail,
+  });
+
+  final PostDetailItem item;
+  final String currentTitle;
+  final String currentDetail;
+
+  @override
+  ConsumerState<_DeletePostPage> createState() => _DeletePostPageState();
+}
+
+class _DeletePostPageState extends ConsumerState<_DeletePostPage> {
+  final TextEditingController _reasonController = TextEditingController();
+  BannerAd? _bannerAd;
+  bool _submitting = false;
+  String? _reasonError;
+
+  String _withDeleteTs(String url) {
+    final sep = url.contains('?') ? '&' : '?';
+    return '$url${sep}ts=${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  void _ensureBannerLoaded(bool isPremium) {
+    if (isPremium || _bannerAd != null) return;
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId:
+          Platform.isIOS
+              ? 'ca-app-pub-3940256099942544/2934735716'
+              : 'ca-app-pub-3940256099942544/6300978111',
+      listener: BannerAdListener(
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          _bannerAd = null;
+          if (mounted) setState(() {});
+        },
+        onAdLoaded: (_) {
+          if (mounted) setState(() {});
+        },
+      ),
+      request: const AdRequest(),
+    )..load();
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    final reason = _reasonController.text.trim();
+    if (reason.isEmpty) {
+      setState(() {
+        _reasonError = '削除理由を入力してください';
+      });
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            content: const Text('削除してよろしいですか'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('キャンセル'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('はい'),
+              ),
+            ],
+          ),
+    );
+    if (ok != true) return;
+    setState(() {
+      _submitting = true;
+      _reasonError = null;
+    });
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final uri = Uri.parse('${AppConfig.instance.baseUrl}post.php');
+      final resp = await http
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: {
+              'action': 'delete',
+              'post_id': (widget.item.postId ?? 0).toString(),
+              'user_id': info.userId.toString(),
+              'delete_reason': reason,
+            },
+          )
+          .timeout(kHttpTimeout);
+      if (!mounted) return;
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        if (data is Map && data['status']?.toString() == 'success') {
+          Navigator.pop(context, {
+            'deleted': true,
+            'postId': widget.item.postId,
+          });
+          return;
+        }
+        final message =
+            (data is Map ? data['message']?.toString() : null) ?? '削除に失敗しました';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('削除に失敗しました（HTTP ${resp.statusCode}）')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('削除に失敗しました: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final premiumState = ref.watch(prem.premiumStateProvider);
+    if (premiumState.isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('投稿の削除'),
+          backgroundColor: AppConfig.instance.appBarBackgroundColor,
+          foregroundColor: AppConfig.instance.appBarForegroundColor,
+          toolbarHeight: 0,
+        ),
+        body: const SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+    final isPremium = premiumState.isPremium;
+    _ensureBannerLoaded(isPremium);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('投稿の削除'),
+        backgroundColor: AppConfig.instance.appBarBackgroundColor,
+        foregroundColor: AppConfig.instance.appBarForegroundColor,
+        toolbarHeight: 0,
+      ),
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                if (!isPremium && _bannerAd != null)
+                  Container(
+                    alignment: Alignment.center,
+                    width: _bannerAd!.size.width.toDouble(),
+                    height: _bannerAd!.size.height.toDouble(),
+                    child: AdWidget(ad: _bannerAd!),
+                  ),
+                Container(
+                  height: kToolbarHeight,
+                  color: AppConfig.instance.appBarBackgroundColor,
+                  child: Row(
+                    children: [
+                      BackButton(
+                        color: AppConfig.instance.appBarForegroundColor,
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      const SizedBox(width: 4),
+                      const Expanded(
+                        child: Text(
+                          '投稿の削除',
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: TextButton.icon(
+                          onPressed: _submitting ? null : _delete,
+                          icon:
+                              _submitting
+                                  ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color:
+                                          AppConfig
+                                              .instance
+                                              .appBarForegroundColor,
+                                    ),
+                                  )
+                                  : const Icon(Icons.delete_outline),
+                          label: const Text('削除'),
+                          style: TextButton.styleFrom(
+                            foregroundColor:
+                                AppConfig.instance.appBarForegroundColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '削除理由',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _reasonController,
+                      maxLength: 255,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: '削除理由を入力してください',
+                        errorText: _reasonError,
+                      ),
+                      onChanged: (_) {
+                        if (_reasonError != null) {
+                          setState(() {
+                            _reasonError = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '概要',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: TextEditingController(
+                        text: widget.currentTitle,
+                      ),
+                      readOnly: true,
+                      maxLength: 32,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      '詳細',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: TextEditingController(
+                        text: widget.currentDetail,
+                      ),
+                      readOnly: true,
+                      minLines: 4,
+                      maxLines: 8,
+                      maxLength: 500,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    if ((widget.item.imageUrl ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        '画像',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          _withDeleteTs(widget.item.imageUrl!),
+                          fit: BoxFit.fitWidth,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

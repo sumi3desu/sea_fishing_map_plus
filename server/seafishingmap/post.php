@@ -30,10 +30,69 @@ try {
     $detail   = isset($_POST['detail']) ? (string)$_POST['detail'] : '';
     $createAt = isset($_POST['create_at']) ? (string)$_POST['create_at'] : '';
     $postId   = isset($_POST['post_id']) ? (int)$_POST['post_id'] : 0; // update 用
+    $deleteReason = isset($_POST['delete_reason']) ? trim((string)$_POST['delete_reason']) : '';
 
     if ($userId <= 0) {
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'invalid user_id'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($action === 'delete') {
+        if ($postId <= 0) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'post_id is required for delete'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ($deleteReason === '' || mb_strlen($deleteReason) > 255) {
+            http_response_code(400);
+            echo json_encode(['status' => 'error', 'message' => 'invalid delete_reason'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stActor = $pdo->prepare('SELECT role FROM `user` WHERE user_id = ? LIMIT 1');
+        $stActor->execute([$userId]);
+        $actor = $stActor->fetch();
+        $actorRole = $actor ? strtolower((string)($actor['role'] ?? '')) : '';
+
+        $stPost = $pdo->prepare('SELECT user_id, is_deleted FROM post WHERE post_id = ? LIMIT 1');
+        $stPost->execute([$postId]);
+        $target = $stPost->fetch();
+        if (!$target) {
+            http_response_code(404);
+            echo json_encode(['status' => 'error', 'message' => 'post not found'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        if ((int)$target['is_deleted'] === 1) {
+            echo json_encode(['status' => 'success', 'post_id' => $postId, 'action' => 'delete'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $ownerId = (int)$target['user_id'];
+        if ($actorRole !== 'admin' && $ownerId !== $userId) {
+            http_response_code(403);
+            echo json_encode(['status' => 'error', 'message' => 'permission denied'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stmtDel = $pdo->prepare(
+            'UPDATE post
+             SET is_deleted = 1,
+                 deleted_at = NOW(),
+                 deleted_by_user_id = :deleted_by_user_id,
+                 delete_reason = :delete_reason,
+                 update_at = NOW()
+             WHERE post_id = :post_id'
+        );
+        $stmtDel->execute([
+            ':deleted_by_user_id' => $userId,
+            ':delete_reason' => $deleteReason,
+            ':post_id' => $postId,
+        ]);
+
+        echo json_encode([
+            'status' => 'success',
+            'post_id' => (int)$postId,
+            'action' => 'delete',
+        ], JSON_UNESCAPED_UNICODE);
         exit;
     }
     // ユーザ単位の投稿ブロックを確認
@@ -66,7 +125,7 @@ try {
         echo json_encode(['status' => 'error', 'message' => 'invalid spot_id'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    if (mb_strlen($detail) > 1024) {
+    if (mb_strlen($detail) > 500) {
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'detail too long'], JSON_UNESCAPED_UNICODE);
         exit;

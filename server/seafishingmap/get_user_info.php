@@ -30,7 +30,7 @@ try {
     // 既存ユーザを検索（どちらの場合もブロック関連カラムを取得）
     $sql = '';
     if ($email === '') {
-        $sql = 'SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
                   FROM user
                  WHERE delete_flg = 0
                    AND uuid = ?';
@@ -38,7 +38,7 @@ try {
         $stmt->execute([$uuid]);
         debug_log('sql['.$sql.'] uuid['.$uuid.']');
     } else {
-        $sql = 'SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
                   FROM user
                  WHERE delete_flg = 0
                    AND email = ?';
@@ -71,6 +71,7 @@ try {
             'uuid'       => $user['uuid'],
             'status'     => 'success',
             'createdAt'  => $user['created_at'],
+            'nick_name'  => $user['nick_name'] ?? null,
             'reports_blocked' => (int)($user['reports_blocked'] ?? 0),
             'reports_blocked_until' => $user['reports_blocked_until'] ?? null,
             'reports_blocked_reason' => $user['reports_blocked_reason'] ?? null,
@@ -94,7 +95,7 @@ try {
     $insertStmt->execute([$uuid, '']);
     $newUserId = $pdo->lastInsertId();
  
-    $sql = 'SELECT user_id, uuid, email, created_at, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+    $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
               FROM user
              WHERE delete_flg = 0
                AND user_id = ?';
@@ -123,6 +124,7 @@ try {
             'uuid'       => $user['uuid'],
             'status'     => 'success',
             'createdAt'  => $user['created_at'],
+            'nick_name'  => $user['nick_name'] ?? null,
             'reports_blocked' => (int)($user['reports_blocked'] ?? 0),
             'reports_blocked_until' => $user['reports_blocked_until'] ?? null,
             'reports_blocked_reason' => $user['reports_blocked_reason'] ?? null,

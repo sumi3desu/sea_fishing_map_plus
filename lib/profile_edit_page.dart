@@ -15,6 +15,7 @@ import 'background_crop_page.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/premium_state_notifier.dart' as prem;
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileEditPage extends ConsumerStatefulWidget {
   const ProfileEditPage({super.key});
@@ -143,6 +144,23 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
     _xController.dispose();
     _instagramController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('URLを開けませんでした')));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('URLを開けませんでした')));
+    }
   }
 
   Future<void> _fetchRemoteImages() async {
@@ -941,6 +959,15 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
                             isPublic: _xPublic,
                             maxLength: 15,
                             hintText: '1から15文字',
+                            icon: _buildSocialIcon(
+                              label: 'X',
+                              onTap: () {
+                                final username = _xController.text.trim();
+                                if (username.isEmpty) return;
+                                _openExternalUrl('https://x.com/$username');
+                              },
+                              enabled: _xController.text.trim().isNotEmpty,
+                            ),
                             onChanged:
                                 (v) => setState(() {
                                   _xPublic = v;
@@ -956,6 +983,19 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
                             isPublic: _instagramPublic,
                             maxLength: 30,
                             hintText: '1から30文字',
+                            icon: _buildSocialIcon(
+                              icon: Icons.camera_alt_outlined,
+                              onTap: () {
+                                final username =
+                                    _instagramController.text.trim();
+                                if (username.isEmpty) return;
+                                _openExternalUrl(
+                                  'https://www.instagram.com/$username/',
+                                );
+                              },
+                              enabled:
+                                  _instagramController.text.trim().isNotEmpty,
+                            ),
                             onChanged:
                                 (v) => setState(() {
                                   _instagramPublic = v;
@@ -1009,6 +1049,7 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
     required bool isPublic,
     required int maxLength,
     required String hintText,
+    required Widget icon,
     required ValueChanged<bool> onChanged,
   }) {
     return Column(
@@ -1039,19 +1080,62 @@ class _ProfileEditPageState extends ConsumerState<ProfileEditPage> {
           ),
         ),
         const SizedBox(height: 10),
-        TextField(
-          controller: controller,
-          maxLength: maxLength,
-          enabled: _isEditing,
-          readOnly: !_isEditing,
-          onChanged: (_) => _dirty = true,
-          decoration: InputDecoration(
-            border: const OutlineInputBorder(),
-            counterText: '',
-            hintText: hintText,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(padding: const EdgeInsets.only(top: 4), child: icon),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                maxLength: maxLength,
+                enabled: _isEditing,
+                readOnly: !_isEditing,
+                onChanged: (_) => setState(() => _dirty = true),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  counterText: '',
+                  hintText: hintText,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  Widget _buildSocialIcon({
+    IconData? icon,
+    String? label,
+    required VoidCallback onTap,
+    required bool enabled,
+  }) {
+    final color =
+        enabled ? AppConfig.instance.appBarBackgroundColor : Colors.grey;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          border: Border.all(color: color),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child:
+            icon != null
+                ? Icon(icon, color: color, size: 20)
+                : Text(
+                  label ?? '',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+      ),
     );
   }
 }

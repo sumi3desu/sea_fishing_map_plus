@@ -458,13 +458,20 @@ class _CatchPostListState extends State<_CatchPostList> {
               } else if (res is Map) {
                 final updated = (res['updated'] == true);
                 final cleared = (res['clearedImage'] == true);
+                final deleted = (res['deleted'] == true);
                 final pid =
                     res['postId'] is int
                         ? res['postId'] as int
                         : (res['postId'] is String
                             ? int.tryParse(res['postId'])
                             : null);
-                if (updated && cleared && pid != null) {
+                if (deleted && pid != null) {
+                  setState(() {
+                    _items.removeWhere((e) => e.postId == pid);
+                    _imgTsByPost.remove(pid);
+                  });
+                  await _removeImageTs(pid);
+                } else if (updated && cleared && pid != null) {
                   // 投稿は残しつつ、画像だけ消した状態に更新（サムネは非表示）
                   final idx = _items.indexWhere((e) => e.postId == pid);
                   if (idx >= 0) {
@@ -975,13 +982,20 @@ class _EnvPostListState extends State<_EnvPostList> {
                     } else if (res is Map) {
                       final updated = (res['updated'] == true);
                       final cleared = (res['clearedImage'] == true);
+                      final deleted = (res['deleted'] == true);
                       final pid =
                           res['postId'] is int
                               ? res['postId'] as int
                               : (res['postId'] is String
                                   ? int.tryParse(res['postId'])
                                   : null);
-                      if (updated && cleared && pid != null) {
+                      if (deleted && pid != null) {
+                        setState(() {
+                          _items.removeWhere((e) => e.postId == pid);
+                          _imgTsByPost.remove(pid);
+                        });
+                        await _removeImageTs(pid);
+                      } else if (updated && cleared && pid != null) {
                         // 画像は外すが投稿行は残す
                         final idx = _items.indexWhere((e) => e.postId == pid);
                         if (idx >= 0) {
@@ -1258,7 +1272,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   int _sheetReloadTick = 0; // 投稿一覧シートの再構築用トリガ
   Set<int> _favoriteIds = <int>{};
   Set<int> _myCatchSpotIds = <int>{};
+  Set<int> _myOwnedSpotIds = <int>{};
   int? _latestMyCatchSpotId;
+  int? _latestMyOwnedSpotId;
+  bool _showApplyModeGuide = false;
+  bool _hideApplyModeGuideCheckbox = false;
+  double? _applyGuideLeft;
+  double? _applyGuideTop;
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
   int _lastAmbiguousPlevel = ambiguous_plevel;
   // 潮汐オーバーレイ表示とスワイプ用
@@ -1370,6 +1390,18 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return ownerId == null || ownerId != userId;
   }
 
+  Set<int> get _myDiarySpotIds => <int>{..._myCatchSpotIds, ..._myOwnedSpotIds};
+
+  Future<bool> _shouldShowApplyModeGuide() async {
+    final prefs = await SharedPreferences.getInstance();
+    return !(prefs.getBool('hide_apply_mode_guide') ?? false);
+  }
+
+  Future<void> _saveHideApplyModeGuide(bool hide) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hide_apply_mode_guide', hide);
+  }
+
   Future<List<Map<String, dynamic>>> _visibleTeibouRows() async {
     final rows = await SioDatabase().getAllTeibouWithPrefecture();
     try {
@@ -1453,6 +1485,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     required double lng,
     required String name,
     required int? portId,
+    String? buttonMode,
   }) async {
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
@@ -1485,6 +1518,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 initialPortId: portId,
                 applicantUserId: owner,
                 canModerate: isAdmin,
+                buttonMode: buttonMode,
               ),
         ),
       );
@@ -1579,9 +1613,23 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         name: name,
         portId: portId,
       );
-      if (handled) return;
+      if (handled) {
+        if (mounted) {
+          _lastLat = null;
+          _lastLng = null;
+          _lastName = '';
+          await _prepare();
+        }
+        return;
+      }
     }
     await _showCurrentSpotInfoDialog();
+    if (mounted) {
+      _lastLat = null;
+      _lastLng = null;
+      _lastName = '';
+      await _prepare();
+    }
   }
 
   int? _rowPrefId(Map<String, dynamic>? row) {
@@ -1830,11 +1878,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     if (_applyMode) return true;
     final verified = await _ensureEmailVerified(authPurposeLabel: '釣り場登録');
     if (!verified) return false;
+    final shouldShowGuide = await _shouldShowApplyModeGuide();
     final bool newMode = true;
     setState(() {
       _applyMode = newMode;
       _applyPoint = null;
       _gmApplyPoint = null;
+      _hideApplyModeGuideCheckbox = false;
+      _showApplyModeGuide = shouldShowGuide;
+      _applyGuideLeft = null;
+      _applyGuideTop = null;
       try {
         _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
       } catch (_) {}
@@ -1852,6 +1905,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       _applyMode = false;
       _applyPoint = null;
       _gmApplyPoint = null;
+      _showApplyModeGuide = false;
+      _hideApplyModeGuideCheckbox = false;
+      _applyGuideLeft = null;
+      _applyGuideTop = null;
       try {
         _gmMarkers.removeWhere((m) => m.markerId.value == 'apply');
       } catch (_) {}
@@ -2160,7 +2217,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final bool showCenterMarker =
         !centerRejected &&
         (!diaryMode ||
-            (centerPortId != null && _myCatchSpotIds.contains(centerPortId)));
+            (centerPortId != null && _myDiarySpotIds.contains(centerPortId)));
     // AppleMap 中心注釈
     if (showCenterMarker) {
       _appleAnnotations.add(
@@ -2202,7 +2259,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               (dlng - center.longitude).abs() < 1e-8);
       if (diaryMode &&
           !(portId != null &&
-              _myCatchSpotIds.contains(portId) &&
+              _myDiarySpotIds.contains(portId) &&
               !isSameAsCenter)) {
         continue;
       }
@@ -2314,7 +2371,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     case -3:
                       return 'ユーザ申請取り下げ';
                     case 1:
-                      return 'ユーザ登録承認ずみ';
+                      return 'ユーザ登録承認済み';
                     default:
                       return '';
                   }
@@ -2567,14 +2624,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                             const gm.MarkerId('apply'),
                           );
                         } catch (_) {}
-                        // 案内表示
-                        final messenger = ScaffoldMessenger.maybeOf(context);
-                        messenger?.showSnackBar(
-                          const SnackBar(
-                            content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
-                            duration: Duration(seconds: 3),
-                          ),
-                        );
                       },
                       onCameraMove: (pos) {
                         if (!mounted) return;
@@ -2640,13 +2689,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           setState(() {
                             _applyPoint = latlng;
                           });
-                          final messenger = ScaffoldMessenger.maybeOf(context);
-                          messenger?.showSnackBar(
-                            const SnackBar(
-                              content: Text('この位置でよければ「釣り場登録」をタップしてください。'),
-                              duration: Duration(seconds: 3),
-                            ),
-                          );
                         },
                         onPositionChanged: (pos, hasGesture) {
                           if (!mounted) return;
@@ -2805,17 +2847,20 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       ),
                     ),
                   ),
+                  if (_applyMode && _showApplyModeGuide)
+                    Positioned.fill(child: _buildApplyModeGuideOverlay()),
                   // 下から引っ張り出すボトムシート（投稿一覧などを想定）
-                  Builder(
-                    key: _sheetActuatorKey,
-                    builder:
-                        (context) => DraggableScrollableActuator(
-                          child: KeyedSubtree(
-                            key: ValueKey('epoch-$_sheetEpoch'),
-                            child: _buildDraggableBottomSheet(),
+                  if (!_applyMode)
+                    Builder(
+                      key: _sheetActuatorKey,
+                      builder:
+                          (context) => DraggableScrollableActuator(
+                            child: KeyedSubtree(
+                              key: ValueKey('epoch-$_sheetEpoch'),
+                              child: _buildDraggableBottomSheet(),
+                            ),
                           ),
-                        ),
-                  ),
+                    ),
                   if (_showTideOverlay)
                     Positioned.fill(child: _buildTideOverlay()),
                 ],
@@ -2852,6 +2897,246 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildApplyModeGuideCard() {
+    return Material(
+      elevation: 8,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              color: const Color(0xFF1E90FF),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: const Row(
+                children: [
+                  Icon(Icons.lightbulb_rounded, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    '釣り場登録モード ガイダンス',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '新しく登録したい釣り場の位置を地図上で長押ししてください。長押しすれば何度でも修正できます。\n'
+                    'その位置でよければ「釣り場登録」ピンをタップして釣り場の情報を入力してください。',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CheckboxListTile(
+                          value: _hideApplyModeGuideCheckbox,
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('今後表示しない'),
+                          onChanged: (v) {
+                            setState(() {
+                              _hideApplyModeGuideCheckbox = v ?? false;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          await _saveHideApplyModeGuide(
+                            _hideApplyModeGuideCheckbox,
+                          );
+                          if (!mounted) return;
+                          setState(() {
+                            _showApplyModeGuide = false;
+                          });
+                        },
+                        child: const Text('了解'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApplyModeGuideOverlay() {
+    return IgnorePointer(
+      ignoring: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final double cardWidth = math.min(constraints.maxWidth - 24, 420);
+          final double minLeft = 12;
+          final double maxLeft = math.max(
+            12,
+            constraints.maxWidth - cardWidth - 12,
+          );
+          final double defaultTop = math.max(80, constraints.maxHeight - 300);
+          final double minTop = 72;
+          final double maxTop = math.max(120, constraints.maxHeight - 120);
+          final double left = (_applyGuideLeft ?? 12).clamp(minLeft, maxLeft);
+          final double top = (_applyGuideTop ?? defaultTop).clamp(
+            minTop,
+            maxTop,
+          );
+          return Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: cardWidth,
+                child: _buildDraggableApplyModeGuideCard(
+                  maxLeft: maxLeft,
+                  minLeft: minLeft,
+                  minTop: minTop,
+                  maxTop: maxTop,
+                  currentLeft: left,
+                  currentTop: top,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDraggableApplyModeGuideCard({
+    required double minLeft,
+    required double maxLeft,
+    required double minTop,
+    required double maxTop,
+    required double currentLeft,
+    required double currentTop,
+  }) {
+    return Material(
+      elevation: 8,
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) {
+                if (_applyGuideLeft == null || _applyGuideTop == null) {
+                  setState(() {
+                    _applyGuideLeft = currentLeft;
+                    _applyGuideTop = currentTop;
+                  });
+                }
+              },
+              onPanUpdate: (details) {
+                setState(() {
+                  _applyGuideLeft = ((_applyGuideLeft ?? currentLeft) +
+                          details.delta.dx)
+                      .clamp(minLeft, maxLeft);
+                  _applyGuideTop = ((_applyGuideTop ?? currentTop) +
+                          details.delta.dy)
+                      .clamp(minTop, maxTop);
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                color: const Color(0xFF1E90FF),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '釣り場登録モード ガイダンス',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(Icons.open_with, color: Colors.white70, size: 18),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    '新しく登録したい釣り場の位置を地図上で長押ししてください。長押しすれば何度でも修正できます。\n'
+                    'その位置でよければ「釣り場登録」ピンをタップして釣り場の情報を入力してください。',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CheckboxListTile(
+                          value: _hideApplyModeGuideCheckbox,
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('今後表示しない'),
+                          onChanged: (v) {
+                            setState(() {
+                              _hideApplyModeGuideCheckbox = v ?? false;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          await _saveHideApplyModeGuide(
+                            _hideApplyModeGuideCheckbox,
+                          );
+                          if (!mounted) return;
+                          setState(() {
+                            _showApplyModeGuide = false;
+                          });
+                        },
+                        child: const Text('了解'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -3695,22 +3980,32 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           case -3:
             return 'ユーザ申請取り下げ';
           case 1:
-            return 'ユーザ登録承認ずみ';
+            return 'ユーザ登録承認済み';
           default:
             return '';
         }
       }
 
       final statusText = _flagText(flag);
+      final me = await loadUserInfo();
+      final bool isAdmin = ((me?.role ?? '').toLowerCase() == 'admin');
       final dynamic _uidRaw = (row != null) ? row['user_id'] : null;
+      final int? currentPortId =
+          row == null
+              ? null
+              : (row['port_id'] is int
+                  ? row['port_id'] as int
+                  : int.tryParse(row['port_id']?.toString() ?? ''));
       final int? ownerId =
           (_uidRaw is int)
               ? _uidRaw
               : int.tryParse((_uidRaw?.toString() ?? ''));
+      final bool canEditPending =
+          flag == -1 &&
+          ((ownerId != null && me != null && ownerId == me.userId) || isAdmin);
       String? nick;
       try {
         if (ownerId != null) {
-          final me = await loadUserInfo();
           if (me != null && ownerId == me.userId) {
             nick = me.nickName ?? '';
           } else {
@@ -3732,117 +4027,256 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         barrierDismissible: true,
         builder:
             (_) => AlertDialog(
-              contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(pageContext, rootNavigator: true).pop();
-                          Future.microtask(
-                            () => Navigator.of(pageContext).push(
-                              MaterialPageRoute(
-                                builder: (_) => const _TideStandalonePage(),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 24,
+              ),
+              contentPadding: EdgeInsets.zero,
+              content: SizedBox(
+                width: 380,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(28),
+                        topRight: Radius.circular(28),
+                      ),
+                      child: Container(
+                        color: const Color(0xFF1E90FF),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(
+                                  pageContext,
+                                  rootNavigator: true,
+                                ).pop();
+                                Future.microtask(
+                                  () => Navigator.of(pageContext).push(
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) => const _TideStandalonePage(),
+                                    ),
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0D47A1),
+                                foregroundColor: Colors.white,
+                                shape: const StadiumBorder(),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                              ),
+                              icon: const Icon(Icons.waves, size: 18),
+                              label: const Text(
+                                '潮汐',
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          shape: const StadiumBorder(),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                        ),
-                        icon: const Icon(Icons.waves, size: 18),
-                        label: const Text(
-                          '潮汐',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          (() {
-                            final base = spotName;
-                            return (flag == -1) ? '$base (申請中)' : base;
-                          })(),
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black87,
-                          ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                (() {
+                                  final base = spotName;
+                                  return (flag == -1) ? '$base (申請中)' : base;
+                                })(),
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Divider(height: 1),
-                  const SizedBox(height: 8),
-                  if (yomi.isNotEmpty) ...[
-                    _infoRow('よみがな', yomi),
-                    const SizedBox(height: 6),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (yomi.isNotEmpty) ...[
+                            _infoRow('よみがな', yomi),
+                            const SizedBox(height: 6),
+                          ],
+                          _infoRow('都道府県', prefName),
+                          const SizedBox(height: 6),
+                          _infoRow('種別', kubunLabel),
+                          const SizedBox(height: 6),
+                          _infoRow(
+                            '緯度経度',
+                            '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}',
+                          ),
+                          const SizedBox(height: 6),
+                          _infoRow('住所', addressShort),
+                          const SizedBox(height: 6),
+                          _infoRow('状態', statusText),
+                          const SizedBox(height: 6),
+                          _infoRow(
+                            '登録者',
+                            (ownerId != null)
+                                ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)'
+                                : '−',
+                          ),
+                          const SizedBox(height: 12),
+                          if (canEditPending)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F8FF),
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Table(
+                                border: TableBorder(
+                                  horizontalInside: BorderSide(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  verticalInside: BorderSide(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                children: [
+                                  TableRow(
+                                    children: [
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () => _openSpotApplyEdit(
+                                              row: row ?? <String, dynamic>{},
+                                              lat: lat,
+                                              lng: lng,
+                                              name: spotName,
+                                              portId: currentPortId,
+                                              buttonMode: 'confirmOnly',
+                                            ),
+                                          );
+                                        },
+                                        icon: Icons.edit_note,
+                                        label: '申請編集',
+                                      ),
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () => _openSpotApplyEdit(
+                                              row: row ?? <String, dynamic>{},
+                                              lat: lat,
+                                              lng: lng,
+                                              name: spotName,
+                                              portId: currentPortId,
+                                              buttonMode: 'withdrawOnly',
+                                            ),
+                                          );
+                                        },
+                                        icon: Icons.remove_circle_outline,
+                                        label: '申請取り下げ',
+                                      ),
+                                    ],
+                                  ),
+                                  TableRow(
+                                    children: [
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () =>
+                                                _onToggleFavorite(pageContext),
+                                          );
+                                        },
+                                        icon: Icons.bookmark_border,
+                                        label: 'お気に入り',
+                                      ),
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () => _onOpenRoute(pageContext),
+                                          );
+                                        },
+                                        icon: Icons.directions_car,
+                                        label: '経路表示',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F8FF),
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Table(
+                                border: TableBorder(
+                                  verticalInside: BorderSide(
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                children: [
+                                  TableRow(
+                                    children: [
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () =>
+                                                _onToggleFavorite(pageContext),
+                                          );
+                                        },
+                                        icon: Icons.bookmark_border,
+                                        label: 'お気に入り',
+                                      ),
+                                      _spotActionTile(
+                                        onPressed: () {
+                                          Navigator.of(
+                                            pageContext,
+                                            rootNavigator: true,
+                                          ).pop();
+                                          Future.microtask(
+                                            () => _onOpenRoute(pageContext),
+                                          );
+                                        },
+                                        icon: Icons.directions_car,
+                                        label: '経路表示',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ],
-                  _infoRow('都道府県', prefName),
-                  const SizedBox(height: 6),
-                  _infoRow('種別', kubunLabel),
-                  const SizedBox(height: 6),
-                  _infoRow(
-                    '緯度経度',
-                    '${lat.toStringAsFixed(5)} , ${lng.toStringAsFixed(5)}',
-                  ),
-                  const SizedBox(height: 6),
-                  _infoRow('住所', addressShort),
-                  const SizedBox(height: 6),
-                  _infoRow('状態', statusText),
-                  const SizedBox(height: 6),
-                  _infoRow(
-                    '登録者',
-                    (ownerId != null)
-                        ? '${(nick ?? '').isNotEmpty ? nick : '−'}($ownerId)'
-                        : '−',
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(
-                              pageContext,
-                              rootNavigator: true,
-                            ).pop();
-                            Future.microtask(
-                              () => _onToggleFavorite(pageContext),
-                            );
-                          },
-                          icon: const Icon(Icons.bookmark_border, size: 18),
-                          label: const Text('お気に入り'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(
-                              pageContext,
-                              rootNavigator: true,
-                            ).pop();
-                            Future.microtask(() => _onOpenRoute(pageContext));
-                          },
-                          icon: const Icon(Icons.directions_car, size: 18),
-                          label: const Text('経路表示'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
       );
@@ -3863,6 +4297,55 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         const SizedBox(width: 6),
         Expanded(child: Text(v.isNotEmpty ? v : '−')),
       ],
+    );
+  }
+
+  Widget _spotActionButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+  }) {
+    return SizedBox(
+      height: 44,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
+    );
+  }
+
+  Widget _spotActionTile({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+  }) {
+    return InkWell(
+      onTap: onPressed,
+      child: SizedBox(
+        height: 56,
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: Colors.black87),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black87),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -3915,6 +4398,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               : (data is List ? data : const []);
       final ids = <int>{};
       int? latestSpotId;
+      final ownedIds = <int>{};
+      int? latestOwnedSpotId;
       for (final e in rows) {
         if (e is! Map) continue;
         final id =
@@ -3926,10 +4411,37 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           latestSpotId ??= id;
         }
       }
+      try {
+        final localRows = await SioDatabase().getAllTeibouWithPrefecture();
+        for (final r in localRows) {
+          final ownerId =
+              r['user_id'] is int
+                  ? r['user_id'] as int
+                  : int.tryParse(r['user_id']?.toString() ?? '');
+          final id =
+              r['port_id'] is int
+                  ? r['port_id'] as int
+                  : int.tryParse(r['port_id']?.toString() ?? '');
+          final flag =
+              r['flag'] is int
+                  ? r['flag'] as int
+                  : int.tryParse(r['flag']?.toString() ?? '');
+          if (ownerId == info.userId &&
+              id != null &&
+              id > 0 &&
+              flag != -2 &&
+              flag != -3) {
+            ownedIds.add(id);
+            latestOwnedSpotId ??= id;
+          }
+        }
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _myCatchSpotIds = ids;
+        _myOwnedSpotIds = ownedIds;
         _latestMyCatchSpotId = latestSpotId;
+        _latestMyOwnedSpotId = latestOwnedSpotId;
       });
       if (Common.instance.fishingDiaryMode) {
         _lastLat = null;
@@ -3941,14 +4453,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   Future<void> _ensureDiarySelectedSpotIfNeeded() async {
-    if (_myCatchSpotIds.isEmpty) return;
+    if (_myDiarySpotIds.isEmpty) return;
     int? selectedId;
     try {
       final prefs = await SharedPreferences.getInstance();
       selectedId = prefs.getInt('selected_teibou_id');
     } catch (_) {}
-    if (selectedId != null && _myCatchSpotIds.contains(selectedId)) return;
-    final fallbackId = _latestMyCatchSpotId;
+    if (selectedId != null && _myDiarySpotIds.contains(selectedId)) return;
+    final fallbackId = _latestMyCatchSpotId ?? _latestMyOwnedSpotId;
     if (fallbackId == null || fallbackId <= 0) return;
     try {
       final rows = await _visibleTeibouRows();
@@ -3988,7 +4500,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   }
 
   Future<_DiaryViewport?> _buildDiaryViewport() async {
-    if (_myCatchSpotIds.isEmpty) return null;
+    if (_myDiarySpotIds.isEmpty) return null;
     try {
       final rows = await _visibleTeibouRows();
       final points = <LatLng>[];
@@ -4002,7 +4514,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             r['port_id'] is int
                 ? r['port_id'] as int
                 : int.tryParse(r['port_id']?.toString() ?? '');
-        if (portId == null || !_myCatchSpotIds.contains(portId)) continue;
+        if (portId == null || !_myDiarySpotIds.contains(portId)) continue;
         final dlat = _toDouble(r['latitude']);
         final dlng = _toDouble(r['longitude']);
         if (dlat == null || dlng == null) continue;

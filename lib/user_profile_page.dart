@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -134,7 +135,6 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('プロフィール'),
@@ -308,7 +308,10 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                                       const SizedBox(height: 8),
                                       Text(
                                         'ユーザーID: ${widget.userId}',
-                                        style: theme.textTheme.bodySmall,
+                                        style:
+                                            Theme.of(
+                                              context,
+                                            ).textTheme.bodySmall,
                                       ),
                                     ],
                                   ),
@@ -317,45 +320,60 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
                                 _sectionTitle('SNS'),
                                 const SizedBox(height: 12),
                                 _sectionCard(
-                                  child:
-                                      (_xPublic && _xUsername.isNotEmpty) ||
-                                              (_instagramPublic &&
-                                                  _instagramUsername.isNotEmpty)
-                                          ? Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              if (_xPublic &&
-                                                  _xUsername.isNotEmpty)
-                                                _buildSocialLinkButton(
-                                                  icon: Icons.alternate_email,
-                                                  title: 'X',
-                                                  subtitle: '@$_xUsername',
-                                                  url:
-                                                      'https://x.com/$_xUsername',
-                                                ),
-                                              if (_xPublic &&
-                                                  _xUsername.isNotEmpty &&
-                                                  _instagramPublic &&
-                                                  _instagramUsername.isNotEmpty)
-                                                const SizedBox(height: 12),
-                                              if (_instagramPublic &&
-                                                  _instagramUsername.isNotEmpty)
-                                                _buildSocialLinkButton(
-                                                  icon:
-                                                      Icons.camera_alt_outlined,
-                                                  title: 'Instagram',
-                                                  subtitle:
-                                                      '@$_instagramUsername',
-                                                  url:
-                                                      'https://www.instagram.com/$_instagramUsername/',
-                                                ),
-                                            ],
-                                          )
-                                          : Text(
-                                            '公開されているSNSはありません',
-                                            style: theme.textTheme.bodyMedium,
-                                          ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _buildSocialFieldReadOnly(
+                                        label: 'X ユーザネーム',
+                                        value: _xPublic ? _xUsername : '',
+                                        isPublic: _xPublic,
+                                        hintText: _xPublic ? '1から15文字' : '',
+                                        icon: _buildSocialIcon(
+                                          label: 'X',
+                                          onTap: () {
+                                            if (!_xPublic ||
+                                                _xUsername.isEmpty) {
+                                              return;
+                                            }
+                                            _openExternalUrl(
+                                              'https://x.com/$_xUsername',
+                                            );
+                                          },
+                                          enabled:
+                                              _xPublic && _xUsername.isNotEmpty,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 16),
+                                      _buildSocialFieldReadOnly(
+                                        label: 'Instagram ユーザネーム',
+                                        value:
+                                            _instagramPublic
+                                                ? _instagramUsername
+                                                : '',
+                                        isPublic: _instagramPublic,
+                                        hintText:
+                                            _instagramPublic ? '1から30文字' : '',
+                                        icon: _buildSocialIcon(
+                                          icon: Icons.camera_alt_outlined,
+                                          onTap: () {
+                                            if (!_instagramPublic ||
+                                                _instagramUsername.isEmpty) {
+                                              return;
+                                            }
+                                            _openExternalUrl(
+                                              'https://www.instagram.com/$_instagramUsername/',
+                                            );
+                                          },
+                                          enabled:
+                                              _instagramPublic &&
+                                              _instagramUsername.isNotEmpty,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -397,28 +415,92 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage> {
     );
   }
 
-  Widget _buildSocialLinkButton({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String url,
+  Widget _buildSocialFieldReadOnly({
+    required String label,
+    required String value,
+    required bool isPublic,
+    required String hintText,
+    required Widget icon,
   }) {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: () => _openExternalUrl(url),
-        icon: Icon(icon),
-        label: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: IgnorePointer(
+            child: CupertinoSlidingSegmentedControl<bool>(
+              groupValue: isPublic,
+              children: const {
+                false: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text('非公開'),
+                ),
+                true: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text('公開'),
+                ),
+              },
+              onValueChanged: (_) {},
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            Padding(padding: const EdgeInsets.only(top: 4), child: icon),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: TextEditingController(text: value),
+                maxLength: label.startsWith('X') ? 15 : 30,
+                enabled: false,
+                readOnly: true,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  counterText: '',
+                  hintText: hintText,
+                ),
+              ),
+            ),
           ],
         ),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          alignment: Alignment.centerLeft,
+      ],
+    );
+  }
+
+  Widget _buildSocialIcon({
+    IconData? icon,
+    String? label,
+    required VoidCallback onTap,
+    required bool enabled,
+  }) {
+    final color =
+        enabled ? AppConfig.instance.appBarBackgroundColor : Colors.grey;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          border: Border.all(color: color),
+          borderRadius: BorderRadius.circular(8),
         ),
+        alignment: Alignment.center,
+        child:
+            icon != null
+                ? Icon(icon, color: color, size: 20)
+                : Text(
+                  label ?? '',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
       ),
     );
   }

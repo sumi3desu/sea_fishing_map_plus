@@ -725,12 +725,21 @@ extension _MosaicBuilders on _FishingResultGridState {
           } else if (updated is Map) {
             final u = (updated['updated'] == true);
             final cleared = (updated['clearedImage'] == true);
+            final deleted = (updated['deleted'] == true);
             final pid =
                 updated['postId'] is int
                     ? updated['postId'] as int
                     : (updated['postId'] is String
                         ? int.tryParse(updated['postId'])
                         : null);
+            if (deleted && pid != null) {
+              setState(() {
+                _items.removeWhere((e) => e.postId == pid);
+                _imgTsByPost.remove(pid);
+              });
+              _removeImageTs(pid);
+              return;
+            }
             if (u && cleared && pid != null) {
               // 画像が消された場合はグリッドからも項目を外す
               setState(() {

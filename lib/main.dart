@@ -1739,20 +1739,6 @@ class _MainPageState extends ConsumerState<MainPage> {
   }
 
   Future<void> _onPressCreatePost() async {
-    if (_selectedIndex != 2) {
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(SnackBar(content: Text(warningSelectSpot)));
-      if (mounted) {
-        setState(() {
-          _selectedIndex = 2;
-        });
-      }
-      await Future<void>.delayed(Duration.zero);
-      try {
-        await tidePageKey.currentState?.showMapTab();
-      } catch (_) {}
-      return;
-    }
     final action = await showModalBottomSheet<_CreateAction>(
       context: context,
       useSafeArea: true,
@@ -1772,6 +1758,7 @@ class _MainPageState extends ConsumerState<MainPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
+                  const SizedBox(width: 16),
                   SizedBox(width: 56, child: Center(child: icon)),
                   const SizedBox(width: 8),
                   Expanded(
@@ -1792,9 +1779,40 @@ class _MainPageState extends ConsumerState<MainPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '【投稿】',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16),
+                        child: Text(
+                          '対象：${Common.instance.selectedTeibouName.isNotEmpty ? Common.instance.selectedTeibouName : '未選択'}',
+                          textAlign: TextAlign.left,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               tile(
                 icon: const Text('🐟', style: TextStyle(fontSize: 22)),
-                label: '釣り場の釣果の投稿',
+                label: '釣果を投稿',
                 action: _CreateAction.catchPost,
               ),
               tile(
@@ -1806,8 +1824,19 @@ class _MainPageState extends ConsumerState<MainPage> {
                     Icon(Icons.wc, color: Colors.black87, size: 20),
                   ],
                 ),
-                label: '釣り場の環境の投稿',
+                label: '環境を投稿',
                 action: _CreateAction.envPost,
+              ),
+              const Divider(height: 20, thickness: 1),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '【新規】',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
               ),
               tile(
                 icon: const Icon(
@@ -1815,7 +1844,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                   color: Colors.black87,
                   size: 20,
                 ),
-                label: '新しい釣り場の登録',
+                label: '釣り場を登録',
                 action: _CreateAction.newSpot,
               ),
               const SizedBox(height: 8),

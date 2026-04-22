@@ -16,7 +16,6 @@ import 'appconfig.dart';
 import 'dart:convert';
 import 'sio_database.dart';
 import 'common.dart';
-import 'package:flutter/cupertino.dart' show CupertinoSegmentedControl;
 import 'new_account_page.dart';
 
 class InputPost extends ConsumerStatefulWidget {
@@ -82,6 +81,8 @@ class _InputPostState extends ConsumerState<InputPost> {
   final TextEditingController _envDetailController =
       TextEditingController(); // 1000桁
   bool _emailVerified = false;
+
+  String get _screenTitle => _postType == 'catch' ? '釣果を投稿' : '環境を投稿';
 
   @override
   void initState() {
@@ -723,7 +724,7 @@ class _InputPostState extends ConsumerState<InputPost> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('投稿入力'),
+        title: Text(_screenTitle),
         backgroundColor: AppConfig.instance.appBarBackgroundColor,
         foregroundColor: AppConfig.instance.appBarForegroundColor,
         toolbarHeight: 0, // タイトルは本文側に表示（バナーの下）
@@ -757,7 +758,7 @@ class _InputPostState extends ConsumerState<InputPost> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '投稿入力',
+                    _screenTitle,
                     style: TextStyle(
                       color: AppConfig.instance.appBarForegroundColor,
                       fontSize: 20,
@@ -841,45 +842,6 @@ class _InputPostState extends ConsumerState<InputPost> {
                 },
               ),
             ),
-            // 種別切替（釣果/環境）
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              color: Colors.white,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: CupertinoSegmentedControl<String>(
-                  groupValue: _postType,
-                  padding: const EdgeInsets.all(0),
-                  children: const {
-                    'catch': Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: Text('釣果'),
-                    ),
-                    'env': Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      child: Text('環境'),
-                    ),
-                  },
-                  onValueChanged: (val) {
-                    setState(() {
-                      _postType = (val == 'env') ? 'env' : 'catch';
-                      // 入力可否などを即時再評価
-                      _onChangedAny('');
-                    });
-                    // 投稿一覧の選択状態としても反映（起動中は維持）
-                    try {
-                      Common.instance.setPostListMode(_postType);
-                    } catch (_) {}
-                  },
-                ),
-              ),
-            ),
             // 投稿種別に応じた説明文 + 認証の注意
             Container(
               width: double.infinity,
@@ -893,6 +855,31 @@ class _InputPostState extends ConsumerState<InputPost> {
                         ? '釣果の投稿を入力してください。'
                         : '釣り場の規制/駐車場/トイレなどについての投稿を入力してください。',
                   ),
+                  if (_postType == 'catch')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.lightbulb_rounded,
+                            color: Colors.orange,
+                            size: 18,
+                          ),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '釣果は周辺の釣り場のいずれかとして表示されます。\n'
+                              '※自分の投稿は正確な場所で確認できます。',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (!_emailVerified)
                     const Padding(
                       padding: EdgeInsets.only(top: 4),
@@ -933,13 +920,13 @@ class _InputPostState extends ConsumerState<InputPost> {
                       ),
                       const SizedBox(height: 16),
                       const Text(
-                        '釣果詳細(1024桁)',
+                        '釣果詳細(500桁)',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _detailController,
-                        maxLength: 1024,
+                        maxLength: 500,
                         minLines: 4,
                         maxLines: 8,
                         decoration: const InputDecoration(
@@ -1014,13 +1001,13 @@ class _InputPostState extends ConsumerState<InputPost> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        '環境詳細（1000桁）',
+                        '環境詳細（500桁）',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _envDetailController,
-                        maxLength: 1000,
+                        maxLength: 500,
                         minLines: 4,
                         maxLines: 10,
                         decoration: const InputDecoration(

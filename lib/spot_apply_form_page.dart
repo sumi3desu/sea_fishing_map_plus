@@ -18,6 +18,7 @@ class SpotApplyFormPage extends StatefulWidget {
     this.initialPortId,
     this.applicantUserId,
     this.canModerate = false,
+    this.buttonMode,
   });
   final double lat;
   final double lng;
@@ -31,6 +32,7 @@ class SpotApplyFormPage extends StatefulWidget {
   final int? initialPortId; // 既存のport_id（編集時）
   final int? applicantUserId; // 申請者 user_id（admin 編集時も保持）
   final bool canModerate; // 承認/非承認を表示可能か（admin からの遷移時のみ true）
+  final String? buttonMode; // confirmOnly / withdrawOnly
 
   @override
   State<SpotApplyFormPage> createState() => _SpotApplyFormPageState();
@@ -375,69 +377,97 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                 Row(
                   children: [
                     Expanded(
-                      child:
-                          widget.editMode && (widget.canModerate && _isAdmin)
-                              ? Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed:
-                                          () => _goModerationConfirm(
-                                            title: '確認',
-                                            overrideFlag: null,
-                                            mailAction: 'confirm',
-                                          ),
-                                      child: const Text('確認'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed:
-                                          () => _goModerationConfirm(
-                                            title: '承認',
-                                            overrideFlag: 1,
-                                            mailAction: 'approve',
-                                          ),
-                                      child: const Text('承認'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed:
-                                          () => _goModerationConfirm(
-                                            title: '否認',
-                                            overrideFlag: -2,
-                                            mailAction: 'deny',
-                                          ),
-                                      child: const Text('否認'),
-                                    ),
-                                  ),
-                                ],
-                              )
-                              : widget.editMode
-                              ? Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      onPressed: _goWithdrawConfirm,
-                                      child: const Text('申請取り下げ'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: _goConfirm,
-                                      child: const Text('確認'),
-                                    ),
-                                  ),
-                                ],
-                              )
-                              : ElevatedButton(
+                      child: () {
+                        if (widget.editMode &&
+                            widget.buttonMode == 'confirmOnly') {
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: ElevatedButton(
                                 onPressed: _goConfirm,
                                 child: const Text('確認'),
                               ),
+                            ),
+                          );
+                        }
+                        if (widget.editMode &&
+                            widget.buttonMode == 'withdrawOnly') {
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: OutlinedButton(
+                                onPressed: _goWithdrawConfirm,
+                                child: const Text('申請取り下げ'),
+                              ),
+                            ),
+                          );
+                        }
+                        if (widget.editMode &&
+                            (widget.canModerate && _isAdmin)) {
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed:
+                                      () => _goModerationConfirm(
+                                        title: '確認',
+                                        overrideFlag: null,
+                                        mailAction: 'confirm',
+                                      ),
+                                  child: const Text('確認'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed:
+                                      () => _goModerationConfirm(
+                                        title: '承認',
+                                        overrideFlag: 1,
+                                        mailAction: 'approve',
+                                      ),
+                                  child: const Text('承認'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed:
+                                      () => _goModerationConfirm(
+                                        title: '否認',
+                                        overrideFlag: -2,
+                                        mailAction: 'deny',
+                                      ),
+                                  child: const Text('否認'),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        if (widget.editMode) {
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _goWithdrawConfirm,
+                                  child: const Text('申請取り下げ'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: _goConfirm,
+                                  child: const Text('確認'),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return ElevatedButton(
+                          onPressed: _goConfirm,
+                          child: const Text('確認'),
+                        );
+                      }(),
                     ),
                   ],
                 ),

@@ -528,6 +528,7 @@ class Common extends ChangeNotifier {
   double selectedTeibouLng = 0.0;
   int selectedTeibouPrefId = 0;
   int listCenterTick = 0; // 釣り場一覧で再センタリングの要求カウンタ
+  int teibouReloadTick = 0; // 釣り場一覧の再読込要求カウンタ
   // 釣り場一覧から釣り場詳細タブへのナビゲーション要求カウンタ
   int navigateToTideTick = 0;
   int postFeedReloadTick = 0;
@@ -610,7 +611,7 @@ class Common extends ChangeNotifier {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 12),
-                    const Text('自分が投稿した釣果や釣り場だけ表示します。'),
+                    const Text('自分が投稿した釣果や、登録した釣り場だけ表示します。'),
                   ],
                 ),
                 actions: [
@@ -770,6 +771,11 @@ class Common extends ChangeNotifier {
 
   void requestListCentering() {
     listCenterTick++;
+    notifyListeners();
+  }
+
+  void requestTeibouReload() {
+    teibouReloadTick++;
     notifyListeners();
   }
 

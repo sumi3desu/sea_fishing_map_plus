@@ -69,7 +69,11 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   String? _mySpotsError;
   final Map<int, _MySpotSummary> _mySpotSummaryById = {};
   Set<int> _myCatchSpotIds = <int>{};
+  Set<int> _myOwnedSpotIds = <int>{};
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
+  int _lastTeibouReloadTick = Common.instance.teibouReloadTick;
+
+  Set<int> get _myDiarySpotIds => <int>{..._myCatchSpotIds, ..._myOwnedSpotIds};
 
   Future<bool> _ensureEmailVerified({
     bool returnToInputPost = false,
@@ -121,6 +125,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     if (_lastFishingDiaryMode != Common.instance.fishingDiaryMode) {
       _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
       setState(() {});
+    }
+    if (_lastTeibouReloadTick != Common.instance.teibouReloadTick) {
+      _lastTeibouReloadTick = Common.instance.teibouReloadTick;
+      _load();
     }
     // 起動時の自動近隣検索要求が来ている場合は、一度だけ検索＋自動選択を実施
     final cmn = Common.instance;
@@ -474,9 +482,37 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
       }
       map.putIfAbsent(chihou, () => <int>{}).add(id);
     }
+    final ownedIds = <int>{};
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      if (info.userId > 0) {
+        for (final r in rows) {
+          final ownerId =
+              r['user_id'] is int
+                  ? r['user_id'] as int
+                  : int.tryParse(r['user_id']?.toString() ?? '');
+          final portId =
+              r['port_id'] is int
+                  ? r['port_id'] as int
+                  : int.tryParse(r['port_id']?.toString() ?? '');
+          final flag =
+              r['flag'] is int
+                  ? r['flag'] as int
+                  : int.tryParse(r['flag']?.toString() ?? '');
+          if (ownerId == info.userId &&
+              portId != null &&
+              portId > 0 &&
+              flag != -2 &&
+              flag != -3) {
+            ownedIds.add(portId);
+          }
+        }
+      }
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _rows = rows;
+      _myOwnedSpotIds = ownedIds;
       _regionPrefSet
         ..clear()
         ..addAll(map);
@@ -723,7 +759,16 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     } else if (selectedRegion == '近くの釣り場') {
       filtered = List<Map<String, dynamic>>.from(_nearby); // 検索順（距離昇順）のまま
     } else if (selectedRegion == 'マイ釣り場') {
-      filtered = List<Map<String, dynamic>>.from(_mySpots);
+      filtered =
+          Common.instance.fishingDiaryMode
+              ? _rows.where((r) {
+                final id =
+                    r['port_id'] is int
+                        ? r['port_id'] as int
+                        : int.tryParse(r['port_id']?.toString() ?? '');
+                return id != null && _myDiarySpotIds.contains(id);
+              }).toList()
+              : List<Map<String, dynamic>>.from(_mySpots);
     } else {
       // todoufuken テーブル由来の地方→都道府県ID集合で厳密にフィルタ
       final allowed = _regionPrefSet[selectedRegion] ?? <int>{};
@@ -744,7 +789,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 r['port_id'] is int
                     ? r['port_id'] as int
                     : int.tryParse(r['port_id']?.toString() ?? '');
-            return id != null && _myCatchSpotIds.contains(id);
+            return id != null && _myDiarySpotIds.contains(id);
           }).toList();
     }
 

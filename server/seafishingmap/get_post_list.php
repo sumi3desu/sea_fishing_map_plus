@@ -35,6 +35,7 @@ try {
     // WHERE 句の組み立て
     $where = [];
     $params = [];
+    $where[] = 'p.is_deleted = 0';
 
     // get_kind の意味:
     //  1 -> 釣果 (post_kind = 1)
