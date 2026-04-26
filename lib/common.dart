@@ -533,6 +533,14 @@ class Common extends ChangeNotifier {
   int navigateToTideTick = 0;
   int postFeedReloadTick = 0;
   int startApplyModeTick = 0;
+  int navigateToFishingTick = 0;
+  int catchNotificationTick = 0;
+  final Set<int> _knownCatchPostIds = <int>{};
+  int? latestCatchNotificationPostId;
+  String latestCatchNotificationTitle = '';
+  String latestCatchNotificationBody = '';
+  int currentMainPageIndex = 0;
+  int fishingResultTabIndex = 0;
   SioInfo oneDaySioInfoAlt = SioInfo();
 
   // 投稿一覧の表示モード（'catch' or 'env'）。アプリ起動中のみ保持。
@@ -656,6 +664,65 @@ class Common extends ChangeNotifier {
   void requestPostFeedReload() {
     postFeedReloadTick++;
     notifyListeners();
+  }
+
+  void showCatchNotification({
+    required int postId,
+    required String title,
+    required String body,
+    bool navigateToFishing = true,
+  }) {
+    latestCatchNotificationPostId = postId;
+    latestCatchNotificationTitle = title;
+    latestCatchNotificationBody = body;
+    catchNotificationTick++;
+    if (navigateToFishing) {
+      navigateToFishingTick++;
+    }
+    notifyListeners();
+  }
+
+  void setCurrentMainPageIndex(int pageIndex) {
+    final normalized = pageIndex < 0 ? 0 : pageIndex;
+    if (currentMainPageIndex == normalized) return;
+    currentMainPageIndex = normalized;
+    notifyListeners();
+  }
+
+  void setFishingResultTabIndex(int tabIndex) {
+    final normalized = tabIndex == 1 ? 1 : 0;
+    if (fishingResultTabIndex == normalized) return;
+    fishingResultTabIndex = normalized;
+    notifyListeners();
+  }
+
+  bool get isViewingFishingList =>
+      currentMainPageIndex == 0 && fishingResultTabIndex == 1;
+
+  void clearCatchNotification() {
+    if (latestCatchNotificationPostId == null &&
+        latestCatchNotificationTitle.isEmpty &&
+        latestCatchNotificationBody.isEmpty) {
+      return;
+    }
+    latestCatchNotificationPostId = null;
+    latestCatchNotificationTitle = '';
+    latestCatchNotificationBody = '';
+    notifyListeners();
+  }
+
+  bool hasKnownCatchPostId(int postId) => _knownCatchPostIds.contains(postId);
+
+  void registerKnownCatchPostIds(Iterable<int> postIds) {
+    var changed = false;
+    for (final postId in postIds) {
+      if (postId > 0 && _knownCatchPostIds.add(postId)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      notifyListeners();
+    }
   }
 
   void requestStartApplyMode() {

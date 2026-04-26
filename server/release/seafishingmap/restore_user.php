@@ -33,7 +33,7 @@ try {
     );
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-    $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role
+    $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, notif_on_off
               FROM user
              WHERE delete_flg = 0
                AND refresh_token = ?
@@ -81,6 +81,7 @@ try {
         'posts_blocked_reason' => $user['posts_blocked_reason'] ?? null,
         'can_report' => $canReport,
         'role' => $user['role'] ?? null,
+        'notif_on_off' => isset($user['notif_on_off']) ? (int)$user['notif_on_off'] : 1,
         'refresh_token' => $refresh_token,
         'message' => 'refresh_token から既存ユーザを復元しました',
     ]);

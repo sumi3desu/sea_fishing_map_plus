@@ -31,6 +31,29 @@ try {
     $createAt = isset($_POST['create_at']) ? (string)$_POST['create_at'] : '';
     $postId   = isset($_POST['post_id']) ? (int)$_POST['post_id'] : 0; // update 用
     $deleteReason = isset($_POST['delete_reason']) ? trim((string)$_POST['delete_reason']) : '';
+    $candidateSpotIdsJson = isset($_POST['candidate_spot_ids']) ? trim((string)$_POST['candidate_spot_ids']) : '';
+    $candidateSpotIdsPayload = null;
+    if ($candidateSpotIdsJson !== '') {
+        $decoded = json_decode($candidateSpotIdsJson, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $rawIds = [];
+            if (isset($decoded['candidate_spot_ids']) && is_array($decoded['candidate_spot_ids'])) {
+                $rawIds = $decoded['candidate_spot_ids'];
+            } elseif (array_values($decoded) === $decoded) {
+                $rawIds = $decoded;
+            }
+            $normalizedIds = [];
+            foreach ($rawIds as $rawId) {
+                $id = (int)$rawId;
+                if ($id > 0) {
+                    $normalizedIds[$id] = $id;
+                }
+            }
+            $candidateSpotIdsPayload = [
+                'candidate_spot_ids' => array_values($normalizedIds),
+            ];
+        }
+    }
 
     if ($userId <= 0) {
         http_response_code(400);
@@ -170,6 +193,9 @@ try {
     }
 
     $tsForPath = time();
+    $pdo->beginTransaction();
+    $hasImageForNotificationJob = (isset($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) ? 1 : 0;
+
     if ($action === 'update') {
         if ($postId <= 0) {
             http_response_code(400);
@@ -221,6 +247,38 @@ try {
             ':create_at' => $createAtMysql,
         ]);
         $postId = (int)$pdo->lastInsertId();
+
+        if ($kindVal === 1) {
+            $payloadJson = json_encode(
+                $candidateSpotIdsPayload ?? ['candidate_spot_ids' => []],
+                JSON_UNESCAPED_UNICODE
+            );
+            $stmtJob = $pdo->prepare(
+                'INSERT INTO notification_jobs (
+                    job_type,
+                    post_id,
+                    base_spot_id,
+                    poster_user_id,
+                    has_image,
+                    payload_json
+                 ) VALUES (
+                    :job_type,
+                    :post_id,
+                    :base_spot_id,
+                    :poster_user_id,
+                    :has_image,
+                    :payload_json
+                 )'
+            );
+            $stmtJob->execute([
+                ':job_type' => 'fishing_report',
+                ':post_id' => $postId,
+                ':base_spot_id' => $spotId,
+                ':poster_user_id' => $userId,
+                ':has_image' => $hasImageForNotificationJob,
+                ':payload_json' => $payloadJson,
+            ]);
+        }
     }
 
     $imageRelative = null;
@@ -380,6 +438,10 @@ try {
         // サムネ更新失敗は致命的ではないため無視
     }
 
+    if ($pdo->inTransaction()) {
+        $pdo->commit();
+    }
+
     echo json_encode([
         'status' => 'success',
         'post_id' => (int)$postId,
@@ -389,6 +451,9 @@ try {
     ], JSON_UNESCAPED_UNICODE);
 
 } catch (PDOException $e) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
 }

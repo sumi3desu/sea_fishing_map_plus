@@ -11,6 +11,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'setting_page.dart';
 import 'FishingResultGrid.dart';
@@ -37,6 +40,9 @@ import 'new_account_page.dart';
 import 'services/revenuecat_service.dart';
 import 'providers/premium_state_notifier.dart' as prem;
 import 'log_print.dart';
+
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 /// 初回データのダウンロードをユーザーに確認してから実行する共通関数
 Future<void> confirmAndDownloadInitialData({
@@ -89,10 +95,234 @@ Future<void> confirmAndDownloadInitialData({
   }
 }
 
+/*
+Future<void> setupFcm() async {
+  final messaging = FirebaseMessaging.instance;
+
+  final settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  logPrint('permission: ${settings.authorizationStatus}');
+
+  final token = await messaging.getToken();
+  logPrint('FCM token: $token');
+  _pendingFcmToken = token?.trim();
+  final current = await loadUserInfo();
+  if (current != null && current.userId > 0) {
+    await _syncFcmTokenToServer(current.userId, _pendingFcmToken);
+  }
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    logPrint('New token: $newToken');
+    _pendingFcmToken = newToken.trim();
+    loadUserInfo().then((info) {
+      if (info != null && info.userId > 0) {
+        _syncFcmTokenToServer(info.userId, _pendingFcmToken);
+      }
+    });
+  });
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    logPrint('Foreground message: ${message.notification?.title}');
+    logPrint('Foreground body: ${message.notification?.body}');
+    final title = (message.notification?.title ?? '').trim();
+    final body = (message.notification?.body ?? '').trim();
+    final text = [title, body].where((e) => e.isNotEmpty).join('\n');
+    if (text.isNotEmpty) {
+      rootScaffoldMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(text)));
+    }
+  });
+}
+*/
+/*
+Future<void> setupFcm() async {
+  final messaging = FirebaseMessaging.instance;
+
+  final settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  logPrint('permission: ${settings.authorizationStatus}');
+
+  await refreshForegroundNotificationPresentationOptions();
+
+  final apnsToken = await messaging.getAPNSToken();
+  logPrint('APNS token: $apnsToken');
+
+  final token = await messaging.getToken();
+  logPrint('FCM token: $token');
+
+  _pendingFcmToken = token?.trim();
+  final current = await loadUserInfo();
+  if (current != null && current.userId > 0) {
+    await _syncFcmTokenToServer(current.userId, _pendingFcmToken);
+  }
+
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    logPrint('New token: $newToken');
+    _pendingFcmToken = newToken.trim();
+    loadUserInfo().then((info) {
+      if (info != null && info.userId > 0) {
+        _syncFcmTokenToServer(info.userId, _pendingFcmToken);
+      }
+    });
+  });
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    logPrint('Foreground message: ${message.notification?.title}');
+    logPrint('Foreground body: ${message.notification?.body}');
+    final title = (message.notification?.title ?? '').trim();
+    final body = (message.notification?.body ?? '').trim();
+    final text = [title, body].where((e) => e.isNotEmpty).join('\n');
+    if (text.isNotEmpty) {
+      rootScaffoldMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(text)));
+    }
+  });
+}
+*/
+Future<void> setupFcm() async {
+  final messaging = FirebaseMessaging.instance;
+
+  final settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  logPrint('permission: ${settings.authorizationStatus}');
+
+  await messaging.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  final apnsToken = await messaging.getAPNSToken();
+  logPrint('APNS token: $apnsToken');
+
+  final token = await messaging.getToken();
+  logPrint('FCM token: $token');
+  _pendingFcmToken = token?.trim();
+  final current = await loadUserInfo();
+  if (current != null && current.userId > 0) {
+    await _syncFcmTokenToServer(current.userId, _pendingFcmToken);
+  }
+
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+    logPrint('New token: $newToken');
+    _pendingFcmToken = newToken.trim();
+    loadUserInfo().then((info) {
+      if (info != null && info.userId > 0) {
+        _syncFcmTokenToServer(info.userId, _pendingFcmToken);
+      }
+    });
+  });
+
+  void handleCatchMessage(RemoteMessage message, {required bool navigate}) {
+    final title =
+        (message.notification?.title ?? message.data['title'] ?? '')
+            .toString()
+            .trim();
+    final body =
+        (message.notification?.body ?? message.data['body'] ?? '')
+            .toString()
+            .trim();
+    final postId = int.tryParse((message.data['post_id'] ?? '').toString());
+    if (postId == null || postId <= 0) return;
+    Common.instance.requestPostFeedReload();
+    Common.instance.showCatchNotification(
+      postId: postId,
+      title: title.isNotEmpty ? title : '新しい釣果通知',
+      body: body.isNotEmpty ? body : '地図で周辺の釣果状況を確認できます',
+      navigateToFishing: navigate,
+    );
+  }
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    logPrint('onMessage fired');
+    logPrint('Foreground title: ${message.notification?.title}');
+    logPrint('Foreground body: ${message.notification?.body}');
+    logPrint('Foreground data: ${message.data}');
+    final title =
+        (message.notification?.title ?? message.data['title'] ?? '')
+            .toString()
+            .trim();
+    final body =
+        (message.notification?.body ?? message.data['body'] ?? '')
+            .toString()
+            .trim();
+    handleCatchMessage(message, navigate: false);
+    final text = [title, body].where((e) => e.isNotEmpty).join('\n');
+    if (text.isNotEmpty) {
+      rootScaffoldMessengerKey.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(text)));
+    }
+  });
+
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    logPrint('onMessageOpenedApp fired');
+    logPrint('OpenedApp title: ${message.notification?.title}');
+    logPrint('OpenedApp body: ${message.notification?.body}');
+    logPrint('OpenedApp data: ${message.data}');
+    handleCatchMessage(message, navigate: true);
+  });
+
+  final initialMessage = await messaging.getInitialMessage();
+  if (initialMessage != null) {
+    logPrint('getInitialMessage fired');
+    logPrint('Initial title: ${initialMessage.notification?.title}');
+    logPrint('Initial body: ${initialMessage.notification?.body}');
+    logPrint('Initial data: ${initialMessage.data}');
+    handleCatchMessage(initialMessage, navigate: true);
+  }
+}
+
+bool? _lastForegroundAlertEnabled;
+
+Future<void> refreshForegroundNotificationPresentationOptions() async {
+  final suppressAlert = Common.instance.isViewingFishingList;
+  final alertEnabled = !suppressAlert;
+  if (_lastForegroundAlertEnabled == alertEnabled) return;
+  _lastForegroundAlertEnabled = alertEnabled;
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: alertEnabled,
+    badge: true,
+    sound: alertEnabled,
+  );
+}
+
+String? _pendingFcmToken;
+
+Future<void> _syncFcmTokenToServer(int userId, String? token) async {
+  final t = (token ?? '').trim();
+  if (t.isEmpty || userId <= 0) return;
+  try {
+    final uri = Uri.parse('${AppConfig.instance.baseUrl}update_fcm_token.php');
+    final resp = await http
+        .post(uri, body: {'user_id': userId.toString(), 'fcm_token': t})
+        .timeout(kHttpTimeout);
+    logPrint('FCM token sync status: ${resp.statusCode}');
+  } catch (e) {
+    logPrint('FCM token sync failed: $e');
+  }
+}
+
 void main() async {
   // ネイティブのスプラッシュを表示し続け、初回フレーム描画を遅らせる
   final binding = WidgetsFlutterBinding.ensureInitialized();
   binding.deferFirstFrame();
+
+  // firebase初期化
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   // Google AdMob 初期化
   MobileAds.instance.initialize();
   // 画面の向きを縦方向に固定
@@ -165,6 +395,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'siowadou?',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
@@ -185,6 +416,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+
     // 1.5秒後にメイン画面へ遷移
     Future.delayed(const Duration(milliseconds: 1000), () {
       Navigator.pushReplacement(
@@ -313,6 +545,7 @@ class UserInfo {
   final String? postsBlockedReason; // 理由メモ
   final String? role; // 権限(user,admin)
   final bool canReport; // 送信可否（サーバ算出）
+  final int notifOnOff; // 1=通知ON, 0=通知OFF
   // プロフィール画像
   final String? photoUrl;
   final int? photoVersion;
@@ -333,6 +566,7 @@ class UserInfo {
     this.postsBlockedReason,
     this.role,
     this.canReport = true,
+    this.notifOnOff = 1,
     this.photoUrl,
     this.photoVersion,
   });
@@ -372,6 +606,14 @@ class UserInfo {
             : (json['can_report'] is int)
             ? ((json['can_report'] as int) != 0)
             : true,
+    notifOnOff:
+        (json['notif_on_off'] is int)
+            ? json['notif_on_off'] as int
+            : (json['notif_on_off'] is bool)
+            ? ((json['notif_on_off'] as bool) ? 1 : 0)
+            : (json['notif_on_off'] is String)
+            ? int.tryParse(json['notif_on_off'] as String) ?? 1
+            : 1,
     photoUrl: (json['profile_image_url'] ?? json['photo_url']) as String?,
     photoVersion:
         (json['profile_image_version'] is int)
@@ -399,6 +641,7 @@ class UserInfo {
     if (postsBlockedReason != null) 'posts_blocked_reason': postsBlockedReason,
     if (role != null) 'role': role,
     'can_report': canReport,
+    'notif_on_off': notifOnOff,
     if (photoUrl != null) 'profile_image_url': photoUrl,
     if (photoVersion != null) 'profile_image_version': photoVersion,
   };
@@ -419,6 +662,7 @@ class UserInfo {
     String? postsBlockedReason,
     String? role,
     bool? canReport,
+    int? notifOnOff,
     String? photoUrl,
     int? photoVersion,
     bool clearRefreshToken = false,
@@ -455,6 +699,7 @@ class UserInfo {
             : (postsBlockedReason ?? this.postsBlockedReason),
     role: role ?? this.role,
     canReport: canReport ?? this.canReport,
+    notifOnOff: notifOnOff ?? this.notifOnOff,
     photoUrl: photoUrl ?? this.photoUrl,
     photoVersion: photoVersion ?? this.photoVersion,
   );
@@ -464,6 +709,9 @@ class UserInfo {
 Future<void> saveUserInfo(UserInfo info) async {
   await _secure.write(key: userInfoKey, value: jsonEncode(info.toJson()));
   await syncSavedRefreshToken(info.refreshToken);
+  if (info.userId > 0 && (_pendingFcmToken ?? '').isNotEmpty) {
+    _syncFcmTokenToServer(info.userId, _pendingFcmToken);
+  }
 }
 
 /// ユーザ情報を非同期に読み込むプロバイダ
@@ -513,6 +761,10 @@ Future<UserInfo> getUserInfoFromServer({
                 : ((data['can_report'] is int)
                     ? ((data['can_report'] as int) != 0)
                     : true),
+        notifOnOff:
+            (data['notif_on_off'] is int)
+                ? data['notif_on_off'] as int
+                : int.tryParse(data['notif_on_off']?.toString() ?? '') ?? 1,
       );
     } else {
       throw Exception('get_user_info.php が失敗しました: ${data['status']}');
@@ -574,6 +826,10 @@ Future<UserInfo?> getUserInfoFromServerByRefreshToken(
                 : ((data['can_report'] is int)
                     ? ((data['can_report'] as int) != 0)
                     : true),
+        notifOnOff:
+            (data['notif_on_off'] is int)
+                ? data['notif_on_off'] as int
+                : int.tryParse(data['notif_on_off']?.toString() ?? '') ?? 1,
       );
     }
     if (resp.statusCode == 200 && data['status'] == 'not_found') {
@@ -783,6 +1039,7 @@ class _MainPageState extends ConsumerState<MainPage> {
   final GlobalKey<TidePageState> tidePageKey = GlobalKey<TidePageState>();
   // 日付タブは廃止（Tide ページ内のボタンから遷移）
   int _lastNavigateToTideTick = 0;
+  int _lastNavigateToFishingTick = 0;
   // 起動時の最寄り自動選択（未選択時）の実行フラグ
   bool _didStartupAutoSelect = false;
   bool _accountRecoveryPromptShown = false;
@@ -810,6 +1067,8 @@ class _MainPageState extends ConsumerState<MainPage> {
     setState(() {
       _selectedIndex = pageIndex;
     });
+    Common.instance.setCurrentMainPageIndex(pageIndex);
+    refreshForegroundNotificationPresentationOptions();
     // 釣り場詳細(TidePage) が選択された場合だけ TidePage の refreshTide() を呼び出す
     if (pageIndex == 2) {
       tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
@@ -822,13 +1081,22 @@ class _MainPageState extends ConsumerState<MainPage> {
         Common.instance.requestListCentering();
       } catch (_) {}
     }
+    if (pageIndex != 0) {
+      Common.instance.clearCatchNotification();
+    }
   }
 
   @override
   void initState() {
     super.initState();
+
+    // FCM
+    setupFcm();
+
     // 初期タブを外部指定で切り替え可能にする
     _selectedIndex = widget.initialIndex;
+    Common.instance.setCurrentMainPageIndex(_selectedIndex);
+    refreshForegroundNotificationPresentationOptions();
     final isPremium = ref.read(prem.premiumStateProvider).isPremium;
     if (!isPremium) {
       _loadBanner();
@@ -1006,6 +1274,8 @@ class _MainPageState extends ConsumerState<MainPage> {
       setState(() {
         _selectedIndex = 2; // 釣り場詳細タブ
       });
+      Common.instance.setCurrentMainPageIndex(2);
+      refreshForegroundNotificationPresentationOptions();
       // 遷移直後に潮汐の再読込も実施
       try {
         tidePageKey.currentState?.refreshTide(Common.instance.tideDate);
@@ -1014,6 +1284,16 @@ class _MainPageState extends ConsumerState<MainPage> {
       try {
         tidePageKey.currentState?.forceReloadCatchList();
       } catch (_) {}
+      return;
+    }
+    if (common.navigateToFishingTick != _lastNavigateToFishingTick) {
+      _lastNavigateToFishingTick = common.navigateToFishingTick;
+      if (!mounted) return;
+      setState(() {
+        _selectedIndex = 0;
+      });
+      Common.instance.setCurrentMainPageIndex(0);
+      refreshForegroundNotificationPresentationOptions();
     }
   }
 
@@ -1969,6 +2249,8 @@ class _MainPageState extends ConsumerState<MainPage> {
       setState(() {
         _selectedIndex = 2;
       });
+      Common.instance.setCurrentMainPageIndex(2);
+      refreshForegroundNotificationPresentationOptions();
     }
     Common.instance.requestStartApplyMode();
   }

@@ -11,7 +11,6 @@ import 'common.dart';
 import 'log_print.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 import 'new_account_page.dart';
 
 class FishingResultGrid extends StatefulWidget {
@@ -21,12 +20,18 @@ class FishingResultGrid extends StatefulWidget {
   State<FishingResultGrid> createState() => _FishingResultGridState();
 }
 
-class _FishingResultGridState extends State<FishingResultGrid> {
+class _FishingResultGridState extends State<FishingResultGrid>
+    with SingleTickerProviderStateMixin {
   final List<_PostGridItem> _items = [];
+  final List<_PostGridItem> _listItems = [];
   final ScrollController _sc = ScrollController();
+  final ScrollController _listSc = ScrollController();
   bool _loading = false;
+  bool _listLoading = false;
   bool _hasMore = true;
+  bool _listHasMore = true;
   int _page = 1;
+  int _listPage = 1;
   final Map<int, String> _prefNameById = {};
   final Map<int, String> _spotNameById = {};
   bool _isAdmin = false;
@@ -36,6 +41,14 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
   int _lastAmbiguousPlevel = ambiguous_plevel;
   int _lastPostFeedReloadTick = Common.instance.postFeedReloadTick;
+  int _lastCatchNotificationTick = Common.instance.catchNotificationTick;
+  int? _lastCatchNotificationPostId =
+      Common.instance.latestCatchNotificationPostId;
+  String _lastCatchNotificationTitle =
+      Common.instance.latestCatchNotificationTitle;
+  String _lastCatchNotificationBody =
+      Common.instance.latestCatchNotificationBody;
+  late final TabController _tabController;
 
   Future<bool> _ensureEmailVerified() async {
     try {
@@ -54,13 +67,36 @@ class _FishingResultGridState extends State<FishingResultGrid> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    Common.instance.setFishingResultTabIndex(_tabController.index);
+    refreshForegroundNotificationPresentationOptions();
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) return;
+      Common.instance.setFishingResultTabIndex(_tabController.index);
+      refreshForegroundNotificationPresentationOptions();
+      if (_tabController.index != 1) {
+        Common.instance.clearCatchNotification();
+      }
+    });
     _initMeta();
     _loadImageTsMap();
     Common.instance.addListener(_onCommonChanged);
     _loadFirst();
+    _loadListFirst();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (Common.instance.latestCatchNotificationPostId != null) {
+        _tabController.animateTo(1);
+      }
+    });
     _sc.addListener(() {
       if (_sc.position.pixels >= _sc.position.maxScrollExtent - 200) {
         _loadMore();
+      }
+    });
+    _listSc.addListener(() {
+      if (_listSc.position.pixels >= _listSc.position.maxScrollExtent - 200) {
+        _loadListMore();
       }
     });
   }
@@ -85,9 +121,47 @@ class _FishingResultGridState extends State<FishingResultGrid> {
     final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
     final postFeedChanged =
         _lastPostFeedReloadTick != Common.instance.postFeedReloadTick;
+    final catchNotificationChanged =
+        _lastCatchNotificationTick != Common.instance.catchNotificationTick;
+    final currentNotificationPostId =
+        Common.instance.latestCatchNotificationPostId;
+    final currentNotificationTitle =
+        Common.instance.latestCatchNotificationTitle;
+    final currentNotificationBody = Common.instance.latestCatchNotificationBody;
+    final catchNotificationStateChanged =
+        _lastCatchNotificationPostId != currentNotificationPostId ||
+        _lastCatchNotificationTitle != currentNotificationTitle ||
+        _lastCatchNotificationBody != currentNotificationBody;
+    if (catchNotificationStateChanged) {
+      _lastCatchNotificationPostId = currentNotificationPostId;
+      _lastCatchNotificationTitle = currentNotificationTitle;
+      _lastCatchNotificationBody = currentNotificationBody;
+    }
+    if (catchNotificationChanged) {
+      _lastCatchNotificationTick = Common.instance.catchNotificationTick;
+      if (Common.instance.latestCatchNotificationPostId != null) {
+        _tabController.animateTo(1);
+        if (_listItems.isEmpty) {
+          _loadListFirst();
+        } else {
+          _refreshListPreserveItems();
+        }
+      }
+    }
     if (_lastFishingDiaryMode == enabled &&
         !ambiguousChanged &&
-        !postFeedChanged) {
+        !postFeedChanged &&
+        !catchNotificationChanged &&
+        !catchNotificationStateChanged) {
+      return;
+    }
+    if (!ambiguousChanged &&
+        !postFeedChanged &&
+        !catchNotificationChanged &&
+        catchNotificationStateChanged) {
+      if (mounted) {
+        setState(() {});
+      }
       return;
     }
     _lastFishingDiaryMode = enabled;
@@ -97,16 +171,28 @@ class _FishingResultGridState extends State<FishingResultGrid> {
       'FishingResultGrid reload trigger diaryMode=$enabled ambiguous=$ambiguous_plevel feedTick=${Common.instance.postFeedReloadTick}',
     );
     _loadFirst();
+    if (_listItems.isEmpty) {
+      _loadListFirst();
+    } else {
+      _refreshListPreserveItems();
+    }
   }
 
   @override
   void dispose() {
+    Common.instance.setFishingResultTabIndex(0);
+    refreshForegroundNotificationPresentationOptions();
     Common.instance.removeListener(_onCommonChanged);
+    _tabController.dispose();
     _sc.dispose();
+    _listSc.dispose();
     super.dispose();
   }
 
-  Future<_FetchResult> _fetch({required int page}) async {
+  Future<_FetchResult> _fetch({
+    required int page,
+    required bool imageOnly,
+  }) async {
     try {
       final ts = DateTime.now().millisecondsSinceEpoch;
       final uri = Uri.parse(
@@ -127,7 +213,7 @@ class _FishingResultGridState extends State<FishingResultGrid> {
         if (uid > 0) body['user_id'] = uid.toString();
       }
       logPrint(
-        'FishingResultGrid fetch page=$page diaryMode=${Common.instance.fishingDiaryMode} body=${body.entries.map((e) => '${e.key}=${e.value}').join('&')}',
+        'FishingResultGrid fetch page=$page imageOnly=$imageOnly diaryMode=${Common.instance.fishingDiaryMode} body=${body.entries.map((e) => '${e.key}=${e.value}').join('&')}',
       );
       final resp = await http
           .post(
@@ -165,10 +251,15 @@ class _FishingResultGridState extends State<FishingResultGrid> {
           )
           .join(',');
       final uniqueUserIds = list.map((e) => e.userId).whereType<int>().toSet();
+      Common.instance.registerKnownCatchPostIds(
+        list.map((e) => e.postId).whereType<int>(),
+      );
       logPrint(
         'FishingResultGrid fetch result page=$page count=${list.length} uniqueUserIds=${uniqueUserIds.length} sampleItems=[$sampleItems]',
       );
-      // 画像ありのみ
+      if (!imageOnly) {
+        return _FetchResult(items: list, rawCount: list.length);
+      }
       return _FetchResult(
         items: list.where((e) => (e.thumbUrl ?? e.imageUrl) != null).toList(),
         rawCount: list.length,
@@ -193,15 +284,57 @@ class _FishingResultGridState extends State<FishingResultGrid> {
     await _loadMore();
   }
 
+  Future<void> _loadListFirst() async {
+    if (!mounted) return;
+    logPrint(
+      'FishingResultGrid loadListFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguous_plevel',
+    );
+    setState(() {
+      _listItems.clear();
+      _listPage = 1;
+      _listHasMore = true;
+      _listLoading = false;
+    });
+    await _loadListMore();
+  }
+
+  Future<void> _refreshListPreserveItems() async {
+    if (!mounted) return;
+    final currentItems = List<_PostGridItem>.from(_listItems);
+    final currentHasMore = _listHasMore;
+    final currentPage = _listPage;
+    logPrint(
+      'FishingResultGrid refreshListPreserveItems currentCount=${currentItems.length} currentPage=$currentPage',
+    );
+    setState(() => _listLoading = true);
+    final result = await _fetch(page: 1, imageOnly: false);
+    if (!mounted) return;
+    final merged = <_PostGridItem>[];
+    merged.addAll(_dedupePostGridItems(result.items, existing: merged));
+    merged.addAll(_dedupePostGridItems(currentItems, existing: merged));
+    setState(() {
+      _listItems
+        ..clear()
+        ..addAll(merged);
+      _listHasMore = currentHasMore || result.rawCount >= kPostPageSize;
+      _listPage = currentPage < 2 ? 2 : currentPage;
+      _listLoading = false;
+    });
+    _scrollToLatestCatchNotificationIfNeeded();
+    logPrint(
+      'FishingResultGrid refreshListPreserveItems end itemCount=${_listItems.length} nextPage=$_listPage hasMore=$_listHasMore',
+    );
+  }
+
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     if (!mounted) return;
     logPrint('FishingResultGrid loadMore start page=$_page');
     setState(() => _loading = true);
-    final result = await _fetch(page: _page);
+    final result = await _fetch(page: _page, imageOnly: true);
     if (!mounted) return;
     setState(() {
-      _items.addAll(result.items);
+      _items.addAll(_dedupePostGridItems(result.items, existing: _items));
       _hasMore = result.rawCount >= kPostPageSize;
       _page += 1;
       _loading = false;
@@ -211,12 +344,83 @@ class _FishingResultGridState extends State<FishingResultGrid> {
     );
   }
 
+  Future<void> _loadListMore() async {
+    if (_listLoading || !_listHasMore) return;
+    if (!mounted) return;
+    logPrint('FishingResultGrid loadListMore start page=$_listPage');
+    setState(() => _listLoading = true);
+    final result = await _fetch(page: _listPage, imageOnly: false);
+    if (!mounted) return;
+    setState(() {
+      _listItems.addAll(
+        _dedupePostGridItems(result.items, existing: _listItems),
+      );
+      _listHasMore = result.rawCount >= kPostPageSize;
+      _listPage += 1;
+      _listLoading = false;
+    });
+    _scrollToLatestCatchNotificationIfNeeded();
+    logPrint(
+      'FishingResultGrid loadListMore end nextPage=$_listPage hasMore=$_listHasMore itemCount=${_listItems.length} rawCount=${result.rawCount}',
+    );
+  }
+
+  List<_PostGridItem> _dedupePostGridItems(
+    List<_PostGridItem> incoming, {
+    List<_PostGridItem> existing = const [],
+  }) {
+    final seen = <int>{};
+    for (final item in existing) {
+      final postId = item.postId;
+      if (postId != null && postId > 0) {
+        seen.add(postId);
+      }
+    }
+    final unique = <_PostGridItem>[];
+    for (final item in incoming) {
+      final postId = item.postId;
+      if (postId == null || postId <= 0) {
+        unique.add(item);
+        continue;
+      }
+      if (seen.add(postId)) {
+        unique.add(item);
+      }
+    }
+    return unique;
+  }
+
+  void _scrollToLatestCatchNotificationIfNeeded() {
+    final targetPostId = Common.instance.latestCatchNotificationPostId;
+    if (targetPostId == null) return;
+    final idx = _listItems.indexWhere((e) => e.postId == targetPostId);
+    if (idx < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_listSc.hasClients) return;
+      final offset = (idx * 73.0).clamp(0.0, _listSc.position.maxScrollExtent);
+      _listSc.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   void _maybeLoadMoreFromScroll(ScrollMetrics metrics) {
     if (metrics.extentAfter < 300 && !_loading && _hasMore) {
       logPrint(
         'FishingResultGrid scroll trigger extentAfter=${metrics.extentAfter.toStringAsFixed(1)} page=$_page hasMore=$_hasMore',
       );
       _loadMore();
+    }
+  }
+
+  void _maybeLoadListMoreFromScroll(ScrollMetrics metrics) {
+    if (metrics.extentAfter < 300 && !_listLoading && _listHasMore) {
+      logPrint(
+        'FishingResultGrid list scroll trigger extentAfter=${metrics.extentAfter.toStringAsFixed(1)} page=$_listPage hasMore=$_listHasMore',
+      );
+      _loadListMore();
     }
   }
 
@@ -399,110 +603,370 @@ class _FishingResultGridState extends State<FishingResultGrid> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadFirst,
-              child:
-                  !_metaReady
-                      ? const Center(child: CircularProgressIndicator())
-                      : Builder(
-                        builder: (context) {
-                          if (_items.isEmpty && !_loading) {
-                            return ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              children: const [
-                                SizedBox(height: 120),
-                                Center(
-                                  child: Text('釣果が取得できませんでした。下に引っ張って更新してください。'),
-                                ),
-                              ],
-                            );
-                          }
-                          final width = MediaQuery.of(context).size.width;
-                          const double pad = 8;
-                          const double gap = 4;
-                          final double cell = (width - pad * 2 - gap * 2) / 3.0;
-                          // グループ分割（パターン2..4のみを使用。同一パターンは連続回避）
-                          final groups = <_MosaicGroup>[];
-                          int i = 0;
-                          int prev = 0;
-                          int? forceNext; // 2/3 の後は 4 を強制
-                          final rng = math.Random(_items.length + _page);
-                          while (i < _items.length) {
-                            final remain = _items.length - i;
-                            int pattern;
-                            // 最初のグループはパターン2（大1枚＋右に小2枚の縦並び）。残数不足なら4にフォールバック。
-                            if (i == 0) {
-                              pattern = (remain >= 3) ? 2 : 4;
-                            } else if (forceNext != null) {
-                              pattern = forceNext!;
-                              forceNext = null;
-                            } else {
-                              // 2,3は3件必要。4は1..3件。
-                              final viable = <int>[];
-                              if (remain >= 3) {
-                                viable.addAll([2, 3, 4]);
-                              } else {
-                                viable.addAll([4]);
-                              }
-                              // 直前パターン除外
-                              final candidates =
-                                  viable.where((p) => p != prev).toList();
-                              if (candidates.isEmpty) {
-                                // どうしても連続回避できない場合は成立するものを選択
-                                pattern = 4;
-                              } else {
-                                pattern =
-                                    candidates[rng.nextInt(candidates.length)];
-                                // 2/3は残数が3件必要。残数不足なら4にフォールバック
-                                if ((pattern == 2 || pattern == 3) &&
-                                    remain < 3) {
-                                  pattern = 4;
-                                }
-                              }
-                            }
-                            final need = math.min(3, remain);
-                            final slice = _items.sublist(i, i + need);
-                            groups.add(
-                              _MosaicGroup(pattern: pattern, items: slice),
-                            );
-                            i += need;
-                            if ((pattern == 2 || pattern == 3) &&
-                                i < _items.length) {
-                              forceNext = 4; // 次は横3個
-                              prev = 4; // 連続回避の基準も4に設定
-                            } else {
-                              prev = pattern;
-                            }
-                          }
-                          return NotificationListener<ScrollNotification>(
-                            onNotification: (notification) {
-                              _maybeLoadMoreFromScroll(notification.metrics);
-                              return false;
-                            },
-                            child: ListView.builder(
-                              controller: _sc,
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(pad),
-                              itemCount: groups.length + (_hasMore ? 1 : 0),
-                              itemBuilder: (context, gi) {
-                                if (gi >= groups.length) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16),
-                                    child: Center(
-                                      child: CircularProgressIndicator(),
+            child:
+                !_metaReady
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(
+                      children: [
+                        Container(
+                          color: Colors.white,
+                          child: TabBar(
+                            controller: _tabController,
+                            tabs: [
+                              Tab(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.photo_library_outlined,
+                                      size: 18,
                                     ),
-                                  );
-                                }
-                                final g = groups[gi];
-                                return _buildGroup(g, cell, gap);
-                              },
-                            ),
-                          );
-                        },
-                      ),
-            ),
+                                    SizedBox(width: 6),
+                                    Text('ギャラリー'),
+                                  ],
+                                ),
+                              ),
+                              Tab(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.view_list_outlined, size: 18),
+                                    SizedBox(width: 6),
+                                    Text('一覧'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            labelColor: Colors.black87,
+                            indicatorColor: Colors.black87,
+                          ),
+                        ),
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabController,
+                            children: [
+                              RefreshIndicator(
+                                onRefresh: _loadFirst,
+                                child: _buildGalleryTab(context),
+                              ),
+                              RefreshIndicator(
+                                onRefresh: _loadListFirst,
+                                child: _buildListTab(context),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGalleryTab(BuildContext context) {
+    if (_items.isEmpty && !_loading) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
+        ],
+      );
+    }
+    final width = MediaQuery.of(context).size.width;
+    const double pad = 8;
+    const double gap = 4;
+    final double cell = (width - pad * 2 - gap * 2) / 3.0;
+    final groups = <_MosaicGroup>[];
+    int i = 0;
+    int prev = 0;
+    int? forceNext;
+    final rng = math.Random(_items.length + _page);
+    while (i < _items.length) {
+      final remain = _items.length - i;
+      int pattern;
+      if (i == 0) {
+        pattern = (remain >= 3) ? 2 : 4;
+      } else if (forceNext != null) {
+        pattern = forceNext!;
+        forceNext = null;
+      } else {
+        final viable = <int>[];
+        if (remain >= 3) {
+          viable.addAll([2, 3, 4]);
+        } else {
+          viable.addAll([4]);
+        }
+        final candidates = viable.where((p) => p != prev).toList();
+        if (candidates.isEmpty) {
+          pattern = 4;
+        } else {
+          pattern = candidates[rng.nextInt(candidates.length)];
+          if ((pattern == 2 || pattern == 3) && remain < 3) {
+            pattern = 4;
+          }
+        }
+      }
+      final need = math.min(3, remain);
+      final slice = _items.sublist(i, i + need);
+      groups.add(_MosaicGroup(pattern: pattern, items: slice));
+      i += need;
+      if ((pattern == 2 || pattern == 3) && i < _items.length) {
+        forceNext = 4;
+        prev = 4;
+      } else {
+        prev = pattern;
+      }
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        _maybeLoadMoreFromScroll(notification.metrics);
+        return false;
+      },
+      child: ListView.builder(
+        controller: _sc,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(pad),
+        itemCount: groups.length + (_hasMore ? 1 : 0),
+        itemBuilder: (context, gi) {
+          if (gi >= groups.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final g = groups[gi];
+          return _buildGroup(g, cell, gap);
+        },
+      ),
+    );
+  }
+
+  Widget _buildListTab(BuildContext context) {
+    final notificationPostId = Common.instance.latestCatchNotificationPostId;
+    if (_listItems.isEmpty && !_listLoading) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
+        ],
+      );
+    }
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        _maybeLoadListMoreFromScroll(notification.metrics);
+        return false;
+      },
+      child: ListView.builder(
+        controller: _listSc,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount:
+            _listItems.length +
+            (_listHasMore ? 1 : 0) +
+            (notificationPostId != null ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (notificationPostId != null && index == 0) {
+            return InkWell(
+              onTap: () => Common.instance.clearCatchNotification(),
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F1FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFB9D2FF)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_active,
+                      color: Color(0xFF1565C0),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            Common
+                                    .instance
+                                    .latestCatchNotificationTitle
+                                    .isNotEmpty
+                                ? Common.instance.latestCatchNotificationTitle
+                                : '新しい釣果通知',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          if (Common
+                              .instance
+                              .latestCatchNotificationBody
+                              .isNotEmpty)
+                            Text(
+                              Common.instance.latestCatchNotificationBody,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          final listIndex = index - (notificationPostId != null ? 1 : 0);
+          if (listIndex >= _listItems.length) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final it = _listItems[listIndex];
+          final thumb = it.thumbUrl ?? it.imageUrl;
+          final isMine = _myUserId != null && it.userId == _myUserId;
+          final isNotified =
+              notificationPostId != null && it.postId == notificationPostId;
+          return Column(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: isNotified ? const Color(0xFFFFF7CC) : null,
+                  border: Border(
+                    left: BorderSide(
+                      color:
+                          isMine
+                              ? const Color(0xFFFFB74D)
+                              : const Color(0xFFBDBDBD),
+                      width: 8,
+                    ),
+                  ),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.only(left: 12, right: 16),
+                  leading:
+                      (thumb != null)
+                          ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(
+                              _withTs(thumb, it.postId),
+                              width: 48,
+                              height: 48,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                          : const Icon(
+                            Icons.image,
+                            size: 40,
+                            color: Colors.black38,
+                          ),
+                  title: Text(
+                    it.title?.isNotEmpty == true
+                        ? it.title!
+                        : (it.nickName ?? '投稿'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Row(
+                    children: [
+                      Expanded(
+                        child:
+                            it.detail?.isNotEmpty == true
+                                ? Text(
+                                  it.detail!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                )
+                                : const SizedBox.shrink(),
+                      ),
+                      if ((it.createAt ?? '').isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          it.createAt!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                        ),
+                      ],
+                    ],
+                  ),
+                  onTap: () async {
+                    Common.instance.clearCatchNotification();
+                    final String? detailRaw = it.imageUrl ?? it.thumbUrl;
+                    final String? detailUrl =
+                        (detailRaw != null)
+                            ? _withTs(detailRaw, it.postId)
+                            : null;
+                    final updated = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => PostDetailPage(
+                              item: PostDetailItem(
+                                userId: it.userId,
+                                postId: it.postId,
+                                postKind: it.postKind,
+                                exist: it.exist,
+                                title: it.title,
+                                detail: it.detail,
+                                imageUrl: detailUrl,
+                                nickName: it.nickName,
+                                createAt: it.createAt,
+                                spotId: it.spotId,
+                                showNearbyButton: true,
+                              ),
+                            ),
+                      ),
+                    );
+                    if (!mounted) return;
+                    if (updated == true && it.postId != null) {
+                      final ts =
+                          DateTime.now().millisecondsSinceEpoch.toString();
+                      setState(() {
+                        _imgTsByPost[it.postId!] = ts;
+                      });
+                      _saveImageTs(it.postId!, ts);
+                    } else if (updated is Map) {
+                      final u = (updated['updated'] == true);
+                      final cleared = (updated['clearedImage'] == true);
+                      final deleted = (updated['deleted'] == true);
+                      final pid =
+                          updated['postId'] is int
+                              ? updated['postId'] as int
+                              : (updated['postId'] is String
+                                  ? int.tryParse(updated['postId'])
+                                  : null);
+                      if (deleted && pid != null) {
+                        setState(() {
+                          _listItems.removeWhere((e) => e.postId == pid);
+                          _items.removeWhere((e) => e.postId == pid);
+                          _imgTsByPost.remove(pid);
+                        });
+                        _removeImageTs(pid);
+                        return;
+                      }
+                      if (u && cleared && pid != null) {
+                        setState(() {
+                          _items.removeWhere((e) => e.postId == pid);
+                          _imgTsByPost.remove(pid);
+                        });
+                        _removeImageTs(pid);
+                      } else if (u && pid != null) {
+                        final ts =
+                            DateTime.now().millisecondsSinceEpoch.toString();
+                        setState(() {
+                          _imgTsByPost[pid] = ts;
+                        });
+                        _saveImageTs(pid, ts);
+                      }
+                    }
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+          );
+        },
       ),
     );
   }

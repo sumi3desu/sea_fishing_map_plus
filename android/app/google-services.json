@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1018516835892",
+    "project_id": "seafishingmap-4f77f",
+    "storage_bucket": "seafishingmap-4f77f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1018516835892:android:c169ceafaba72d7e1d4461",
+        "android_client_info": {
+          "package_name": "com.example.siowadou"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKPIJh8UaeTWjCdznrTKjgsZyzPpvrZLY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

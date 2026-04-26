@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 /// Example:
 ///   ServerLog2025/10/22 14/03/55 Purchased product_id=com.example.pro
 void logPrint(String message) {
-  if (!kReleaseMode) {
+  //if (!kReleaseMode) {
 
   final now = DateTime.now();
   String two(int n) => n.toString().padLeft(2, '0');
@@ -20,6 +20,6 @@ void logPrint(String message) {
   // Output example: ServerLog2025/10/22 14/03/55 Your message here
   // ignore: avoid_print
   print('ServerLog $ts $message');
-  }
+  //}
 }
 

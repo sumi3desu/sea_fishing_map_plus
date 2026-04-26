@@ -30,7 +30,7 @@ try {
     // 既存ユーザを検索（どちらの場合もブロック関連カラムを取得）
     $sql = '';
     if ($email === '') {
-        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, notif_on_off, delete_flg
                   FROM user
                  WHERE delete_flg = 0
                    AND uuid = ?';
@@ -38,7 +38,7 @@ try {
         $stmt->execute([$uuid]);
         debug_log('sql['.$sql.'] uuid['.$uuid.']');
     } else {
-        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+        $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, notif_on_off, delete_flg
                   FROM user
                  WHERE delete_flg = 0
                    AND email = ?';
@@ -80,6 +80,7 @@ try {
             'posts_blocked_reason' => $user['posts_blocked_reason'] ?? null,
             'can_report' => $canReport,
             'role' => $user['role'],
+            'notif_on_off' => isset($user['notif_on_off']) ? (int)$user['notif_on_off'] : 1,
             'message'    => '既存ユーザを取得しました',
         ];
         echo json_encode($response);
@@ -95,7 +96,7 @@ try {
     $insertStmt->execute([$uuid, '']);
     $newUserId = $pdo->lastInsertId();
  
-    $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, delete_flg
+    $sql = 'SELECT user_id, uuid, email, created_at, nick_name, reports_blocked, reports_blocked_until, reports_blocked_reason, posts_blocked, posts_blocked_until, posts_blocked_reason, role, notif_on_off, delete_flg
               FROM user
              WHERE delete_flg = 0
                AND user_id = ?';
@@ -133,6 +134,7 @@ try {
             'posts_blocked_reason' => $user['posts_blocked_reason'] ?? null,
             'can_report' => $canReport,
             'role' => $user['role'],
+            'notif_on_off' => isset($user['notif_on_off']) ? (int)$user['notif_on_off'] : 1,
             'message'    => '新規ユーザを作成しました',
         ];
     }

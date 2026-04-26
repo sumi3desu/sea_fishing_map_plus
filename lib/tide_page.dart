@@ -254,14 +254,28 @@ class _CatchPostListState extends State<_CatchPostList> {
       final data = jsonDecode(resp.body);
       if (data is Map && data['status'] == 'success') {
         final List rows = (data['rows'] as List?) ?? [];
-        return rows
-            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final items =
+            rows
+                .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+        if (kind == 1) {
+          Common.instance.registerKnownCatchPostIds(
+            items.map((e) => e.postId).whereType<int>(),
+          );
+        }
+        return items;
       }
       if (data is List) {
-        return data
-            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final items =
+            data
+                .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+        if (kind == 1) {
+          Common.instance.registerKnownCatchPostIds(
+            items.map((e) => e.postId).whereType<int>(),
+          );
+        }
+        return items;
       }
       return [];
     } catch (_) {
@@ -297,7 +311,7 @@ class _CatchPostListState extends State<_CatchPostList> {
     rows = await _applyAmbiguityFilter(rows);
     if (!mounted) return;
     setState(() {
-      _items.addAll(rows);
+      _items.addAll(_dedupePostItems(rows, existing: _items));
       _hasMore = rows.length >= kPostPageSize;
       _page += 1;
       _loading = false;
@@ -781,14 +795,28 @@ class _EnvPostListState extends State<_EnvPostList> {
       final data = jsonDecode(resp.body);
       if (data is Map && data['status'] == 'success') {
         final List rows = (data['rows'] as List?) ?? [];
-        return rows
-            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final items =
+            rows
+                .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+        if (kind == 1) {
+          Common.instance.registerKnownCatchPostIds(
+            items.map((e) => e.postId).whereType<int>(),
+          );
+        }
+        return items;
       }
       if (data is List) {
-        return data
-            .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
-            .toList();
+        final items =
+            data
+                .map((e) => _PostItem.fromJson(e as Map<String, dynamic>))
+                .toList();
+        if (kind == 1) {
+          Common.instance.registerKnownCatchPostIds(
+            items.map((e) => e.postId).whereType<int>(),
+          );
+        }
+        return items;
       }
       return [];
     } catch (_) {
@@ -822,7 +850,7 @@ class _EnvPostListState extends State<_EnvPostList> {
     final rows = await _fetch(kind: widget.filterKind, page: _page);
     if (!mounted) return;
     setState(() {
-      _items.addAll(rows);
+      _items.addAll(_dedupePostItems(rows, existing: _items));
       _hasMore = rows.length >= kPostPageSize;
       _page += 1;
       _loading = false;
@@ -4826,7 +4854,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     rows = await _applyAmbiguityFilter(rows);
     if (!mounted) return;
     setState(() {
-      _items.addAll(rows);
+      _items.addAll(_dedupePostItems(rows, existing: _items));
       _hasMore = rows.length >= kPostPageSize;
       _page += 1;
       _loading = false;
@@ -4984,12 +5012,28 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(
-                  it.detail?.isNotEmpty == true
-                      ? it.detail!
-                      : (it.createAt ?? ''),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                subtitle: Row(
+                  children: [
+                    Expanded(
+                      child:
+                          it.detail?.isNotEmpty == true
+                              ? Text(
+                                it.detail!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                              : const SizedBox.shrink(),
+                    ),
+                    if ((it.createAt ?? '').isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        it.createAt!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                      ),
+                    ],
+                  ],
                 ),
                 onTap: () {
                   Navigator.of(context).push(
@@ -5020,6 +5064,31 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
       },
     );
   }
+}
+
+List<_PostItem> _dedupePostItems(
+  List<_PostItem> incoming, {
+  List<_PostItem> existing = const [],
+}) {
+  final seen = <int>{};
+  for (final item in existing) {
+    final postId = item.postId;
+    if (postId != null && postId > 0) {
+      seen.add(postId);
+    }
+  }
+  final unique = <_PostItem>[];
+  for (final item in incoming) {
+    final postId = item.postId;
+    if (postId == null || postId <= 0) {
+      unique.add(item);
+      continue;
+    }
+    if (seen.add(postId)) {
+      unique.add(item);
+    }
+  }
+  return unique;
 }
 
 class _TideNavObserver extends NavigatorObserver {

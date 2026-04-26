@@ -13,7 +13,6 @@ import 'sio_database.dart';
 import 'nearby_map_page.dart';
 import 'input_post_page.dart';
 import 'new_account_page.dart';
-import 'dart:math' as Maths;
 import 'appconfig.dart';
 import 'html_view_page.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -22,7 +21,7 @@ import 'log_print.dart';
 import 'main.dart';
 //import 'constants.dart';
 import 'common.dart';
-import 'log_print.dart';
+import 'catch_area_candidates.dart';
 
 class PostDetailPage extends ConsumerStatefulWidget {
   const PostDetailPage({super.key, required this.item});
@@ -485,269 +484,17 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
         Navigator.pop(context);
         return;
       }
-      // 距離計算して近い順に並べる
-      List<Map<String, dynamic>> list = [];
-      for (final r in rows) {
-        final lat = (r['latitude'] as num).toDouble();
-        final lng = (r['longitude'] as num).toDouble();
-        final d = _dist(sLat, sLng, lat, lng);
-        final id = int.tryParse(r['port_id']?.toString() ?? '');
-        list.add({
-          'id': id,
-          'name': (r['port_name'] ?? '').toString(),
-          'address': (r['address'] ?? '').toString(),
-          'lat': lat,
-          'lng': lng,
-          'd': d,
-        });
-      }
-      list.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
-      late final List<Map<String, dynamic>> points;
-      if (ambiguous_method == 2) {
-        final nearby15 = list.take(15).toList();
-        final groups = <String, List<Map<String, dynamic>>>{};
-        for (final e in nearby15) {
-          final rawAddress = ((e['address'] ?? '') as String).trim();
-          final key =
-              rawAddress.isNotEmpty
-                  ? rawAddress
-                  : '__missing__:${e['id'] ?? e['name'] ?? nearby15.indexOf(e)}';
-          groups.putIfAbsent(key, () => <Map<String, dynamic>>[]).add(e);
-        }
-        final orderedGroups =
-            groups.values.toList()..sort((a, b) {
-              final ad = a
-                  .map((e) => (e['d'] as double?) ?? double.infinity)
-                  .reduce((x, y) => x < y ? x : y);
-              final bd = b
-                  .map((e) => (e['d'] as double?) ?? double.infinity)
-                  .reduce((x, y) => x < y ? x : y);
-              return ad.compareTo(bd);
-            });
-        for (final g in orderedGroups) {
-          g.sort(
-            (a, b) => ((a['d'] as double?) ?? double.infinity).compareTo(
-              (b['d'] as double?) ?? double.infinity,
-            ),
-          );
-        }
-        points = orderedGroups.expand((g) => g).toList();
-      } else if (ambiguous_method == 3) {
-        final nearby20 = list.take(20).toList();
-        if (nearby20.length <= 15) {
-          logPrint(
-            'ambiguous_method=3 spotId=$sid shape=unknown nearby20=${nearby20.length} action=no_cut',
-          );
-          points = nearby20;
-        } else {
-          double minLat = double.infinity;
-          double maxLat = -double.infinity;
-          double minLng = double.infinity;
-          double maxLng = -double.infinity;
-          for (final e in nearby20) {
-            final lat = (e['lat'] as num).toDouble();
-            final lng = (e['lng'] as num).toDouble();
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-            if (lng < minLng) minLng = lng;
-            if (lng > maxLng) maxLng = lng;
-          }
-          final centerLat = (minLat + maxLat) / 2.0;
-          final centerLng = (minLng + maxLng) / 2.0;
-          final heightM = _dist(minLat, centerLng, maxLat, centerLng);
-          final widthM = _dist(centerLat, minLng, centerLat, maxLng);
-          final vertical = heightM >= widthM;
-          final pattern = (sid % 3) + 1;
-          logPrint(
-            'ambiguous_method=3 spotId=$sid shape=${vertical ? 'vertical' : 'horizontal'} pattern=$pattern heightM=${heightM.toStringAsFixed(1)} widthM=${widthM.toStringAsFixed(1)}',
-          );
-          if (pattern == 3) {
-            final removed = nearby20.skip(15).map((e) => e['id']).toList();
-            logPrint(
-              'ambiguous_method=3 action=nearest15_keep removedCount=${removed.length} removedIds=$removed',
-            );
-            points = nearby20.take(15).toList();
-          } else {
-            final working = List<Map<String, dynamic>>.from(nearby20);
-            int primaryCutCount = 0;
-            int fallbackCutCount = 0;
-            final removedIds = <dynamic>[];
-
-            int _pickIndex(List<Map<String, dynamic>> src, bool primarySide) {
-              final indexed = src.asMap().entries.toList();
-              indexed.sort((a, b) {
-                final av =
-                    primarySide
-                        ? _axisValue(a.value, vertical, pattern)
-                        : _axisValue(
-                          a.value,
-                          vertical,
-                          pattern,
-                          opposite: true,
-                        );
-                final bv =
-                    primarySide
-                        ? _axisValue(b.value, vertical, pattern)
-                        : _axisValue(
-                          b.value,
-                          vertical,
-                          pattern,
-                          opposite: true,
-                        );
-                final c = av.compareTo(bv);
-                if (c != 0) return c;
-                final ad = (a.value['d'] as double?) ?? double.infinity;
-                final bd = (b.value['d'] as double?) ?? double.infinity;
-                return bd.compareTo(ad);
-              });
-              for (final entry in indexed) {
-                if ((entry.value['id'] as int?) != sid) return entry.key;
-              }
-              return -1;
-            }
-
-            while (working.length > 15) {
-              int idx = _pickIndex(working, true);
-              bool usedFallback = false;
-              if (idx < 0) {
-                idx = _pickIndex(working, false);
-                usedFallback = true;
-              }
-              if (idx < 0) break;
-              final removed = working.removeAt(idx);
-              removedIds.add(removed['id']);
-              if (usedFallback) {
-                fallbackCutCount++;
-              } else {
-                primaryCutCount++;
-              }
-            }
-            final primaryAction =
-                vertical
-                    ? (pattern == 1 ? 'top_cut' : 'bottom_cut')
-                    : (pattern == 1 ? 'right_cut' : 'left_cut');
-            final fallbackAction =
-                vertical
-                    ? (pattern == 1 ? 'bottom_cut' : 'top_cut')
-                    : (pattern == 1 ? 'left_cut' : 'right_cut');
-            logPrint(
-              'ambiguous_method=3 action=$primaryAction count=$primaryCutCount fallbackAction=$fallbackAction fallbackCount=$fallbackCutCount removedIds=$removedIds',
-            );
-            points =
-                nearby20.where((e) {
-                  final id = e['id'] as int?;
-                  if (id != null) {
-                    return working.any((w) => (w['id'] as int?) == id);
-                  }
-                  return working.any((w) {
-                    final d = _dist(
-                      (e['lat'] as num).toDouble(),
-                      (e['lng'] as num).toDouble(),
-                      (w['lat'] as num).toDouble(),
-                      (w['lng'] as num).toDouble(),
-                    );
-                    return d < 1.0;
-                  });
-                }).toList();
-          }
-        }
-      } else {
-        // ambiguous_method=1: 既存のハイブリッド選択
-        final s1 = list.take(10).toList();
-        final c10 = s1.isNotEmpty ? s1.last : null;
-        List<Map<String, dynamic>> s2 = [];
-        if (c10 != null) {
-          final cLat = (c10['lat'] as num).toDouble();
-          final cLng = (c10['lng'] as num).toDouble();
-          final withD =
-              rows.map((r) {
-                final lat = (r['latitude'] as num).toDouble();
-                final lng = (r['longitude'] as num).toDouble();
-                final id = int.tryParse(r['port_id']?.toString() ?? '');
-                final d = _dist(cLat, cLng, lat, lng);
-                return {
-                  'id': id,
-                  'name': (r['port_name'] ?? '').toString(),
-                  'address': (r['address'] ?? '').toString(),
-                  'lat': lat,
-                  'lng': lng,
-                  'd': d,
-                };
-              }).toList();
-          withD.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
-          s2 = withD.take(10).toList();
-        }
-        final seenIds = <int>{};
-        final combined = <Map<String, dynamic>>[];
-
-        bool addIfUnique(Map<String, dynamic> e) {
-          final id = e['id'] as int?;
-          if (id != null) {
-            if (seenIds.contains(id)) return false;
-            seenIds.add(id);
-            combined.add(e);
-            return true;
-          }
-          final lat = (e['lat'] as num).toDouble();
-          final lng = (e['lng'] as num).toDouble();
-          for (final x in combined) {
-            final d = _dist(
-              lat,
-              lng,
-              (x['lat'] as num).toDouble(),
-              (x['lng'] as num).toDouble(),
-            );
-            if (d < 50.0) return false;
-          }
-          combined.add(e);
-          return true;
-        }
-
-        for (final e in s1) {
-          addIfUnique(e);
-        }
-        for (final e in s2) {
-          addIfUnique(e);
-        }
-        points = combined;
-      }
+      final points = buildCatchAreaPoints(
+        rows: rows.cast<Map<String, dynamic>>(),
+        spotId: sid,
+        logger: logPrint,
+      );
       if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => NearbyMapPage(points: points)),
       );
     } catch (_) {}
-  }
-
-  double _dist(double lat1, double lon1, double lat2, double lon2) {
-    const r = 6371000.0;
-    final dLat = (lat2 - lat1) * 3.141592653589793 / 180.0;
-    final dLon = (lon2 - lon1) * 3.141592653589793 / 180.0;
-    final a =
-        (Maths.sin(dLat / 2) * Maths.sin(dLat / 2)) +
-        Maths.cos(lat1 * 3.141592653589793 / 180.0) *
-            Maths.cos(lat2 * 3.141592653589793 / 180.0) *
-            (Maths.sin(dLon / 2) * Maths.sin(dLon / 2));
-    final c = 2 * Maths.atan2(Maths.sqrt(a), Maths.sqrt(1 - a));
-    return r * c;
-  }
-
-  double _axisValue(
-    Map<String, dynamic> e,
-    bool vertical,
-    int pattern, {
-    bool opposite = false,
-  }) {
-    final lat = (e['lat'] as num).toDouble();
-    final lng = (e['lng'] as num).toDouble();
-    if (vertical) {
-      final fromTop = pattern == 1;
-      final useTop = opposite ? !fromTop : fromTop;
-      return useTop ? -lat : lat;
-    }
-    final fromRight = pattern == 1;
-    final useRight = opposite ? !fromRight : fromRight;
-    return useRight ? -lng : lng;
   }
 
   @override

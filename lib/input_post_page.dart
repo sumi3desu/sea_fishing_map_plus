@@ -12,11 +12,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/premium_state_notifier.dart' as prem;
 import 'package:http/http.dart' as http;
 import 'dart:io';
-import 'appconfig.dart';
 import 'dart:convert';
 import 'sio_database.dart';
 import 'common.dart';
 import 'new_account_page.dart';
+import 'catch_area_candidates.dart';
 
 class InputPost extends ConsumerStatefulWidget {
   const InputPost({
@@ -444,6 +444,12 @@ class _InputPostState extends ConsumerState<InputPost> {
       };
       // exist は常に 0（任意）
       map['exist'] = '0';
+      if (_postType == 'catch') {
+        final candidateSpotIds = await _buildCandidateSpotIds(spotId);
+        map['candidate_spot_ids'] = jsonEncode({
+          'candidate_spot_ids': candidateSpotIds,
+        });
+      }
 
       final pathToSend = _uploadImage?.path ?? _pickedImage?.path;
 
@@ -628,6 +634,19 @@ class _InputPostState extends ConsumerState<InputPost> {
   String _formatMySqlDate(DateTime dt) {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${dt.year}-${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+  }
+
+  Future<List<int>> _buildCandidateSpotIds(int spotId) async {
+    try {
+      final db = await SioDatabase().database;
+      final rows = await db.query('teibou');
+      return buildCatchAreaCandidateSpotIds(
+        rows: rows.cast<Map<String, dynamic>>(),
+        spotId: spotId,
+      );
+    } catch (_) {
+      return <int>[spotId];
+    }
   }
 
   Future<void> _showImageActionSheet() async {

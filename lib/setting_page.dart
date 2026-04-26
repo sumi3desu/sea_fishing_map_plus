@@ -40,6 +40,8 @@ class _SettingPageState extends State<SettingPage> {
   String _nickname = '';
   bool _isAdmin = false;
   bool _didInitPremium = false;
+  bool _notifEnabled = true;
+  bool _notifSaving = false;
 
   void waitGetMapKind() async {
     Common.instance.mapKind = await Common.instance.loadMapKind();
@@ -81,6 +83,7 @@ class _SettingPageState extends State<SettingPage> {
         postsBlockedReason: remote.postsBlockedReason,
         role: (remote.role ?? '').isNotEmpty ? remote.role : local.role,
         canReport: remote.canReport,
+        notifOnOff: remote.notifOnOff,
         photoUrl: remote.photoUrl ?? local.photoUrl,
         photoVersion: remote.photoVersion ?? local.photoVersion,
         clearReportsBlockedUntil: remote.reportsBlockedUntil == null,
@@ -103,6 +106,7 @@ class _SettingPageState extends State<SettingPage> {
       if (!mounted) return;
       setState(() {
         _isAdmin = ((merged.role ?? '').toLowerCase() == 'admin');
+        _notifEnabled = merged.notifOnOff != 0;
         if (!_isAdmin && _selectedTabIndex >= _tabs.length) {
           _selectedTabIndex = _tabs.length - 1;
         }
@@ -127,11 +131,62 @@ class _SettingPageState extends State<SettingPage> {
       setState(() {
         _nickname = nn;
         _isAdmin = isAdmin;
+        _notifEnabled = (info?.notifOnOff ?? 1) != 0;
         if (!_isAdmin && _selectedTabIndex >= _tabs.length) {
           _selectedTabIndex = _tabs.length - 1;
         }
       });
     } catch (_) {}
+  }
+
+  Future<void> _updateNotificationSetting(bool enabled) async {
+    final previous = _notifEnabled;
+    setState(() {
+      _notifEnabled = enabled;
+      _notifSaving = true;
+    });
+    try {
+      final local = await loadUserInfo() ?? await getOrInitUserInfo();
+      final uri = Uri.parse(
+        '${AppConfig.instance.baseUrl}update_notification_setting.php',
+      );
+      final resp = await http
+          .post(
+            uri,
+            body: {
+              'user_id': local.userId.toString(),
+              'notif_on_off': enabled ? '1' : '0',
+            },
+          )
+          .timeout(kHttpTimeout);
+      final data = jsonDecode(resp.body);
+      if (resp.statusCode != 200 ||
+          data is! Map ||
+          (data['status']?.toString() ?? '') != 'success') {
+        throw Exception('notification setting update failed');
+      }
+      final updated = local.copyWith(notifOnOff: enabled ? 1 : 0);
+      await saveUserInfo(updated);
+      if (!mounted) return;
+      r.ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).invalidate(userInfoProvider);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notifEnabled = previous;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('通知設定の更新に失敗しました')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _notifSaving = false;
+        });
+      }
+    }
   }
 
   Widget _sectionTitle(BuildContext context, String title) {
@@ -402,6 +457,7 @@ class _SettingPageState extends State<SettingPage> {
         postsBlockedReason: remote.postsBlockedReason,
         role: remote.role ?? base.role,
         canReport: remote.canReport,
+        notifOnOff: remote.notifOnOff,
         photoUrl: remote.photoUrl ?? base.photoUrl,
         photoVersion: remote.photoVersion ?? base.photoVersion,
         clearReportsBlockedUntil: remote.reportsBlockedUntil == null,
@@ -835,6 +891,48 @@ class _SettingPageState extends State<SettingPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _sectionTitle(context, '通知設定'),
+        const SizedBox(height: 12),
+        _sectionCard(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                const Icon(Icons.notifications_active_outlined),
+                const SizedBox(width: 12),
+                const Expanded(child: Text('釣果通知')),
+                SizedBox(
+                  width: 70,
+                  child:
+                      _notifSaving
+                          ? const Center(
+                            child: SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                          : Text(
+                            _notifEnabled ? '通知ON' : '通知OFF',
+                            textAlign: TextAlign.right,
+                          ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: _notifEnabled,
+                  onChanged:
+                      _notifSaving
+                          ? null
+                          : (value) {
+                            _updateNotificationSetting(value);
+                          },
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
         _sectionTitle(context, '地図(経路)'),
         const SizedBox(height: 8),
         _sectionCard(
