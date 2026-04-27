@@ -744,9 +744,23 @@ class _SettingPageState extends State<SettingPage> {
                             final uid = userInfo?.userId;
                             if (uid == null || uid <= 0)
                               return const SizedBox.shrink();
-                            return Text(
-                              'ユーザID: $uid',
-                              style: Theme.of(context).textTheme.bodySmall,
+                            final isAdmin =
+                                ((userInfo?.role ?? '').toLowerCase() ==
+                                    'admin');
+                            final style = Theme.of(context).textTheme.bodySmall;
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: Text('ユーザID: $uid', style: style),
+                                ),
+                                if (isAdmin)
+                                  Text(
+                                    '管理者',
+                                    style: style?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                              ],
                             );
                           },
                         ),

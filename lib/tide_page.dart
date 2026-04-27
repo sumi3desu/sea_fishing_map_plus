@@ -216,10 +216,13 @@ class _CatchPostListState extends State<_CatchPostList> {
   bool _loading = false;
   bool _hasMore = true;
   int _page = 1;
+  bool _isAdmin = false;
+  final Map<int, String> _spotNameById = {};
   final Map<int, String> _imgTsByPost = {}; // 編集後のキャッシュバスター
   @override
   void initState() {
     super.initState();
+    _initAdminMeta();
     _loadImageTsMap().then((_) => _loadFirst());
     _sc.addListener(() {
       if (_sc.position.pixels >= _sc.position.maxScrollExtent - 200) {
@@ -411,6 +414,53 @@ class _CatchPostListState extends State<_CatchPostList> {
     return url;
   }
 
+  Future<void> _initAdminMeta() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+      if (!isAdmin) {
+        if (mounted) setState(() => _isAdmin = false);
+        return;
+      }
+
+      final db = await SioDatabase().database;
+      var rows = await db.query('teibou');
+      if (rows.isEmpty) {
+        try {
+          rows = await SioDatabase().getAllTeibouWithPrefecture();
+        } catch (_) {}
+      }
+      final spotNames = <int, String>{};
+      for (final r in rows) {
+        final id = int.tryParse(r['port_id']?.toString() ?? '');
+        final name = (r['port_name'] ?? '').toString();
+        if (id != null && name.isNotEmpty) spotNames[id] = name;
+      }
+      if (!mounted) return;
+      setState(() {
+        _isAdmin = true;
+        _spotNameById
+          ..clear()
+          ..addAll(spotNames);
+      });
+    } catch (_) {}
+  }
+
+  String _adminPostMeta(_PostItem it) {
+    if (!_isAdmin) return '';
+    final userId = it.userId?.toString() ?? '';
+    final spotText =
+        it.spotId != null
+            ? ((_spotNameById[it.spotId!] ?? '').isNotEmpty
+                ? _spotNameById[it.spotId!]!
+                : it.spotId!.toString())
+            : '';
+    final parts = <String>[];
+    if (userId.isNotEmpty) parts.add('user_id:$userId');
+    if (spotText.isNotEmpty) parts.add('spot:$spotText');
+    return parts.join(', ');
+  }
+
   String? _formatDate(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -459,6 +509,7 @@ class _CatchPostListState extends State<_CatchPostList> {
           final it = _items[i];
           final String? raw = it.thumbUrl ?? it.imageUrl;
           final imgUrl = (raw != null) ? _withTs(raw, it.postId) : null;
+          final adminMeta = _adminPostMeta(it);
           return InkWell(
             onTap: () async {
               final String? detailRaw = it.imageUrl ?? it.thumbUrl;
@@ -595,27 +646,36 @@ class _CatchPostListState extends State<_CatchPostList> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        (it.nickName ?? '').isNotEmpty ? it.nickName! : '',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black87,
+                  SizedBox(
+                    width: 150,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          adminMeta.isNotEmpty
+                              ? adminMeta
+                              : ((it.nickName ?? '').isNotEmpty
+                                  ? it.nickName!
+                                  : ''),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _formatDate(it.createAt) ?? '',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.black54,
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatDate(it.createAt) ?? '',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black54,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -1373,14 +1433,49 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
 
   void _showModeInfoDialog() {
     final isApply = _applyMode;
+    final title = isApply ? '釣り場登録モードとは' : '閲覧モードとは';
     final String msg =
         isApply
             ? '地図上で登録したい場所を長押ししてください。\nピンが表示されたら「釣り場登録」をタップしてください。\n申請中のピンを申請者本人がタップすると入力項目の修正ができます。\n\n「釣り場登録中...」ボタンをタップすると「閲覧モード」に遷移します。'
-            : '地図上の釣り場をタップして選びながら、釣果や環境の投稿を閲覧するモードです。\n\n長押しするとその近辺の釣り場がピン表示されます。\n\n「釣り場登録」ボタンをタップすると釣り場を登録する「釣り場登録モード」に遷移します。';
+            : '地図上の釣り場をタップして選びながら、釣果や環境の投稿をボトムシートの「投稿一覧」で閲覧するモードです。\n\n長押しするとその近辺の釣り場が新たにピン表示されます。';
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (_) => AlertDialog(content: Text(msg)),
+      builder:
+          (_) => AlertDialog(
+            titlePadding: EdgeInsets.zero,
+            title: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(28),
+                topRight: Radius.circular(28),
+              ),
+              child: Container(
+                color: _navyBg,
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      size: 22,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            content: Text(msg),
+          ),
     );
   }
 
@@ -1522,7 +1617,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         centerName: name,
         lat: nlat,
         lng: nlng,
-        radiusKm: 30.0,
+        radiusKm: kNearbyMapSearchRadiusKm,
       );
       if (mounted) setState(() {});
     } catch (_) {}
@@ -1826,13 +1921,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           centerName: useName,
           lat: useLat,
           lng: useLng,
-          radiusKm: 30.0,
+          radiusKm: kNearbyMapSearchRadiusKm,
         );
         // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
           final viewport = diaryMode ? await _buildDiaryViewport() : null;
           final displayCenter = _center!;
-          final displayRadiusKm = viewport?.radiusKm ?? 30.0;
+          final displayRadiusKm =
+              viewport?.radiusKm ?? kNearbyMapSearchRadiusKm;
           final z =
               (diaryMode && !diaryModeChanged)
                   ? _currentZoom
@@ -1884,12 +1980,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             centerName: fallbackName,
             lat: fallbackLat,
             lng: fallbackLng,
-            radiusKm: 30.0,
+            radiusKm: kNearbyMapSearchRadiusKm,
           );
           if (mounted && _center != null) {
             final viewport = diaryMode ? await _buildDiaryViewport() : null;
             final displayCenter = _center!;
-            final displayRadiusKm = viewport?.radiusKm ?? 30.0;
+            final displayRadiusKm =
+                viewport?.radiusKm ?? kNearbyMapSearchRadiusKm;
             final z =
                 (diaryMode && !diaryModeChanged)
                     ? _currentZoom
@@ -2487,7 +2584,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 lng: center.longitude,
                 portId: centerPortId,
                 prefId: _rowPrefId(centerRow),
-                radiusKm: 30.0,
+                radiusKm: kNearbyMapSearchRadiusKm,
               );
             },
             child: Column(
@@ -2560,7 +2657,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               lng: center.longitude,
               portId: centerPortId,
               prefId: _rowPrefId(centerRow),
-              radiusKm: 30.0,
+              radiusKm: kNearbyMapSearchRadiusKm,
             );
           },
           zIndex: 1000,
@@ -2867,14 +2964,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           children: [
             Container(
               width: double.infinity,
-              color: const Color(0xFF1E90FF),
+              color: _navyBg,
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
               child: const Row(
                 children: [
                   Icon(Icons.lightbulb_rounded, color: Colors.white, size: 20),
                   SizedBox(width: 8),
                   Text(
-                    '釣り場登録モード ガイダンス',
+                    '釣り場登録モードとは',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -3017,7 +3114,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               },
               child: Container(
                 width: double.infinity,
-                color: const Color(0xFF1E90FF),
+                color: _navyBg,
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
                 child: const Row(
                   children: [
@@ -3029,7 +3126,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '釣り場登録モード ガイダンス',
+                        '釣り場登録モードとは',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
@@ -3360,14 +3457,14 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             centerName: name,
             lat: lat,
             lng: lng,
-            radiusKm: 30.0,
+            radiusKm: kNearbyMapSearchRadiusKm,
           );
         } else if (_center != null) {
           await _loadMarkers(
             centerName: name,
             lat: _center!.latitude,
             lng: _center!.longitude,
-            radiusKm: 30.0,
+            radiusKm: kNearbyMapSearchRadiusKm,
           );
         }
       } catch (_) {}
@@ -4462,6 +4559,7 @@ class _BottomSheetCatchList extends StatefulWidget {
 
 class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   final List<_PostItem> _items = [];
+  final ScrollController _listController = ScrollController();
   bool _loading = false;
   bool _hasMore = true;
   int _page = 1;
@@ -4471,6 +4569,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   int _lastAmbiguousLevel = ambiguousLevel;
   int? _myUserId;
   int? _selectedSpotId;
+  bool _isAdmin = false;
+  final Map<int, String> _spotNameById = {};
 
   @override
   void initState() {
@@ -4485,24 +4585,68 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     } catch (_) {}
     _loadMyUserId();
     _loadFirst();
-    widget.extController.addListener(_onScroll);
+    _listController.addListener(_onScroll);
   }
 
   Future<void> _loadMyUserId() async {
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
       final prefs = await SharedPreferences.getInstance();
+      final isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+      var spotNames = <int, String>{};
+      if (isAdmin) {
+        try {
+          spotNames = await _loadSpotNamesById();
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         _myUserId = info.userId;
         _selectedSpotId = prefs.getInt('selected_teibou_id');
+        _isAdmin = isAdmin;
+        _spotNameById
+          ..clear()
+          ..addAll(spotNames);
       });
     } catch (_) {}
   }
 
+  Future<Map<int, String>> _loadSpotNamesById() async {
+    final db = await SioDatabase().database;
+    var rows = await db.query('teibou');
+    if (rows.isEmpty) {
+      try {
+        rows = await SioDatabase().getAllTeibouWithPrefecture();
+      } catch (_) {}
+    }
+    final spotNames = <int, String>{};
+    for (final r in rows) {
+      final id = int.tryParse(r['port_id']?.toString() ?? '');
+      final name = (r['port_name'] ?? '').toString();
+      if (id != null && name.isNotEmpty) spotNames[id] = name;
+    }
+    return spotNames;
+  }
+
+  String _adminPostMeta(_PostItem it) {
+    if (!_isAdmin || _mode != 'catch') return '';
+    final userId = it.userId?.toString() ?? '';
+    final spotText =
+        it.spotId != null
+            ? ((_spotNameById[it.spotId!] ?? '').isNotEmpty
+                ? _spotNameById[it.spotId!]!
+                : it.spotId!.toString())
+            : '';
+    final parts = <String>[];
+    if (userId.isNotEmpty) parts.add('user_id:$userId');
+    if (spotText.isNotEmpty) parts.add('spot:$spotText');
+    return parts.join(', ');
+  }
+
   @override
   void dispose() {
-    widget.extController.removeListener(_onScroll);
+    _listController.removeListener(_onScroll);
+    _listController.dispose();
     try {
       Common.instance.removeListener(_onCommonModeChanged);
     } catch (_) {}
@@ -4533,8 +4677,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   void _onScroll() {
     if (!_hasMore || _loading) return;
-    if (widget.extController.position.pixels >=
-        widget.extController.position.maxScrollExtent - 200) {
+    if (_listController.position.pixels >=
+        _listController.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -4644,193 +4788,240 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isCatch = _mode == 'catch';
-    final totalCount = 1 /*header*/ + _items.length + (_hasMore ? 1 : 0);
-    return ListView.builder(
+    final itemCount = _items.length + (_hasMore ? 1 : 0);
+    return CustomScrollView(
       controller: widget.extController,
-      padding: EdgeInsets.zero,
-      itemCount: totalCount,
-      itemBuilder: (context, index) {
-        // 0: ヘッダー（グラブハンドル＋タイトル）
-        if (index == 0) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 60,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Center(
-                      child: Text(
-                        '投稿一覧',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+      physics: const ClampingScrollPhysics(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: _PostListHeader(
+            mode: _mode,
+            onModeChanged: (val) {
+              setState(() {
+                _mode = val;
+                try {
+                  Common.instance.setPostListMode(val);
+                } catch (_) {}
+                _items.clear();
+                _page = 1;
+                _hasMore = true;
+                _loading = false;
+              });
+              _loadFirst();
+            },
+          ),
+        ),
+        SliverFillRemaining(
+          child: ListView.builder(
+            controller: _listController,
+            padding: const EdgeInsets.only(bottom: 72),
+            itemCount: itemCount,
+            itemBuilder: (context, index) {
+              if (index >= _items.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final it = _items[index];
+              final thumb = it.thumbUrl ?? it.imageUrl;
+              final adminMeta = _adminPostMeta(it);
+              final isMineAtCurrentSpot =
+                  _myUserId != null &&
+                  _selectedSpotId != null &&
+                  it.userId == _myUserId &&
+                  it.spotId == _selectedSpotId;
+              return Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color:
+                              isMineAtCurrentSpot
+                                  ? const Color(0xFFFFB74D)
+                                  : const Color(0xFFBDBDBD),
+                          width: 8,
                         ),
                       ),
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(minWidth: 0),
-                        child: CupertinoSegmentedControl<String>(
-                          groupValue: _mode,
-                          padding: const EdgeInsets.all(0),
-                          children: const {
-                            'catch': Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              child: Text('釣果'),
-                            ),
-                            'env': Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 6,
-                              ),
-                              child: Text('環境'),
-                            ),
-                          },
-                          onValueChanged: (val) {
-                            setState(() {
-                              _mode = val;
-                              try {
-                                Common.instance.setPostListMode(val);
-                              } catch (_) {}
-                              _items.clear();
-                              _page = 1;
-                              _hasMore = true;
-                              _loading = false;
-                            });
-                            _loadFirst();
-                          },
-                        ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.only(
+                        left: 12,
+                        right: 16,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(height: 1),
-            ],
-          );
-        }
-        final listIndex = index - 1;
-        if (listIndex >= _items.length) {
-          // ローディングフッター
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final it = _items[listIndex];
-        final thumb = it.thumbUrl ?? it.imageUrl;
-        final isMineAtCurrentSpot =
-            _myUserId != null &&
-            _selectedSpotId != null &&
-            it.userId == _myUserId &&
-            it.spotId == _selectedSpotId;
-        return Column(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    color:
-                        isMineAtCurrentSpot
-                            ? const Color(0xFFFFB74D)
-                            : const Color(0xFFBDBDBD),
-                    width: 8,
-                  ),
-                ),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.only(left: 12, right: 16),
-                leading:
-                    (thumb != null)
-                        ? ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.network(
-                            thumb,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
+                      leading:
+                          (thumb != null)
+                              ? ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.network(
+                                  thumb,
+                                  width: 48,
+                                  height: 48,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                              : const Icon(
+                                Icons.image,
+                                size: 40,
+                                color: Colors.black38,
+                              ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              it.title?.isNotEmpty == true
+                                  ? it.title!
+                                  : (it.nickName ?? '投稿'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        )
-                        : const Icon(
-                          Icons.image,
-                          size: 40,
-                          color: Colors.black38,
-                        ),
-                title: Text(
-                  it.title?.isNotEmpty == true
-                      ? it.title!
-                      : (it.nickName ?? '投稿'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Row(
-                  children: [
-                    Expanded(
-                      child:
-                          it.detail?.isNotEmpty == true
-                              ? Text(
-                                it.detail!,
+                          if (adminMeta.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                adminMeta,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                              )
-                              : const SizedBox.shrink(),
-                    ),
-                    if ((it.createAt ?? '').isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        it.createAt!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                      ),
-                    ],
-                  ],
-                ),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder:
-                          (_) => PostDetailPage(
-                            item: PostDetailItem(
-                              userId: it.userId,
-                              postId: it.postId,
-                              postKind: it.postKind,
-                              exist: it.exist,
-                              title: it.title,
-                              detail: it.detail,
-                              imageUrl: it.imageUrl ?? it.thumbUrl,
-                              nickName: it.nickName,
-                              createAt: it.createAt,
-                              spotId: it.spotId,
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.black54,
+                                ),
+                              ),
                             ),
+                          ],
+                        ],
+                      ),
+                      subtitle: Row(
+                        children: [
+                          Expanded(
+                            child:
+                                it.detail?.isNotEmpty == true
+                                    ? Text(
+                                      it.detail!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    )
+                                    : const SizedBox.shrink(),
                           ),
+                          if ((it.createAt ?? '').isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              it.createAt!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                            ),
+                          ],
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder:
+                                (_) => PostDetailPage(
+                                  item: PostDetailItem(
+                                    userId: it.userId,
+                                    postId: it.postId,
+                                    postKind: it.postKind,
+                                    exist: it.exist,
+                                    title: it.title,
+                                    detail: it.detail,
+                                    imageUrl: it.imageUrl ?? it.thumbUrl,
+                                    nickName: it.nickName,
+                                    createAt: it.createAt,
+                                    spotId: it.spotId,
+                                  ),
+                                ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+                  ),
+                  const Divider(height: 1),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PostListHeader extends StatelessWidget {
+  const _PostListHeader({
+    Key? key,
+    required this.mode,
+    required this.onModeChanged,
+  }) : super(key: key);
+
+  final String mode;
+  final ValueChanged<String> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.white,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 60,
+            height: 6,
+            decoration: BoxDecoration(
+              color: Colors.black26,
+              borderRadius: BorderRadius.circular(3),
             ),
-            const Divider(height: 1),
-          ],
-        );
-      },
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Center(
+                  child: Text(
+                    '投稿一覧',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 0),
+                    child: CupertinoSegmentedControl<String>(
+                      groupValue: mode,
+                      padding: const EdgeInsets.all(0),
+                      children: const {
+                        'catch': Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: Text('釣果'),
+                        ),
+                        'env': Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          child: Text('環境'),
+                        ),
+                      },
+                      onValueChanged: onModeChanged,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+        ],
+      ),
     );
   }
 }

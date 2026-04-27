@@ -17,6 +17,7 @@ class NearbyMapPage extends StatefulWidget {
     this.centerName,
     this.radiusKm,
     this.highlightId,
+    this.exactPointsOnly = false,
   });
   final List<Map<String, dynamic>>? points; // {id?, name, lat, lng}
   final double? centerLat;
@@ -24,6 +25,7 @@ class NearbyMapPage extends StatefulWidget {
   final String? centerName;
   final double? radiusKm;
   final int? highlightId; // 指定があれば、そのIDを赤マーカーで強調
+  final bool exactPointsOnly; // 近くの釣り場検索結果など、渡された points だけを表示する
 
   @override
   State<NearbyMapPage> createState() => _NearbyMapPageState();
@@ -55,6 +57,14 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
 
   Future<void> _preparePoints() async {
     if (widget.points != null && widget.points!.isNotEmpty) {
+      if (widget.exactPointsOnly) {
+        _pts = List<Map<String, dynamic>>.from(widget.points!);
+        _cands = const <Map<String, dynamic>>[];
+        _circleCenter = null;
+        _circleRadiusM = 0.0;
+        if (mounted) setState(() {});
+        return;
+      }
       // points は曖昧候補セット
       _cands = widget.points!;
       // 候補の重心
@@ -65,6 +75,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       }
       final cLat = slat / _cands.length;
       final cLng = slng / _cands.length;
+      final radiusM = kNearbyMapSearchRadiusKm * 1000.0;
 
       // DBから全堤防を取得し、重心に近い順に最大件数まで取得（候補は重複除外して先頭に）
       final extras = <Map<String, dynamic>>[];
@@ -84,6 +95,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
           final lat = (r['latitude'] as num).toDouble();
           final lng = (r['longitude'] as num).toDouble();
           final d = _dist(cLat, cLng, lat, lng);
+          if (d > radiusM) continue;
           if (id != null && existingIds.contains(id)) continue; // 候補と重複は無視
           // 近接重複も軽く除外
           bool nearDup = false;
@@ -124,7 +136,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
         final rows = await db.query('teibou');
         final clat = widget.centerLat!;
         final clng = widget.centerLng!;
-        final radiusM = (widget.radiusKm ?? 30.0) * 1000.0;
+        final radiusM = (widget.radiusKm ?? kNearbyMapSearchRadiusKm) * 1000.0;
         final cand = <Map<String, dynamic>>[];
         for (final r in rows) {
           final id = int.tryParse(r['port_id']?.toString() ?? '');
@@ -287,26 +299,27 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text('釣れたエリア'),
+        title: Text(widget.exactPointsOnly ? '近くの釣り場' : '釣れたエリア'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
           // タイトル下の説明エリア（AppBarと同じ高さ・白背景）
-          Container(
-            height: kToolbarHeight,
-            width: double.infinity,
-            color: Colors.white,
-            alignment: Alignment.centerLeft,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                'この円内で釣果がありますが、非公開です。\n釣り場をタップすると「釣り場MAP」画面に移動します。',
-                style: TextStyle(color: Colors.black87, fontSize: 13),
+          if (!widget.exactPointsOnly)
+            Container(
+              height: kToolbarHeight,
+              width: double.infinity,
+              color: Colors.white,
+              alignment: Alignment.centerLeft,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  'この円内で釣果がありますが、非公開です。\n釣り場をタップすると「釣り場MAP」画面に移動します。',
+                  style: TextStyle(color: Colors.black87, fontSize: 13),
+                ),
               ),
             ),
-          ),
           const Divider(height: 1),
           Expanded(
             child:

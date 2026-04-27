@@ -669,6 +669,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
     if (_items.isEmpty && !_loading) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: kScrollableContentBottomPadding),
         children: const [
           SizedBox(height: 120),
           Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
@@ -728,7 +729,12 @@ class _FishingResultGridState extends State<FishingResultGrid>
       child: ListView.builder(
         controller: _sc,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(pad),
+        padding: const EdgeInsets.fromLTRB(
+          pad,
+          pad,
+          pad,
+          kScrollableContentBottomPadding,
+        ),
         itemCount: groups.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, gi) {
           if (gi >= groups.length) {
@@ -749,6 +755,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
     if (_listItems.isEmpty && !_listLoading) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: kScrollableContentBottomPadding),
         children: const [
           SizedBox(height: 120),
           Center(child: Text('釣果が取得できませんでした。下に引っ張って更新してください。')),
@@ -763,6 +770,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
       child: ListView.builder(
         controller: _listSc,
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: kScrollableContentBottomPadding),
         itemCount:
             _listItems.length +
             (_listHasMore ? 1 : 0) +
@@ -826,6 +834,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
           final it = _listItems[listIndex];
           final thumb = it.thumbUrl ?? it.imageUrl;
           final isMine = _myUserId != null && it.userId == _myUserId;
+          final adminMeta = _adminPostMeta(it);
           final isNotified =
               notificationPostId != null && it.postId == notificationPostId;
           return Column(
@@ -861,12 +870,33 @@ class _FishingResultGridState extends State<FishingResultGrid>
                             size: 40,
                             color: Colors.black38,
                           ),
-                  title: Text(
-                    it.title?.isNotEmpty == true
-                        ? it.title!
-                        : (it.nickName ?? '投稿'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          it.title?.isNotEmpty == true
+                              ? it.title!
+                              : (it.nickName ?? '投稿'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (adminMeta.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            adminMeta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   subtitle: Row(
                     children: [
@@ -1106,6 +1136,21 @@ extension _MosaicBuilders on _FishingResultGridState {
       }
     }
     return url;
+  }
+
+  String _adminPostMeta(_PostGridItem it) {
+    if (!_isAdmin) return '';
+    final userId = it.userId?.toString() ?? '';
+    final spotText =
+        it.spotId != null
+            ? ((_spotNameById[it.spotId!] ?? '').isNotEmpty
+                ? _spotNameById[it.spotId!]!
+                : it.spotId!.toString())
+            : '';
+    final parts = <String>[];
+    if (userId.isNotEmpty) parts.add('user_id:$userId');
+    if (spotText.isNotEmpty) parts.add('spot:$spotText');
+    return parts.join(', ');
   }
 
   Widget _buildTile(

@@ -976,6 +976,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                     )
                     : ListView.builder(
                       controller: _scrollController,
+                      padding: const EdgeInsets.only(
+                        bottom: kScrollableContentBottomPadding,
+                      ),
                       itemCount: groups.length,
                       itemBuilder: (context, index) {
                         final g = groups[index];
@@ -1514,14 +1517,18 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                               'lng': dlng,
                             };
                           }).toList();
-                      return NearbyMapPage(points: pts, highlightId: portId);
+                      return NearbyMapPage(
+                        points: pts,
+                        highlightId: portId,
+                        exactPointsOnly: true,
+                      );
                     }
                     // 既存の近隣検索マップ（中心＋半径）
                     return NearbyMapPage(
                       centerLat: lat!,
                       centerLng: lng!,
                       centerName: portName,
-                      radiusKm: 30.0,
+                      radiusKm: kNearbyMapSearchRadiusKm,
                     );
                   },
                 ),

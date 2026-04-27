@@ -4,15 +4,19 @@ const Duration kHttpTimeout = Duration(seconds: 20);
 
 const int kPostPageSize = 20; // 「釣果」の「ギャラリー」と「一覧」の1ページ件数
 
+const double kScrollableContentBottomPadding = 96.0; // 一覧系スクロール末尾の見切れ防止余白
+
+const double kNearbyMapSearchRadiusKm = 30.0; // 近辺の釣り場表示で使う検索半径
+
 // 「投稿詳細」の「釣れたエリア」で半径 30km 以内の釣り場で地図全体に表示する最大件数
-const int kNearbyMapMaxMarkerCount = 100; 
+const int kNearbyMapMaxMarkerCount = 100;
 
-const int kCatchAreaCandidateSourceCount = 20; // 「投稿詳細」の「釣れたエリア」で候補算出の起点にする近傍件数
+const int kCatchAreaCandidateSourceCount = 15; // 「投稿詳細」の「釣れたエリア」で候補算出の起点にする近傍件数
 
-const int kCatchAreaVisibleSpotCount = 15; // 「投稿詳細」の「釣れたエリア」で円内候補として残す件数
+const int kCatchAreaVisibleSpotCount = 10; // 「投稿詳細」の「釣れたエリア」で円内候補として残す件数
 
-final String _tosUrl = 'asset://assets/policies/terms_of_use.html';
-final String _privacyUrl = 'asset://assets/policies/privacy_policy.html';
+//final String _tosUrl = 'asset://assets/policies/terms_of_use.html';
+//final String _privacyUrl = 'asset://assets/policies/privacy_policy.html';
 
 // 投稿の釣り場表示モード。
 //

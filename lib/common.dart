@@ -596,7 +596,7 @@ class Common extends ChangeNotifier {
                     topRight: Radius.circular(28),
                   ),
                   child: Container(
-                    color: const Color(0xFF1E90FF),
+                    color: const Color(0xFF001F3F),
                     padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
                     child: const Column(
                       mainAxisSize: MainAxisSize.min,
@@ -732,7 +732,8 @@ class Common extends ChangeNotifier {
 
   Future<void> loadAmbiguousLevel() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt('ambiguousLevel') ?? prefs.getInt('ambiguous_plevel');
+    final v =
+        prefs.getInt('ambiguousLevel') ?? prefs.getInt('ambiguous_plevel');
     ambiguousLevel = (v == 0) ? 0 : kDefaultAmbiguousLevel;
   }
 
