@@ -39,7 +39,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
   bool _metaReady = false; // 都道府県/釣り場名とadminの準備完了
   final Map<int, String> _imgTsByPost = {}; // キャッシュバスター（編集後の差し替え用）
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
-  int _lastAmbiguousPlevel = ambiguous_plevel;
+  int _lastAmbiguousLevel = ambiguousLevel;
   int _lastPostFeedReloadTick = Common.instance.postFeedReloadTick;
   int _lastCatchNotificationTick = Common.instance.catchNotificationTick;
   int? _lastCatchNotificationPostId =
@@ -118,7 +118,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
 
   void _onCommonChanged() {
     final enabled = Common.instance.fishingDiaryMode;
-    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
+    final ambiguousChanged = _lastAmbiguousLevel != ambiguousLevel;
     final postFeedChanged =
         _lastPostFeedReloadTick != Common.instance.postFeedReloadTick;
     final catchNotificationChanged =
@@ -165,10 +165,10 @@ class _FishingResultGridState extends State<FishingResultGrid>
       return;
     }
     _lastFishingDiaryMode = enabled;
-    _lastAmbiguousPlevel = ambiguous_plevel;
+    _lastAmbiguousLevel = ambiguousLevel;
     _lastPostFeedReloadTick = Common.instance.postFeedReloadTick;
     logPrint(
-      'FishingResultGrid reload trigger diaryMode=$enabled ambiguous=$ambiguous_plevel feedTick=${Common.instance.postFeedReloadTick}',
+      'FishingResultGrid reload trigger diaryMode=$enabled ambiguous=$ambiguousLevel feedTick=${Common.instance.postFeedReloadTick}',
     );
     _loadFirst();
     if (_listItems.isEmpty) {
@@ -202,7 +202,8 @@ class _FishingResultGridState extends State<FishingResultGrid>
         'get_kind': '1', // 釣果
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
-        'ambiguous_plevel': ambiguous_plevel.toString(),
+        'ambiguous_plevel': ambiguousLevel.toString(),
+        'catch_list_image_only': imageOnly ? '1' : '0',
         'ts': ts.toString(),
       };
       if (Common.instance.fishingDiaryMode) {
@@ -273,7 +274,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
   Future<void> _loadFirst() async {
     if (!mounted) return;
     logPrint(
-      'FishingResultGrid loadFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguous_plevel',
+      'FishingResultGrid loadFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguousLevel',
     );
     setState(() {
       _items.clear();
@@ -287,7 +288,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
   Future<void> _loadListFirst() async {
     if (!mounted) return;
     logPrint(
-      'FishingResultGrid loadListFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguous_plevel',
+      'FishingResultGrid loadListFirst diaryMode=${Common.instance.fishingDiaryMode} ambiguous=$ambiguousLevel',
     );
     setState(() {
       _listItems.clear();
@@ -1127,7 +1128,7 @@ extension _MosaicBuilders on _FishingResultGridState {
     }
     final bottomLabel = it.nickName ?? '';
     final isMine = _myUserId != null && it.userId == _myUserId;
-    final bool canShowSpotName = (ambiguous_plevel == 0) || _isAdmin;
+    final bool canShowSpotName = (ambiguousLevel == 0) || _isAdmin;
     final String? spotName =
         (it.spotId != null) ? _spotNameById[it.spotId] : null;
     final String combinedTopLabel = () {
@@ -1145,7 +1146,7 @@ extension _MosaicBuilders on _FishingResultGridState {
       height: h,
       child: InkWell(
         onTap: () async {
-          if (ambiguous_plevel == 0 && it.spotId != null) {
+          if (ambiguousLevel == 0 && it.spotId != null) {
             // 釣り場が曖昧でない場合、該当スポットを選択して釣り場詳細へ
             final ok = await Common.instance.selectTeibouById(it.spotId!);
             if (ok) {

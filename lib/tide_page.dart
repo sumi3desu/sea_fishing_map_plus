@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'appconfig.dart';
 import 'constants.dart';
+import 'catch_area_candidates.dart';
 import 'post_detail_page.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -19,10 +20,9 @@ import 'set_date_page.dart';
 import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:apple_maps_flutter/apple_maps_flutter.dart' as am;
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
-import 'dart:io' show Platform;
-import 'constants.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
+import 'dart:io' show Platform;
+import 'package:latlong2/latlong.dart';
 import 'dart:ui' as ui;
 import 'package:geolocator/geolocator.dart';
 import 'spot_apply_form_page.dart';
@@ -32,6 +32,22 @@ import 'providers/premium_state_notifier.dart' as prem;
 
 // 紺（潮汐画面の背景色）
 const Color _navyBg = Color(0xFF001F3F);
+
+Future<String?> _buildCatchAreaSpotIdsCsv(int? spotId) async {
+  if (spotId == null || spotId <= 0 || ambiguousLevel == 0) return null;
+  try {
+    final db = await SioDatabase().database;
+    final rows = await db.query('teibou');
+    final ids = buildCatchAreaCandidateSpotIds(
+      rows: rows.cast<Map<String, dynamic>>(),
+      spotId: spotId,
+    );
+    if (ids.isEmpty) return null;
+    return ids.join(',');
+  } catch (_) {
+    return null;
+  }
+}
 
 class TidePage extends StatefulWidget {
   const TidePage({Key? key}) : super(key: key);
@@ -175,7 +191,7 @@ class _CatchTab extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  ambiguous_plevel != 0 ? 'この釣り場近辺の釣果です。' : 'この釣り場の釣果です。',
+                  ambiguousLevel != 0 ? 'この釣り場近辺の釣果です。' : 'この釣り場の釣果です。',
                   style: TextStyle(fontSize: 13, color: Colors.black87),
                 ),
               ),
@@ -230,6 +246,8 @@ class _CatchPostListState extends State<_CatchPostList> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final spotId = prefs.getInt('selected_teibou_id');
+      final catchAreaSpotIdsCsv =
+          (kind == 1) ? await _buildCatchAreaSpotIdsCsv(spotId) : null;
       final ts = DateTime.now().millisecondsSinceEpoch;
       final uri = Uri.parse(
         '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
@@ -238,11 +256,14 @@ class _CatchPostListState extends State<_CatchPostList> {
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
-        'ambiguous_plevel': ambiguous_plevel.toString(),
+        'ambiguous_plevel': ambiguousLevel.toString(),
         // キャッシュ回避のためのタイムスタンプ
         'ts': DateTime.now().millisecondsSinceEpoch.toString(),
       };
       if (spotId != null && spotId > 0) body['spot_id'] = spotId.toString();
+      if (catchAreaSpotIdsCsv != null && catchAreaSpotIdsCsv.isNotEmpty) {
+        body['catch_area_spot_ids'] = catchAreaSpotIdsCsv;
+      }
       final resp = await http
           .post(
             uri,
@@ -318,9 +339,9 @@ class _CatchPostListState extends State<_CatchPostList> {
     });
   }
 
-  // ambiguous_plevel=0 のときは、選択中の釣り場IDに一致する投稿のみを表示
+  // ambiguousLevel=0 のときは、選択中の釣り場IDに一致する投稿のみを表示
   Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
-    if (ambiguous_plevel != 0) return rows;
+    if (ambiguousLevel != 0) return rows;
     try {
       final prefs = await SharedPreferences.getInstance();
       final selId = prefs.getInt('selected_teibou_id');
@@ -779,7 +800,7 @@ class _EnvPostListState extends State<_EnvPostList> {
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
-        'ambiguous_plevel': ambiguous_plevel.toString(),
+        'ambiguous_plevel': ambiguousLevel.toString(),
         // キャッシュ回避のためのタイムスタンプ
         'ts': DateTime.now().millisecondsSinceEpoch.toString(),
       };
@@ -1308,7 +1329,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   double? _applyGuideLeft;
   double? _applyGuideTop;
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
-  int _lastAmbiguousPlevel = ambiguous_plevel;
+  int _lastAmbiguousLevel = ambiguousLevel;
   // 潮汐オーバーレイ表示とスワイプ用
   bool _showTideOverlay = false;
   late PageController _tidePageController;
@@ -1726,7 +1747,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final lat = Common.instance.selectedTeibouLat;
     final lng = Common.instance.selectedTeibouLng;
     final diaryModeChanged = _lastFishingDiaryMode != diaryMode;
-    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
+    final ambiguousChanged = _lastAmbiguousLevel != ambiguousLevel;
     double useLat = lat;
     double useLng = lng;
     String useName = name;
@@ -1800,7 +1821,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         _lastLng = useLng;
         _lastName = useName;
         _lastFishingDiaryMode = diaryMode;
-        _lastAmbiguousPlevel = ambiguous_plevel;
+        _lastAmbiguousLevel = ambiguousLevel;
         await _loadMarkers(
           centerName: useName,
           lat: useLat,
@@ -1858,7 +1879,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           _lastLng = fallbackLng;
           _lastName = fallbackName;
           _lastFishingDiaryMode = diaryMode;
-          _lastAmbiguousPlevel = ambiguous_plevel;
+          _lastAmbiguousLevel = ambiguousLevel;
           await _loadMarkers(
             centerName: fallbackName,
             lat: fallbackLat,
@@ -2546,36 +2567,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         ),
       );
 
-    // GoogleMap: 外接円（候補範囲） - 曖昧表示のときのみ
-    if (_center != null && maxDkm > 0 && ambiguous_plevel == 2) {
-      _gmCircles.add(
-        gm.Circle(
-          circleId: const gm.CircleId('enclosing'),
-          center: gm.LatLng(_center!.latitude, _center!.longitude),
-          radius: maxDkm * 1000.0,
-          strokeColor: Colors.redAccent.withOpacity(0.35),
-          strokeWidth: 2,
-          fillColor: Colors.redAccent.withOpacity(0.12),
-        ),
-      );
-    }
-
-    // GoogleMap: メッシュ（ambiguous_plevel == 2 のとき）
-    if (ambiguous_plevel == 2) {
-      _gmPolylines.clear();
-      for (final pl in _buildMeshPolylines()) {
-        final pts =
-            pl.points.map((p) => gm.LatLng(p.latitude, p.longitude)).toList();
-        _gmPolylines.add(
-          gm.Polyline(
-            polylineId: gm.PolylineId('mesh-${_gmPolylines.length}'),
-            points: pts,
-            color: Colors.black.withOpacity(0.2),
-            width: 1,
-          ),
-        );
-      }
-    }
     if (mounted) setState(() {});
   }
 
@@ -2662,29 +2653,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           );
                           _currentZoom = pos.zoom;
                         });
-                        // メッシュはズーム・中心に応じて動的だが、簡易に再計算
-                        if (ambiguous_plevel == 2) {
-                          _gmPolylines.clear();
-                          for (final pl in _buildMeshPolylines()) {
-                            final pts =
-                                pl.points
-                                    .map(
-                                      (p) => gm.LatLng(p.latitude, p.longitude),
-                                    )
-                                    .toList();
-                            _gmPolylines.add(
-                              gm.Polyline(
-                                polylineId: gm.PolylineId(
-                                  'mesh-${_gmPolylines.length}-${DateTime.now().millisecondsSinceEpoch}',
-                                ),
-                                points: pts,
-                                color: Colors.black.withOpacity(0.2),
-                                width: 1,
-                              ),
-                            );
-                          }
-                          if (mounted) setState(() {});
-                        }
                       },
                       markers: _gmMarkers,
                       polylines: _gmPolylines,
@@ -2738,10 +2706,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           userAgentPackageName: 'jp.bouzer.seafishingmap',
                           tileProvider: fm.NetworkTileProvider(),
                         ),
-                        if (ambiguous_plevel == 2)
-                          fm.PolylineLayer(polylines: _buildMeshPolylines()),
-                        if (ambiguous_plevel == 2)
-                          fm.MarkerLayer(markers: _buildGridCenterMarkers()),
                         fm.MarkerLayer(markers: _buildAllMarkers()),
                         const fm.RichAttributionWidget(
                           attributions: [
@@ -2759,44 +2723,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                     right: 0,
                     child: _buildTopOverlayPanel(context),
                   ),
-                  if (ambiguous_plevel == 2 && _center != null)
-                    // 画面中央に現在のグリッド識別子 (X, Y) を表示
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        ignoring: true,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.9),
-                              borderRadius: BorderRadius.circular(6),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 4),
-                              ],
-                            ),
-                            child: Builder(
-                              builder: (_) {
-                                final g = Common.grid10kmXY(
-                                  _center!.latitude,
-                                  _center!.longitude,
-                                );
-                                return Text(
-                                  'X=${g.x}, Y=${g.y}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   // 釣り場名の上部オーバーレイは廃止（選択ピン上のラベルで代替）
                   // 左上（同じY位置）にモード表示バッジ
                   Positioned(
@@ -3215,168 +3141,6 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     } catch (_) {
       return 0.0;
     }
-  }
-
-  List<fm.Polyline> _buildMeshPolylines() {
-    if (_center == null) return const <fm.Polyline>[];
-    // Web Mercator メートル座標で 10km グリッドを固定生成
-    const double R = 6378137.0; // Web Mercator 半径（m）
-    final double gridM = meshSize.toDouble() * 1000.0; // 可変メッシュ（km -> m）
-
-    // 中心のメルカトル座標
-    final _M xy = _projectToMercator(_center!.latitude, _center!.longitude);
-
-    // ズームに応じた描画範囲（半径km）
-    double radiusKm;
-    if (_currentZoom >= 14)
-      radiusKm = 12;
-    else if (_currentZoom >= 13)
-      radiusKm = 20;
-    else if (_currentZoom >= 12)
-      radiusKm = 35;
-    else if (_currentZoom >= 11)
-      radiusKm = 60;
-    else
-      radiusKm = 100;
-    final double rangeM = radiusKm * 1000.0;
-
-    // 表示領域（概算）
-    final double xMin = xy.x - rangeM;
-    final double xMax = xy.x + rangeM;
-    final double yMin = (xy.y - rangeM).clamp(-math.pi * R, math.pi * R);
-    final double yMax = (xy.y + rangeM).clamp(-math.pi * R, math.pi * R);
-
-    // グリッド開始点（原点 0 を基準に 10km きざみ）
-    final double startX = (xMin / gridM).floorToDouble() * gridM;
-    final double startY = (yMin / gridM).floorToDouble() * gridM;
-
-    const int segs = 16; // 線分近似の分割数
-    final lines = <fm.Polyline>[];
-
-    // 垂直線 x = const
-    for (double x = startX; x <= xMax + 1e-6; x += gridM) {
-      final pts = <LatLng>[];
-      for (int i = 0; i <= segs; i++) {
-        final double t = i / segs;
-        final double y = yMin + (yMax - yMin) * t;
-        final latlng = _unprojectFromMercator(x, y);
-        pts.add(latlng);
-      }
-      lines.add(
-        fm.Polyline(
-          points: pts,
-          color: Colors.black.withOpacity(0.20),
-          strokeWidth: 1.0,
-        ),
-      );
-    }
-
-    // 水平線 y = const
-    for (double y = startY; y <= yMax + 1e-6; y += gridM) {
-      final pts = <LatLng>[];
-      for (int i = 0; i <= segs; i++) {
-        final double t = i / segs;
-        final double x = xMin + (xMax - xMin) * t;
-        final latlng = _unprojectFromMercator(x, y);
-        pts.add(latlng);
-      }
-      lines.add(
-        fm.Polyline(
-          points: pts,
-          color: Colors.black.withOpacity(0.20),
-          strokeWidth: 1.0,
-        ),
-      );
-    }
-
-    return lines;
-  }
-
-  List<fm.Marker> _buildGridCenterMarkers() {
-    if (_center == null) return const <fm.Marker>[];
-    // 低ズームでは密集しすぎるため非表示
-    if (_currentZoom < 11) return const <fm.Marker>[];
-
-    const double R = 6378137.0; // Web Mercator 半径
-    final double gridM = meshSize.toDouble() * 1000.0; // 可変メッシュ（km -> m）
-    final _M xy = _projectToMercator(_center!.latitude, _center!.longitude);
-
-    double radiusKm;
-    if (_currentZoom >= 14)
-      radiusKm = 12;
-    else if (_currentZoom >= 13)
-      radiusKm = 20;
-    else if (_currentZoom >= 12)
-      radiusKm = 35;
-    else
-      radiusKm = 60;
-    final double rangeM = radiusKm * 1000.0;
-
-    final double xMin = xy.x - rangeM;
-    final double xMax = xy.x + rangeM;
-    final double yMin = (xy.y - rangeM).clamp(-math.pi * R, math.pi * R);
-    final double yMax = (xy.y + rangeM).clamp(-math.pi * R, math.pi * R);
-
-    final double startX = (xMin / gridM).floorToDouble() * gridM;
-    final double startY = (yMin / gridM).floorToDouble() * gridM;
-
-    final markers = <fm.Marker>[];
-    for (double x = startX; x <= xMax + 1e-6; x += gridM) {
-      for (double y = startY; y <= yMax + 1e-6; y += gridM) {
-        final double cx = x + gridM / 2.0;
-        final double cy = y + gridM / 2.0;
-        if (cx < xMin || cx > xMax || cy < yMin || cy > yMax) continue;
-        final LatLng ll = _unprojectFromMercator(cx, cy);
-        final g = Common.grid10kmXY(ll.latitude, ll.longitude);
-        markers.add(
-          fm.Marker(
-            width: 140,
-            height: 30,
-            point: ll,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.90),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              alignment: Alignment.center,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  'X=${g.x}, Y=${g.y}',
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black87,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-    return markers;
-  }
-
-  // Web Mercator <-> LatLng 変換
-  _M _projectToMercator(double lat, double lon) {
-    const double R = 6378137.0;
-    final double x = R * (lon * math.pi / 180.0);
-    final double y =
-        R * math.log(math.tan(math.pi / 4.0 + (lat * math.pi / 180.0) / 2.0));
-    return _M(x, y);
-  }
-
-  LatLng _unprojectFromMercator(double x, double y) {
-    const double R = 6378137.0;
-    final double lon = (x / R) * 180.0 / math.pi;
-    final double lat =
-        (2.0 * math.atan(math.exp(y / R)) - math.pi / 2.0) * 180.0 / math.pi;
-    return LatLng(lat, lon);
   }
 
   Widget _buildTideOverlay() {
@@ -4704,7 +4468,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   String _mode = 'catch'; // 'catch' or 'env'
   String _lastCommonMode = 'catch';
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
-  int _lastAmbiguousPlevel = ambiguous_plevel;
+  int _lastAmbiguousLevel = ambiguousLevel;
   int? _myUserId;
   int? _selectedSpotId;
 
@@ -4748,13 +4512,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   void _onCommonModeChanged() {
     final cm = Common.instance.postListMode;
     final diaryEnabled = Common.instance.fishingDiaryMode;
-    final ambiguousChanged = _lastAmbiguousPlevel != ambiguous_plevel;
+    final ambiguousChanged = _lastAmbiguousLevel != ambiguousLevel;
     final modeChanged = cm != _lastCommonMode;
     final diaryChanged = diaryEnabled != _lastFishingDiaryMode;
     if (!modeChanged && !diaryChanged && !ambiguousChanged) return;
     _lastCommonMode = cm;
     _lastFishingDiaryMode = diaryEnabled;
-    _lastAmbiguousPlevel = ambiguous_plevel;
+    _lastAmbiguousLevel = ambiguousLevel;
     if (mounted) {
       setState(() {
         _mode = cm;
@@ -4779,6 +4543,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final spotId = prefs.getInt('selected_teibou_id');
+      final catchAreaSpotIdsCsv =
+          (kind == 1) ? await _buildCatchAreaSpotIdsCsv(spotId) : null;
       final ts = DateTime.now().millisecondsSinceEpoch;
       final uri = Uri.parse(
         '${AppConfig.instance.baseUrl}get_post_list.php?ts=$ts',
@@ -4787,10 +4553,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
         'get_kind': kind.toString(),
         'page': page.toString(),
         'page_size': kPostPageSize.toString(),
-        'ambiguous_plevel': ambiguous_plevel.toString(),
+        'ambiguous_plevel': ambiguousLevel.toString(),
         'ts': ts.toString(),
       };
       if (spotId != null && spotId > 0) body['spot_id'] = spotId.toString();
+      if (catchAreaSpotIdsCsv != null && catchAreaSpotIdsCsv.isNotEmpty) {
+        body['catch_area_spot_ids'] = catchAreaSpotIdsCsv;
+      }
       if (Common.instance.fishingDiaryMode) {
         final uid =
             _myUserId ??
@@ -4862,7 +4631,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   }
 
   Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
-    if (ambiguous_plevel != 0) return rows;
+    if (ambiguousLevel != 0) return rows;
     try {
       final prefs = await SharedPreferences.getInstance();
       final selId = prefs.getInt('selected_teibou_id');
@@ -5343,12 +5112,6 @@ class _TideStandalonePageState extends ConsumerState<_TideStandalonePage> {
       ),
     );
   }
-}
-
-class _M {
-  final double x;
-  final double y;
-  const _M(this.x, this.y);
 }
 
 // 月画像はドラッグ不可に戻す（プロフィール用トリミングのみドラッグ対応）

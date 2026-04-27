@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'sio_database.dart';
 import 'common.dart';
+import 'constants.dart';
 import 'dart:math' as math;
 
 class NearbyMapPage extends StatefulWidget {
@@ -65,7 +66,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       final cLat = slat / _cands.length;
       final cLng = slng / _cands.length;
 
-      // DBから全堤防を取得し、重心に近い順に最大100件まで取得（候補は重複除外して先頭に）
+      // DBから全堤防を取得し、重心に近い順に最大件数まで取得（候補は重複除外して先頭に）
       final extras = <Map<String, dynamic>>[];
       try {
         final db = await SioDatabase().database;
@@ -102,8 +103,12 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
           tmp.add({'id': id, 'name': name, 'lat': lat, 'lng': lng, 'd': d});
         }
         tmp.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
-        // 必要数だけ追加（合計100件を目標）
-        final need = (100 - _cands.length).clamp(0, 100);
+        // 必要数だけ追加（合計最大件数を目標）
+        final need =
+            (kNearbyMapMaxMarkerCount - _cands.length).clamp(
+              0,
+              kNearbyMapMaxMarkerCount,
+            );
         extras.addAll(tmp.take(need));
       } catch (_) {}
 
@@ -132,7 +137,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
           }
         }
         cand.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
-        _pts = cand.take(100).toList();
+        _pts = cand.take(kNearbyMapMaxMarkerCount).toList();
       } catch (_) {}
       // 曖昧候補が無い場合は外接円を描画しない
       _circleCenter = null;

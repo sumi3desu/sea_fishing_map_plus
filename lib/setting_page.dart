@@ -1140,10 +1140,10 @@ class _SettingPageState extends State<SettingPage> {
                     ButtonSegment<int>(value: 1, label: Text('曖昧')),
                     ButtonSegment<int>(value: 0, label: Text('明示')),
                   ],
-                  selected: <int>{ambiguous_plevel},
+                  selected: <int>{ambiguousLevel},
                   onSelectionChanged: (selection) async {
                     final value = selection.first;
-                    await Common.instance.setAmbiguousPlevel(value);
+                    await Common.instance.setAmbiguousLevel(value);
                     if (!mounted) return;
                     setState(() {});
                   },

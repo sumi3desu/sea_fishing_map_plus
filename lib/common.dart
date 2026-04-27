@@ -730,18 +730,18 @@ class Common extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadAmbiguousPlevel() async {
+  Future<void> loadAmbiguousLevel() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt('ambiguous_plevel');
-    ambiguous_plevel = (v == 0) ? 0 : kDefaultAmbiguousPlevel;
+    final v = prefs.getInt('ambiguousLevel') ?? prefs.getInt('ambiguous_plevel');
+    ambiguousLevel = (v == 0) ? 0 : kDefaultAmbiguousLevel;
   }
 
-  Future<void> setAmbiguousPlevel(int value) async {
+  Future<void> setAmbiguousLevel(int value) async {
     final normalized = (value == 0) ? 0 : 1;
-    if (ambiguous_plevel == normalized) return;
-    ambiguous_plevel = normalized;
+    if (ambiguousLevel == normalized) return;
+    ambiguousLevel = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('ambiguous_plevel', normalized);
+    await prefs.setInt('ambiguousLevel', normalized);
     notifyListeners();
   }
 
@@ -819,21 +819,6 @@ class Common extends ChangeNotifier {
     selectedTeibouLat = prefs.getDouble('selected_teibou_lat') ?? 0.0;
     selectedTeibouLng = prefs.getDouble('selected_teibou_lng') ?? 0.0;
     selectedTeibouPrefId = prefs.getInt('selected_teibou_pref_id') ?? 0;
-  }
-
-  // =============
-  // 固定グリッド識別子（Web Mercator基準）
-  // =============
-  /// 緯度経度に対して、Web Mercatorの (meshSize km) グリッド上の (X, Y) を返します。
-  /// 地図のパン/ズームに依存しない固定識別子として利用できます。
-  static GridXY grid10kmXY(double lat, double lon) {
-    const double R = 6378137.0; // Web Mercator radius (m)
-    final double x = R * (lon * pi / 180.0);
-    final double y = R * log(tan(pi / 4.0 + (lat * pi / 180.0) / 2.0));
-    final double gridMeters = meshSize.toDouble() * 1000.0;
-    final int gx = (x / gridMeters).floor();
-    final int gy = (y / gridMeters).floor();
-    return GridXY(gx, gy);
   }
 
   void requestListCentering() {
@@ -2967,11 +2952,4 @@ class Common extends ChangeNotifier {
     String authenticationNumber = number.toString().padLeft(6, '0');
     return authenticationNumber;
   }
-}
-
-/// 10kmメッシュの整数グリッド座標
-class GridXY {
-  final int x;
-  final int y;
-  const GridXY(this.x, this.y);
 }

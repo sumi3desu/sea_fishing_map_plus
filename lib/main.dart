@@ -353,7 +353,7 @@ void main() async {
   // 共通状態の初期化
   await Common.instance.loadSelectedTeibou();
   await Common.instance.loadFishingDiaryMode();
-  await Common.instance.loadAmbiguousPlevel();
+  await Common.instance.loadAmbiguousLevel();
   if (Common.instance.selectedTeibouNearestPoint.isNotEmpty) {
     Common.instance.tidePoint = Common.instance.selectedTeibouNearestPoint;
     await Common.instance.savePoint(Common.instance.selectedTeibouNearestPoint);

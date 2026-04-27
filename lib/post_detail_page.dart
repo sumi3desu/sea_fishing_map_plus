@@ -932,7 +932,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                     ),
                     if (widget.item.showNearbyButton &&
                         (widget.item.spotId ?? 0) > 0 &&
-                        ambiguous_plevel != 0)
+                        ambiguousLevel != 0)
                       TextButton.icon(
                         onPressed: _openNearbyMap,
                         icon: const Icon(Icons.map),

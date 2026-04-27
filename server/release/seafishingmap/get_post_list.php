@@ -29,7 +29,13 @@ try {
     $pageSz  = isset($_POST['page_size']) ? (int)$_POST['page_size'] : (isset($_GET['page_size']) ? (int)$_GET['page_size'] : 0);
     if ($pageSz <= 0) $pageSz = 0; // 未指定時は従来のlimitを使用
     $userId  = isset($_POST['user_id']) ? (int)$_POST['user_id'] : (isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0);
-    // 0: 指定スポットのみ / 1: 釣果は近隣10スポット。未指定は従来互換で1。
+    $catchListImageOnly = isset($_POST['catch_list_image_only'])
+        ? (int)$_POST['catch_list_image_only']
+        : (isset($_GET['catch_list_image_only']) ? (int)$_GET['catch_list_image_only'] : 0);
+    $catchAreaSpotIdsRaw = isset($_POST['catch_area_spot_ids'])
+        ? trim((string)$_POST['catch_area_spot_ids'])
+        : (isset($_GET['catch_area_spot_ids']) ? trim((string)$_GET['catch_area_spot_ids']) : '');
+    // 0: 指定スポットのみ / 1: 釣果一覧取得では候補釣り場集合へ広げる。未指定は従来互換で1。
     $ambiguousPlevel = isset($_POST['ambiguous_plevel']) ? (int)$_POST['ambiguous_plevel'] : (isset($_GET['ambiguous_plevel']) ? (int)$_GET['ambiguous_plevel'] : 1);
 
     // WHERE 句の組み立て
@@ -44,7 +50,7 @@ try {
     if (ctype_digit($getKind)) {
         $k = (int)$getKind;
         if ($k === 1) {
-            // 釣果: 近隣10スポット（指定があれば）を対象
+            // 釣果: 条件を満たすと近隣スポットを対象に広げる
             $where[] = 'p.post_kind = 1';
         } else if ($k === 0) {
             $where[] = 'p.post_kind <> 1';
@@ -63,42 +69,29 @@ try {
         $params[':user_id'] = $userId;
     }
 
+    if ($catchListImageOnly !== 0) {
+        $where[] = 'p.has_image = 1';
+    }
+
+    $catchAreaSpotIds = [];
+    if ($catchAreaSpotIdsRaw !== '') {
+        foreach (explode(',', $catchAreaSpotIdsRaw) as $rawId) {
+            $id = (int)trim($rawId);
+            if ($id > 0) $catchAreaSpotIds[$id] = $id;
+        }
+        $catchAreaSpotIds = array_values($catchAreaSpotIds);
+    }
+
     // スポット指定時の処理
     $useNear = false;
     $nearIds = [];
     if ($spotId > 0) {
-        // get_kind=1 かつ ambiguous_plevel != 0 のときだけ近隣10スポット。
+        // get_kind=1 かつ ambiguous_plevel != 0 のときだけ近隣スポットを取得する。
         // ただし user_id 指定時（釣り日記など）は指定スポットのみ取得する。
         // ambiguous_plevel=0 や釣果以外も指定スポットのみ取得する。
-        if (isset($k) && $k === 1 && $ambiguousPlevel !== 0 && $userId <= 0) {
-            try {
-                // 基点座標
-                $stmt0 = $pdo->prepare('SELECT latitude, longitude FROM teibou WHERE port_id = :sid LIMIT 1');
-                $stmt0->execute([':sid' => $spotId]);
-                $row0 = $stmt0->fetch();
-                if ($row0 && isset($row0['latitude']) && isset($row0['longitude'])) {
-                    $lat = (float)$row0['latitude'];
-                    $lng = (float)$row0['longitude'];
-                    // 近距離のスポットを取得（ハバーサイン近似）
-                    $sqlNear = 'SELECT port_id,
-                                   (6371 * acos( cos(radians(:lat)) * cos(radians(latitude)) * cos(radians(longitude) - radians(:lng)) + sin(radians(:lat)) * sin(radians(latitude)) )) AS dist
-                                FROM teibou
-                                ORDER BY dist ASC
-                                LIMIT 10';
-                    $stmtN = $pdo->prepare($sqlNear);
-                    $stmtN->execute([':lat' => $lat, ':lng' => $lng]);
-                    $rowsN = $stmtN->fetchAll();
-                    foreach ($rowsN as $r) {
-                        $pid = (int)$r['port_id'];
-                        if ($pid > 0) $nearIds[] = $pid;
-                    }
-                    if (count($nearIds) > 0) {
-                        $useNear = true;
-                    }
-                }
-            } catch (Throwable $t) {
-                $useNear = false;
-            }
+        if (isset($k) && $k === 1 && $ambiguousPlevel !== 0 && $userId <= 0 && !empty($catchAreaSpotIds)) {
+            $nearIds = $catchAreaSpotIds;
+            $useNear = true;
         }
         if ($useNear && count($nearIds) > 0) {
             // IN 句を構築
