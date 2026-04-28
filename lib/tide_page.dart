@@ -2360,6 +2360,29 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     final bool isCenterFav =
         centerPortId != null && _favoriteIds.contains(centerPortId);
     final bool diaryMode = Common.instance.fishingDiaryMode;
+    if (diaryMode) {
+      try {
+        final info = await loadUserInfo() ?? await getOrInitUserInfo();
+        for (final r in rows) {
+          final ownerId =
+              r['user_id'] is int
+                  ? r['user_id'] as int
+                  : int.tryParse(r['user_id']?.toString() ?? '');
+          if (ownerId != info.userId) continue;
+          final id =
+              r['spot_id'] is int
+                  ? r['spot_id'] as int
+                  : int.tryParse(r['spot_id']?.toString() ?? '');
+          final flag =
+              r['flag'] is int
+                  ? r['flag'] as int
+                  : int.tryParse(r['flag']?.toString() ?? '');
+          if (id != null && id > 0 && flag != -2 && flag != -3) {
+            _myOwnedSpotIds.add(id);
+          }
+        }
+      } catch (_) {}
+    }
     final bool showCenterMarker =
         !centerRejected &&
         (!diaryMode ||

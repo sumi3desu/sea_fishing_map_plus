@@ -118,6 +118,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
 
   void _onCommonChanged() {
     final enabled = Common.instance.fishingDiaryMode;
+    final diaryModeChanged = _lastFishingDiaryMode != enabled;
     final ambiguousChanged = _lastAmbiguousLevel != ambiguousLevel;
     final postFeedChanged =
         _lastPostFeedReloadTick != Common.instance.postFeedReloadTick;
@@ -171,7 +172,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
       'FishingResultGrid reload trigger diaryMode=$enabled ambiguous=$ambiguousLevel feedTick=${Common.instance.postFeedReloadTick}',
     );
     _loadFirst();
-    if (_listItems.isEmpty) {
+    if (diaryModeChanged || _listItems.isEmpty) {
       _loadListFirst();
     } else {
       _refreshListPreserveItems();
