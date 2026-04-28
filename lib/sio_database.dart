@@ -22,7 +22,7 @@ class SioDatabase extends ChangeNotifier {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -33,6 +33,9 @@ class SioDatabase extends ChangeNotifier {
         }
         if (oldVersion < 4) {
           await _migrateToV4(db);
+        }
+        if (oldVersion < 5) {
+          await _migrateToV5(db);
         }
       },
       onOpen: (db) async {
@@ -47,6 +50,8 @@ class SioDatabase extends ChangeNotifier {
   }
 
   Future<void> _ensureTables(Database db) async {
+    await _migrateLegacyTeibouIfNeeded(db);
+
     // お気に入りテーブル（既存）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS favorite_tbl (
@@ -58,9 +63,9 @@ class SioDatabase extends ChangeNotifier {
 
     // リモートMySQLの構成に合わせたローカルSQLiteテーブル
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS teibou (
-        port_id INTEGER NOT NULL PRIMARY KEY,
-        port_name TEXT NOT NULL,
+      CREATE TABLE IF NOT EXISTS spots (
+        spot_id INTEGER NOT NULL PRIMARY KEY,
+        spot_name TEXT NOT NULL,
         furigana TEXT NOT NULL,
         j_yomi TEXT DEFAULT NULL,
         kubun TEXT NOT NULL,
@@ -74,26 +79,26 @@ class SioDatabase extends ChangeNotifier {
     // 互換のため不足カラムを追加（存在すれば無視）
     try {
       await db.execute(
-        'ALTER TABLE teibou ADD COLUMN flag INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE spots ADD COLUMN flag INTEGER NOT NULL DEFAULT 0',
       );
     } catch (_) {}
     try {
       await db.execute(
-        'ALTER TABLE teibou ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE spots ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
       );
     } catch (_) {}
     try {
-      await db.execute('ALTER TABLE teibou ADD COLUMN registrant_name TEXT');
+      await db.execute('ALTER TABLE spots ADD COLUMN registrant_name TEXT');
     } catch (_) {}
     try {
       // SQLite では DATETIME を TEXT として扱う（サーバは CURRENT_TIMESTAMP）
       await db.execute(
-        "ALTER TABLE teibou ADD COLUMN create_at TEXT NOT NULL DEFAULT (datetime('now'))",
+        "ALTER TABLE spots ADD COLUMN create_at TEXT NOT NULL DEFAULT (datetime('now'))",
       );
     } catch (_) {}
     try {
       await db.execute(
-        'ALTER TABLE teibou ADD COLUMN private INTEGER NOT NULL DEFAULT 0',
+        'ALTER TABLE spots ADD COLUMN private INTEGER NOT NULL DEFAULT 0',
       );
     } catch (_) {}
 
@@ -105,7 +110,7 @@ class SioDatabase extends ChangeNotifier {
       )
     ''');
 
-    // 区分マスタ（teibou.kubun の名称・説明）
+    // 区分マスタ（spots.kubun の名称・説明）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS kubun (
         id INTEGER NOT NULL PRIMARY KEY,
@@ -126,7 +131,7 @@ class SioDatabase extends ChangeNotifier {
     // 堤防お気に入りテーブル
     await db.execute('''
       CREATE TABLE IF NOT EXISTS favorite_teibou (
-        port_id INTEGER NOT NULL PRIMARY KEY,
+        spot_id INTEGER NOT NULL PRIMARY KEY,
         created_at INTEGER
       )
     ''');
@@ -149,7 +154,7 @@ class SioDatabase extends ChangeNotifier {
     final rows = await db.query('favorite_teibou');
     final ids = <int>{};
     for (final r in rows) {
-      final v = r['port_id'];
+      final v = r['spot_id'];
       if (v is int) ids.add(v);
       if (v is num) ids.add(v.toInt());
     }
@@ -159,7 +164,7 @@ class SioDatabase extends ChangeNotifier {
   Future<void> addFavoriteTeibou(int portId) async {
     final db = await database;
     await db.insert('favorite_teibou', {
-      'port_id': portId,
+      'spot_id': portId,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -168,7 +173,7 @@ class SioDatabase extends ChangeNotifier {
     final db = await database;
     await db.delete(
       'favorite_teibou',
-      where: 'port_id = ?',
+      where: 'spot_id = ?',
       whereArgs: [portId],
     );
   }
@@ -337,6 +342,69 @@ class SioDatabase extends ChangeNotifier {
     });
   }
 
+  Future<void> _migrateToV5(Database db) async {
+    await db.transaction((txn) async {
+      await _migrateLegacyTeibouIfNeeded(txn);
+      await _migrateFavoriteTeibouSpotIdIfNeeded(txn);
+    });
+  }
+
+  Future<void> _migrateLegacyTeibouIfNeeded(DatabaseExecutor db) async {
+    final hasTeibou = await _tableExists(db, 'teibou');
+    if (!hasTeibou) return;
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS spots (
+        spot_id INTEGER NOT NULL PRIMARY KEY,
+        spot_name TEXT NOT NULL,
+        furigana TEXT NOT NULL,
+        j_yomi TEXT DEFAULT NULL,
+        kubun TEXT NOT NULL,
+        address TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        note TEXT NOT NULL
+      )
+    ''');
+
+    final idColumn =
+        await _columnExists(db, 'teibou', 'spot_id') ? 'spot_id' : 'port_id';
+    final nameColumn =
+        await _columnExists(db, 'teibou', 'spot_name')
+            ? 'spot_name'
+            : 'port_name';
+    await db.execute('''
+      INSERT OR IGNORE INTO spots (
+        spot_id, spot_name, furigana, j_yomi, kubun, address, latitude, longitude, note
+      )
+      SELECT $idColumn, $nameColumn, furigana, j_yomi, kubun, address, latitude, longitude, note
+      FROM teibou
+    ''');
+
+    await db.execute('DROP TABLE IF EXISTS teibou');
+  }
+
+  Future<void> _migrateFavoriteTeibouSpotIdIfNeeded(DatabaseExecutor db) async {
+    final exists = await _tableExists(db, 'favorite_teibou');
+    if (!exists) return;
+    if (await _columnExists(db, 'favorite_teibou', 'spot_id')) return;
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS favorite_teibou_new (
+        spot_id INTEGER NOT NULL PRIMARY KEY,
+        created_at INTEGER
+      )
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO favorite_teibou_new (spot_id, created_at)
+      SELECT port_id, created_at FROM favorite_teibou
+    ''');
+    await db.execute('DROP TABLE IF EXISTS favorite_teibou');
+    await db.execute(
+      'ALTER TABLE favorite_teibou_new RENAME TO favorite_teibou',
+    );
+  }
+
   Future<bool> _columnExists(
     DatabaseExecutor db,
     String table,
@@ -404,15 +472,15 @@ class SioDatabase extends ChangeNotifier {
     return count;
   }
 
-  // teibou と todoufuken を結合し、全堤防情報を取得
-  // MySQL: LEFT(CAST(t.port_id AS CHAR), 2) = p.todoufuken_id に相当する条件を
-  // SQLite では CAST(substr(CAST(t.port_id AS TEXT),1,2) AS INTEGER) を用いて実現
+  // spots と todoufuken を結合し、全釣り場情報を取得
+  // MySQL: LEFT(CAST(t.spot_id AS CHAR), 2) = p.todoufuken_id に相当する条件を
+  // SQLite では CAST(substr(CAST(t.spot_id AS TEXT),1,2) AS INTEGER) を用いて実現
   Future<List<Map<String, dynamic>>> getAllTeibouWithPrefecture() async {
     final db = await database;
     final sql = '''
       SELECT
-        t.port_id,
-        t.port_name,
+        t.spot_id,
+        t.spot_name,
         t.furigana,
         t.j_yomi,
         t.kubun,
@@ -425,13 +493,13 @@ class SioDatabase extends ChangeNotifier {
         t.user_id,
         t.note,
         t.create_at,
-        CAST(substr(CAST(t.port_id AS TEXT), 1, 2) AS INTEGER) AS pref_id_from_port,
+        CAST(substr(CAST(t.spot_id AS TEXT), 1, 2) AS INTEGER) AS pref_id_from_port,
         p.todoufuken_id,
         p.todoufuken_name,
         p.chihou_name
-      FROM teibou AS t
+      FROM spots AS t
       LEFT JOIN todoufuken AS p
-        ON CAST(substr(CAST(t.port_id AS TEXT), 1, 2) AS INTEGER) = p.todoufuken_id
+        ON CAST(substr(CAST(t.spot_id AS TEXT), 1, 2) AS INTEGER) = p.todoufuken_id
       ORDER BY pref_id_from_port, t.j_yomi
     ''';
     final rows = await db.rawQuery(sql);

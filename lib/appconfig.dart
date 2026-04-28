@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 class AppConfig {
@@ -21,7 +20,7 @@ class AppConfig {
   Color appBarBackgroundColor = Colors.black;
   // AppBarの全景色
   Color appBarForegroundColor = Colors.white;
-  
+
   Color buttonBackgroundColor = Colors.greenAccent;
   Color buttonForegroundColor = Colors.black;
 

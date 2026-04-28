@@ -5,7 +5,13 @@ class LagrangeCalculator {
   static int k = 0;
   static List<int> sg = [0, 0, 0, 0, 0];
   static List<double> tm = [0, 0, 0, 0, 0];
-  static List<double> tArr = [0, 0, 0, 0, 0]; // t 配列（名前がtなので予約語との混同を避けるため tArr としています）
+  static List<double> tArr = [
+    0,
+    0,
+    0,
+    0,
+    0,
+  ]; // t 配列（名前がtなので予約語との混同を避けるため tArr としています）
   static List<double> fx = [0, 0, 0, 0, 0];
   static List<double> df = [0, 0, 0, 0, 0];
 
@@ -55,14 +61,16 @@ class LagrangeCalculator {
 
       double x = 0;
       double fnn = (x - df[1]) / (df[2] - df[1]);
-      double lag1 = (1 - fnn) * (2 - fnn) * tArr[1] / 2 +
+      double lag1 =
+          (1 - fnn) * (2 - fnn) * tArr[1] / 2 +
           fnn * (2 - fnn) * tArr[2] -
           (1 - fnn) * fnn * tArr[3] / 2;
       if (lag1 > 0) {
         T.value = lag1;
         x = lag1;
         fnn = (x - tm[2]) / (tm[3] - tm[2]);
-        double lag2 = (1 - fnn) * (2 - fnn) * fx[2] / 2 +
+        double lag2 =
+            (1 - fnn) * (2 - fnn) * fx[2] / 2 +
             fnn * (2 - fnn) * fx[3] -
             (1 - fnn) * fnn * fx[4] / 2;
         y.value = lag2;

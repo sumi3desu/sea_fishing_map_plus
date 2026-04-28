@@ -37,6 +37,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'db_rebuild_screen.dart';
 import 'input_post_page.dart';
 import 'new_account_page.dart';
+import 'onboarding_screen.dart';
 import 'services/revenuecat_service.dart';
 import 'providers/premium_state_notifier.dart' as prem;
 import 'log_print.dart';
@@ -362,13 +363,15 @@ void main() async {
 
   // Riverpod の SharedPreferences を注入
   final prefs = await SharedPreferences.getInstance();
+  final showOnboarding =
+      !(prefs.getBool(OnboardingScreen.onboardingSeenKey) ?? false);
 
   runApp(
     ProviderScope(
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       child: fp.ChangeNotifierProvider<Common>(
         create: (_) => Common.instance,
-        child: const MyApp(),
+        child: MyApp(showOnboarding: showOnboarding),
       ),
     ),
   );
@@ -381,8 +384,23 @@ void main() async {
   });
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final bool showOnboarding;
+
+  const MyApp({super.key, required this.showOnboarding});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late bool _showOnboarding;
+
+  @override
+  void initState() {
+    super.initState();
+    _showOnboarding = widget.showOnboarding;
+  }
 
   void _initMapKind() async {
     Common.instance.mapKind = await Common.instance.loadMapKind();
@@ -390,7 +408,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final common = fp.Provider.of<Common>(context);
+    fp.Provider.of<Common>(context);
     _initMapKind();
     return MaterialApp(
       title: 'siowadou?',
@@ -400,7 +418,17 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MainPage(title: '海釣りMAP+'),
+      home:
+          _showOnboarding
+              ? OnboardingScreen(
+                onFinished: () {
+                  if (!mounted) return;
+                  setState(() {
+                    _showOnboarding = false;
+                  });
+                },
+              )
+              : const MainPage(title: '海釣りMAP+'),
     );
   }
 }
@@ -1331,7 +1359,7 @@ class _MainPageState extends ConsumerState<MainPage> {
       try {
         tb =
             sqflite.Sqflite.firstIntValue(
-              await sdb.rawQuery('SELECT COUNT(*) FROM teibou'),
+              await sdb.rawQuery('SELECT COUNT(*) FROM spots'),
             ) ??
             0;
       } catch (_) {}
@@ -1600,7 +1628,7 @@ class _MainPageState extends ConsumerState<MainPage> {
           int tb = 0, tdfk = 0, kb = 0;
           tb =
               sqflite.Sqflite.firstIntValue(
-                await sdb.rawQuery('SELECT COUNT(*) FROM teibou'),
+                await sdb.rawQuery('SELECT COUNT(*) FROM spots'),
               ) ??
               0;
           tdfk =
@@ -1750,7 +1778,7 @@ class _MainPageState extends ConsumerState<MainPage> {
                           try {
                             int pid = common.selectedTeibouPrefId;
                             if (pid == 0) {
-                              // まずは選択済みport_idで引く（同名別県の誤参照防止）
+                              // まずは選択済みspot_idで引く（同名別県の誤参照防止）
                               try {
                                 final prefs =
                                     await SharedPreferences.getInstance();
@@ -1761,10 +1789,10 @@ class _MainPageState extends ConsumerState<MainPage> {
                                           .getAllTeibouWithPrefecture();
                                   for (final r in rows) {
                                     final rid =
-                                        r['port_id'] is int
-                                            ? r['port_id'] as int
+                                        r['spot_id'] is int
+                                            ? r['spot_id'] as int
                                             : int.tryParse(
-                                              r['port_id']?.toString() ?? '',
+                                              r['spot_id']?.toString() ?? '',
                                             );
                                     if (rid == sid) {
                                       pid =
@@ -1786,14 +1814,14 @@ class _MainPageState extends ConsumerState<MainPage> {
                                   }
                                 }
                               } catch (_) {}
-                              // port_id で取得できなかった場合のみ、名前一致でフォールバック
+                              // spot_id で取得できなかった場合のみ、名前一致でフォールバック
                               if (pid == 0 &&
                                   common.selectedTeibouName.isNotEmpty) {
                                 final rows =
                                     await SioDatabase()
                                         .getAllTeibouWithPrefecture();
                                 for (final r in rows) {
-                                  final n = (r['port_name'] ?? '').toString();
+                                  final n = (r['spot_name'] ?? '').toString();
                                   if (n == common.selectedTeibouName) {
                                     pid =
                                         r['todoufuken_id'] is int
@@ -2259,7 +2287,15 @@ class _MainPageState extends ConsumerState<MainPage> {
     final t = raw?.trim() ?? '';
     if (t.isEmpty) return false;
     final lower = t.toLowerCase();
-    return lower != 'null' && lower != '0';
+    if (lower == 'null' || lower == '0' || t == '0000-00-00 00:00:00') {
+      return false;
+    }
+    try {
+      final dt = DateTime.parse(t.replaceFirst(' ', 'T')).toLocal();
+      return dt.isAfter(DateTime.now());
+    } catch (_) {
+      return false;
+    }
   }
 }
 

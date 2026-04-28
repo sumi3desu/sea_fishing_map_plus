@@ -430,7 +430,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
       final db = await SioDatabase().database;
       var rows = await db.query('todoufuken');
       // 釣り場名のためのテーブルもチェック
-      var teibou = await db.query('teibou');
+      var teibou = await db.query('spots');
       // 初回起動などで未同期の場合はサーバーと同期してから再取得
       if (rows.isEmpty || teibou.isEmpty) {
         try {
@@ -439,7 +439,7 @@ class _FishingResultGridState extends State<FishingResultGrid>
           await SioSyncService().syncFishingData(userId: uid, force: true);
         } catch (_) {}
         rows = await db.query('todoufuken');
-        teibou = await db.query('teibou');
+        teibou = await db.query('spots');
       }
       for (final r in rows) {
         final idVal = r['todoufuken_id'];
@@ -451,15 +451,15 @@ class _FishingResultGridState extends State<FishingResultGrid>
           _prefNameById[id] = name;
         }
       }
-      // 釣り場名（port_id -> port_name）も用意
+      // 釣り場名（spot_id -> spot_name）も用意
       if (teibou.isEmpty) {
         try {
           teibou = await SioDatabase().getAllTeibouWithPrefecture();
         } catch (_) {}
       }
       for (final r in teibou) {
-        final id = int.tryParse(r['port_id']?.toString() ?? '');
-        final name = (r['port_name'] ?? '').toString();
+        final id = int.tryParse(r['spot_id']?.toString() ?? '');
+        final name = (r['spot_name'] ?? '').toString();
         if (id != null && name.isNotEmpty) _spotNameById[id] = name;
       }
       if (mounted) setState(() {});
@@ -1191,16 +1191,6 @@ extension _MosaicBuilders on _FishingResultGridState {
       height: h,
       child: InkWell(
         onTap: () async {
-          if (ambiguousLevel == 0 && it.spotId != null) {
-            // 釣り場が曖昧でない場合、該当スポットを選択して釣り場詳細へ
-            final ok = await Common.instance.selectTeibouById(it.spotId!);
-            if (ok) {
-              if (!mounted) return;
-              Common.instance.requestNavigateToTidePage();
-              return;
-            }
-            // もし失敗した場合は従来の詳細表示にフォールバック
-          }
           final String? detailUrlRaw = it.imageUrl ?? it.thumbUrl;
           final String? detailUrl =
               (detailUrlRaw != null) ? _withTs(detailUrlRaw, it.postId) : null;

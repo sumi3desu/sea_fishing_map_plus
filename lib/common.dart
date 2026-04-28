@@ -843,14 +843,14 @@ class Common extends ChangeNotifier {
     try {
       final db = await sioDb.database;
       final rows = await db.query(
-        'teibou',
-        where: 'port_id = ?',
+        'spots',
+        where: 'spot_id = ?',
         whereArgs: [portId],
         limit: 1,
       );
       if (rows.isEmpty) return false;
       final r = rows.first;
-      final name = (r['port_name'] ?? '').toString();
+      final name = (r['spot_name'] ?? '').toString();
       final lat =
           (r['latitude'] is num)
               ? (r['latitude'] as num).toDouble()
@@ -867,9 +867,9 @@ class Common extends ChangeNotifier {
         final extRows = await SioDatabase().getAllTeibouWithPrefecture();
         for (final er in extRows) {
           final rid =
-              er['port_id'] is int
-                  ? er['port_id'] as int
-                  : int.tryParse(er['port_id']?.toString() ?? '');
+              er['spot_id'] is int
+                  ? er['spot_id'] as int
+                  : int.tryParse(er['spot_id']?.toString() ?? '');
           if (rid == portId) {
             prefId =
                 er['todoufuken_id'] is int
@@ -948,11 +948,11 @@ class Common extends ChangeNotifier {
         }
       }
       if (bestRow == null) return;
-      final name = (bestRow['port_name'] ?? '').toString();
+      final name = (bestRow['spot_name'] ?? '').toString();
       final bid =
-          bestRow['port_id'] is int
-              ? bestRow['port_id'] as int
-              : int.tryParse(bestRow['port_id']?.toString() ?? '');
+          bestRow['spot_id'] is int
+              ? bestRow['spot_id'] as int
+              : int.tryParse(bestRow['spot_id']?.toString() ?? '');
       final plat = _toDouble(bestRow['latitude']) ?? 0.0;
       final plng = _toDouble(bestRow['longitude']) ?? 0.0;
 
@@ -1030,46 +1030,46 @@ class Common extends ChangeNotifier {
         return !(lat == 0.0 && lng == 0.0);
       }
 
-      // 優先1: 静岡県(22)で port_name が「田子漁港」と一致
+      // 優先1: 静岡県(22)で spot_name が「田子漁港」と一致
       for (final r in rows) {
         final pid =
             r['todoufuken_id'] is int
                 ? r['todoufuken_id'] as int
                 : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-        final name = (r['port_name'] ?? '').toString();
+        final name = (r['spot_name'] ?? '').toString();
         if (pid == 22 && name == '田子漁港' && valid(r)) {
           pick = r;
           break;
         }
       }
-      // 優先2: 静岡県(22)で port_name に「田子」を含む
+      // 優先2: 静岡県(22)で spot_name に「田子」を含む
       if (pick == null) {
         for (final r in rows) {
           final pid =
               r['todoufuken_id'] is int
                   ? r['todoufuken_id'] as int
                   : int.tryParse(r['todoufuken_id']?.toString() ?? '');
-          final name = (r['port_name'] ?? '').toString();
+          final name = (r['spot_name'] ?? '').toString();
           if (pid == 22 && name.contains('田子') && valid(r)) {
             pick = r;
             break;
           }
         }
       }
-      // 優先3: port_name が「田子漁港」
+      // 優先3: spot_name が「田子漁港」
       if (pick == null) {
         for (final r in rows) {
-          final name = (r['port_name'] ?? '').toString();
+          final name = (r['spot_name'] ?? '').toString();
           if (name == '田子漁港' && valid(r)) {
             pick = r;
             break;
           }
         }
       }
-      // 優先4: port_name に「田子」を含む
+      // 優先4: spot_name に「田子」を含む
       if (pick == null) {
         for (final r in rows) {
-          final name = (r['port_name'] ?? '').toString();
+          final name = (r['spot_name'] ?? '').toString();
           if (name.contains('田子') && valid(r)) {
             pick = r;
             break;
@@ -1087,11 +1087,11 @@ class Common extends ChangeNotifier {
       }
       if (pick == null) return;
 
-      final name = (pick['port_name'] ?? '').toString();
+      final name = (pick['spot_name'] ?? '').toString();
       final bid =
-          pick['port_id'] is int
-              ? pick['port_id'] as int
-              : int.tryParse(pick['port_id']?.toString() ?? '');
+          pick['spot_id'] is int
+              ? pick['spot_id'] as int
+              : int.tryParse(pick['spot_id']?.toString() ?? '');
       final plat = _toDouble(pick['latitude']) ?? 0.0;
       final plng = _toDouble(pick['longitude']) ?? 0.0;
       final nearestPoint = await _findNearestTidePoint(plat, plng);

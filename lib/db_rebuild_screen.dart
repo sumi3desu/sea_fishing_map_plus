@@ -32,7 +32,7 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   Map<String, int> _remote = {};
   String? _error;
   // 釣り場データを構成するテーブル群
-  static const List<String> _fishingTables = ['teibou', 'kubun', 'todoufuken'];
+  static const List<String> _fishingTables = ['spots', 'kubun', 'todoufuken'];
 
   // ローカルの件数（情報がない判定に使用）
   final Map<String, int> _rowCounts = {};

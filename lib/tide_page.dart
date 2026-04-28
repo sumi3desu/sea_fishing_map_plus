@@ -37,7 +37,7 @@ Future<String?> _buildCatchAreaSpotIdsCsv(int? spotId) async {
   if (spotId == null || spotId <= 0 || ambiguousLevel == 0) return null;
   try {
     final db = await SioDatabase().database;
-    final rows = await db.query('teibou');
+    final rows = await db.query('spots');
     final ids = buildCatchAreaCandidateSpotIds(
       rows: rows.cast<Map<String, dynamic>>(),
       spotId: spotId,
@@ -424,7 +424,7 @@ class _CatchPostListState extends State<_CatchPostList> {
       }
 
       final db = await SioDatabase().database;
-      var rows = await db.query('teibou');
+      var rows = await db.query('spots');
       if (rows.isEmpty) {
         try {
           rows = await SioDatabase().getAllTeibouWithPrefecture();
@@ -432,8 +432,8 @@ class _CatchPostListState extends State<_CatchPostList> {
       }
       final spotNames = <int, String>{};
       for (final r in rows) {
-        final id = int.tryParse(r['port_id']?.toString() ?? '');
-        final name = (r['port_name'] ?? '').toString();
+        final id = int.tryParse(r['spot_id']?.toString() ?? '');
+        final name = (r['spot_name'] ?? '').toString();
         if (id != null && name.isNotEmpty) spotNames[id] = name;
       }
       if (!mounted) return;
@@ -1494,9 +1494,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         if (sid != null && sid > 0) {
           for (final r in rows) {
             final rid =
-                r['port_id'] is int
-                    ? r['port_id'] as int
-                    : int.tryParse(r['port_id']?.toString() ?? '');
+                r['spot_id'] is int
+                    ? r['spot_id'] as int
+                    : int.tryParse(r['spot_id']?.toString() ?? '');
             if (rid == sid) {
               row = r;
               break;
@@ -1505,7 +1505,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         }
       } catch (_) {}
       row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-        (r) => ((r?['port_name'] ?? '').toString() == spotName),
+        (r) => ((r?['spot_name'] ?? '').toString() == spotName),
         orElse: () => null,
       );
       final int? flag =
@@ -1585,7 +1585,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (bestRow == null) return;
       final nlat = _toDouble(bestRow['latitude']) ?? llat;
       final nlng = _toDouble(bestRow['longitude']) ?? llng;
-      final name = (bestRow['port_name'] ?? '').toString();
+      final name = (bestRow['spot_name'] ?? '').toString();
       // 選択状態は更新（最寄りを選択）し、地図の表示位置・スケールは変更せず近辺ピンのみ再構成
       try {
         String? np;
@@ -1600,9 +1600,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                       bestRow['pref_id_from_port']?.toString() ?? '',
                     );
         final int? portId =
-            bestRow['port_id'] is int
-                ? bestRow['port_id'] as int
-                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+            bestRow['spot_id'] is int
+                ? bestRow['spot_id'] as int
+                : int.tryParse(bestRow['spot_id']?.toString() ?? '');
         await Common.instance.saveSelectedTeibou(
           name,
           np ?? (Common.instance.tidePoint),
@@ -1857,9 +1857,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           if (sid != null && sid > 0) {
             for (final r in rows) {
               final rid =
-                  r['port_id'] is int
-                      ? r['port_id'] as int
-                      : int.tryParse(r['port_id']?.toString() ?? '');
+                  r['spot_id'] is int
+                      ? r['spot_id'] as int
+                      : int.tryParse(r['spot_id']?.toString() ?? '');
               if (rid == sid) {
                 hit = r;
                 break;
@@ -1868,7 +1868,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           }
         } catch (_) {}
         hit ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-          (r) => ((r?['port_name'] ?? '').toString() == useName),
+          (r) => ((r?['spot_name'] ?? '').toString() == useName),
           orElse: () => null,
         );
         if (hit != null) {
@@ -1877,7 +1877,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           if (dlat != null && dlng != null && !(dlat == 0.0 && dlng == 0.0)) {
             useLat = dlat;
             useLng = dlng;
-            useName = (hit['port_name'] ?? useName).toString();
+            useName = (hit['spot_name'] ?? useName).toString();
             // 保存して次回以降に活かす
             try {
               await Common.instance.saveSelectedTeibou(
@@ -1886,9 +1886,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 lat: useLat,
                 lng: useLng,
                 id:
-                    hit['port_id'] is int
-                        ? hit['port_id'] as int
-                        : int.tryParse(hit['port_id']?.toString() ?? ''),
+                    hit['spot_id'] is int
+                        ? hit['spot_id'] as int
+                        : int.tryParse(hit['spot_id']?.toString() ?? ''),
                 prefId:
                     hit['todoufuken_id'] is int
                         ? hit['todoufuken_id'] as int
@@ -2137,9 +2137,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (sid != null && sid > 0) {
         for (final r in rows) {
           final rid =
-              r['port_id'] is int
-                  ? r['port_id'] as int
-                  : int.tryParse(r['port_id']?.toString() ?? '');
+              r['spot_id'] is int
+                  ? r['spot_id'] as int
+                  : int.tryParse(r['spot_id']?.toString() ?? '');
           if (rid == sid) {
             centerRow = r;
             break;
@@ -2165,7 +2165,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       double best = double.infinity;
       Map<String, dynamic>? bestRow;
       for (final r in rows) {
-        final name = (r['port_name'] ?? '').toString();
+        final name = (r['spot_name'] ?? '').toString();
         if (name != centerName) continue;
         final dlat0 = _toDouble(r['latitude']);
         final dlng0 = _toDouble(r['longitude']);
@@ -2180,9 +2180,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
     if (centerRow != null) {
       centerPortId =
-          centerRow['port_id'] is int
-              ? centerRow['port_id'] as int
-              : int.tryParse(centerRow['port_id']?.toString() ?? '');
+          centerRow['spot_id'] is int
+              ? centerRow['spot_id'] as int
+              : int.tryParse(centerRow['spot_id']?.toString() ?? '');
       final int? flag =
           centerRow['flag'] is int
               ? centerRow['flag'] as int
@@ -2194,7 +2194,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (dlat1 != null && dlng1 != null) {
         center = LatLng(dlat1, dlng1);
       }
-      cn = (centerRow['port_name'] ?? cn).toString();
+      cn = (centerRow['spot_name'] ?? cn).toString();
     }
     if (centerRow == null && rows.isNotEmpty) {
       double best = double.infinity;
@@ -2214,15 +2214,15 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (bestRow != null) {
         centerRow = bestRow;
         centerPortId =
-            bestRow['port_id'] is int
-                ? bestRow['port_id'] as int
-                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+            bestRow['spot_id'] is int
+                ? bestRow['spot_id'] as int
+                : int.tryParse(bestRow['spot_id']?.toString() ?? '');
         final dlat1 = _toDouble(bestRow['latitude']);
         final dlng1 = _toDouble(bestRow['longitude']);
         if (dlat1 != null && dlng1 != null) {
           center = LatLng(dlat1, dlng1);
         }
-        cn = (bestRow['port_name'] ?? cn).toString();
+        cn = (bestRow['spot_name'] ?? cn).toString();
         final int? f =
             bestRow['flag'] is int
                 ? bestRow['flag'] as int
@@ -2261,9 +2261,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         if (sid != null && sid > 0) {
           for (final r in rows) {
             final rid =
-                r['port_id'] is int
-                    ? r['port_id'] as int
-                    : int.tryParse(r['port_id']?.toString() ?? '');
+                r['spot_id'] is int
+                    ? r['spot_id'] as int
+                    : int.tryParse(r['spot_id']?.toString() ?? '');
             if (rid == sid) {
               rr = r;
               break;
@@ -2271,7 +2271,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           }
         }
         rr ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-          (r) => (r?['port_name'] ?? '').toString() == centerName,
+          (r) => (r?['spot_name'] ?? '').toString() == centerName,
           orElse: () => null,
         );
         if (rr != null) {
@@ -2282,16 +2282,16 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           centerPending = (f == -1);
           centerRejected = (f == -2 || f == -3);
           centerPortId ??=
-              rr['port_id'] is int
-                  ? rr['port_id'] as int
-                  : int.tryParse(rr['port_id']?.toString() ?? '');
+              rr['spot_id'] is int
+                  ? rr['spot_id'] as int
+                  : int.tryParse(rr['spot_id']?.toString() ?? '');
           if (!centerRejected) {
             final dlat1 = _toDouble(rr['latitude']);
             final dlng1 = _toDouble(rr['longitude']);
             if (dlat1 != null && dlng1 != null) {
               center = LatLng(dlat1, dlng1);
             }
-            cn = (rr['port_name'] ?? cn).toString();
+            cn = (rr['spot_name'] ?? cn).toString();
           }
         }
       } catch (_) {}
@@ -2320,12 +2320,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       if (bestRow != null) {
         final nlat = _toDouble(bestRow['latitude']) ?? lat;
         final nlng = _toDouble(bestRow['longitude']) ?? lng;
-        cn = (bestRow['port_name'] ?? '').toString();
+        cn = (bestRow['spot_name'] ?? '').toString();
         center = LatLng(nlat, nlng);
         centerPortId =
-            bestRow['port_id'] is int
-                ? bestRow['port_id'] as int
-                : int.tryParse(bestRow['port_id']?.toString() ?? '');
+            bestRow['spot_id'] is int
+                ? bestRow['spot_id'] as int
+                : int.tryParse(bestRow['spot_id']?.toString() ?? '');
         final int? f2 =
             bestRow['flag'] is int
                 ? bestRow['flag'] as int
@@ -2378,7 +2378,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     for (final r in rows) {
       final dlat = _toDouble(r['latitude']);
       final dlng = _toDouble(r['longitude']);
-      final name = (r['port_name'] ?? '').toString();
+      final name = (r['spot_name'] ?? '').toString();
       final int? flag =
           r['flag'] is int
               ? r['flag'] as int
@@ -2395,9 +2395,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               : int.tryParse(r['todoufuken_id']?.toString() ?? '') ??
                   int.tryParse(r['pref_id_from_port']?.toString() ?? '');
       final int? portId =
-          r['port_id'] is int
-              ? r['port_id'] as int
-              : int.tryParse(r['port_id']?.toString() ?? '');
+          r['spot_id'] is int
+              ? r['spot_id'] as int
+              : int.tryParse(r['spot_id']?.toString() ?? '');
       if (dlat == null || dlng == null) continue;
       final bool isSameAsCenter =
           (centerPortId != null && portId == centerPortId) ||
@@ -3366,12 +3366,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         try {
           final rows = await SioDatabase().getAllTeibouWithPrefecture();
           for (final r in rows) {
-            final n = (r['port_name'] ?? '').toString();
+            final n = (r['spot_name'] ?? '').toString();
             if (n == portName) {
               portId =
-                  r['port_id'] is int
-                      ? r['port_id'] as int
-                      : int.tryParse(r['port_id']?.toString() ?? '');
+                  r['spot_id'] is int
+                      ? r['spot_id'] as int
+                      : int.tryParse(r['spot_id']?.toString() ?? '');
               break;
             }
           }
@@ -3763,9 +3763,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         if (sid != null && sid > 0) {
           for (final r in rows) {
             final rid =
-                r['port_id'] is int
-                    ? r['port_id'] as int
-                    : int.tryParse(r['port_id']?.toString() ?? '');
+                r['spot_id'] is int
+                    ? r['spot_id'] as int
+                    : int.tryParse(r['spot_id']?.toString() ?? '');
             if (rid == sid) {
               row = r;
               break;
@@ -3776,7 +3776,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       // 2) 見つからなければ名前一致
       if (row == null) {
         for (final r in rows) {
-          final n = (r['port_name'] ?? '').toString();
+          final n = (r['spot_name'] ?? '').toString();
           if (n == spotName) {
             row = r;
             break;
@@ -3882,9 +3882,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       final int? currentPortId =
           row == null
               ? null
-              : (row['port_id'] is int
-                  ? row['port_id'] as int
-                  : int.tryParse(row['port_id']?.toString() ?? ''));
+              : (row['spot_id'] is int
+                  ? row['spot_id'] as int
+                  : int.tryParse(row['spot_id']?.toString() ?? ''));
       final int? ownerId =
           (_uidRaw is int)
               ? _uidRaw
@@ -3938,50 +3938,57 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.of(
-                                  pageContext,
-                                  rootNavigator: true,
-                                ).pop();
-                                Future.microtask(
-                                  () => Navigator.of(pageContext).push(
-                                    MaterialPageRoute(
-                                      builder:
-                                          (_) => const _TideStandalonePage(),
+                            SizedBox(
+                              width: 96,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(
+                                      pageContext,
+                                      rootNavigator: true,
+                                    ).pop();
+                                    Future.microtask(
+                                      () => Navigator.of(pageContext).push(
+                                        MaterialPageRoute(
+                                          builder:
+                                              (_) =>
+                                                  const _TideStandalonePage(),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0D47A1),
+                                    foregroundColor: Colors.white,
+                                    shape: const StadiumBorder(),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 10,
                                     ),
                                   ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF0D47A1),
-                                foregroundColor: Colors.white,
-                                shape: const StadiumBorder(),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 10,
+                                  icon: const Icon(Icons.waves, size: 18),
+                                  label: const Text(
+                                    '潮汐',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              icon: const Icon(Icons.waves, size: 18),
-                              label: const Text(
-                                '潮汐',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
+                            const Expanded(
                               child: Text(
-                                (() {
-                                  final base = spotName;
-                                  return (flag == -1) ? '$base (申請中)' : base;
-                                })(),
-                                style: const TextStyle(
+                                '釣り場詳細',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
                                 ),
                               ),
                             ),
+                            const SizedBox(width: 96),
                           ],
                         ),
                       ),
@@ -3992,6 +3999,18 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _infoRow(
+                            '釣り場名',
+                            (() {
+                              final base = spotName;
+                              return (flag == -1) ? '$base (申請中)' : base;
+                            })(),
+                            valueStyle: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
                           if (yomi.isNotEmpty) ...[
                             _infoRow('よみがな', yomi),
                             const SizedBox(height: 6),
@@ -4054,6 +4073,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                           );
                                         },
                                         icon: Icons.edit_note,
+                                        iconColor: Colors.green,
                                         label: '申請編集',
                                       ),
                                       _spotActionTile(
@@ -4074,6 +4094,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                           );
                                         },
                                         icon: Icons.remove_circle_outline,
+                                        iconColor: Colors.red,
                                         label: '申請取り下げ',
                                       ),
                                     ],
@@ -4091,7 +4112,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                                 _onToggleFavorite(pageContext),
                                           );
                                         },
-                                        icon: Icons.bookmark_border,
+                                        icon: Icons.bookmark,
+                                        iconColor: Colors.orange,
                                         label: 'お気に入り',
                                       ),
                                       _spotActionTile(
@@ -4105,6 +4127,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                           );
                                         },
                                         icon: Icons.directions_car,
+                                        iconColor: Colors.blueAccent,
                                         label: '経路表示',
                                       ),
                                     ],
@@ -4140,7 +4163,8 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                                 _onToggleFavorite(pageContext),
                                           );
                                         },
-                                        icon: Icons.bookmark_border,
+                                        icon: Icons.bookmark,
+                                        iconColor: Colors.orange,
                                         label: 'お気に入り',
                                       ),
                                       _spotActionTile(
@@ -4154,6 +4178,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                                           );
                                         },
                                         icon: Icons.directions_car,
+                                        iconColor: Colors.blueAccent,
                                         label: '経路表示',
                                       ),
                                     ],
@@ -4172,7 +4197,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     } catch (_) {}
   }
 
-  Widget _infoRow(String k, String v) {
+  Widget _infoRow(String k, String v, {TextStyle? valueStyle}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4184,7 +4209,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           ),
         ),
         const SizedBox(width: 6),
-        Expanded(child: Text(v.isNotEmpty ? v : '−')),
+        Expanded(child: Text(v.isNotEmpty ? v : '−', style: valueStyle)),
       ],
     );
   }
@@ -4212,6 +4237,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     required VoidCallback onPressed,
     required IconData icon,
     required String label,
+    Color iconColor = Colors.black87,
   }) {
     return InkWell(
       onTap: onPressed,
@@ -4222,7 +4248,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: Colors.black87),
+              Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
@@ -4308,9 +4334,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                   ? r['user_id'] as int
                   : int.tryParse(r['user_id']?.toString() ?? '');
           final id =
-              r['port_id'] is int
-                  ? r['port_id'] as int
-                  : int.tryParse(r['port_id']?.toString() ?? '');
+              r['spot_id'] is int
+                  ? r['spot_id'] as int
+                  : int.tryParse(r['spot_id']?.toString() ?? '');
           final flag =
               r['flag'] is int
                   ? r['flag'] as int
@@ -4356,9 +4382,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       Map<String, dynamic>? hit;
       for (final r in rows) {
         final rid =
-            r['port_id'] is int
-                ? r['port_id'] as int
-                : int.tryParse(r['port_id']?.toString() ?? '');
+            r['spot_id'] is int
+                ? r['spot_id'] as int
+                : int.tryParse(r['spot_id']?.toString() ?? '');
         if (rid == fallbackId) {
           hit = r;
           break;
@@ -4378,7 +4404,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               : int.tryParse(hit['todoufuken_id']?.toString() ?? '') ??
                   int.tryParse(hit['pref_id_from_port']?.toString() ?? '');
       await Common.instance.saveSelectedTeibou(
-        (hit['port_name'] ?? '').toString(),
+        (hit['spot_name'] ?? '').toString(),
         np ?? Common.instance.tidePoint,
         id: fallbackId,
         lat: dlat,
@@ -4400,9 +4426,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                 : int.tryParse(r['flag']?.toString() ?? '');
         if (flag == -2 || flag == -3) continue;
         final int? portId =
-            r['port_id'] is int
-                ? r['port_id'] as int
-                : int.tryParse(r['port_id']?.toString() ?? '');
+            r['spot_id'] is int
+                ? r['spot_id'] as int
+                : int.tryParse(r['spot_id']?.toString() ?? '');
         if (portId == null || !_myDiarySpotIds.contains(portId)) continue;
         final dlat = _toDouble(r['latitude']);
         final dlng = _toDouble(r['longitude']);
@@ -4518,7 +4544,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           if (dlat == null || dlng == null) continue;
           final d = _distanceKm(lat, lng, dlat, dlng);
           if (d <= 30 && !(dlat == lat && dlng == lng)) {
-            final name = (r['port_name'] ?? '').toString();
+            final name = (r['spot_name'] ?? '').toString();
             set.add(
               am.Annotation(
                 annotationId: am.AnnotationId('n${idx++}'),
@@ -4613,7 +4639,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
 
   Future<Map<int, String>> _loadSpotNamesById() async {
     final db = await SioDatabase().database;
-    var rows = await db.query('teibou');
+    var rows = await db.query('spots');
     if (rows.isEmpty) {
       try {
         rows = await SioDatabase().getAllTeibouWithPrefecture();
@@ -4621,8 +4647,8 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     }
     final spotNames = <int, String>{};
     for (final r in rows) {
-      final id = int.tryParse(r['port_id']?.toString() ?? '');
-      final name = (r['port_name'] ?? '').toString();
+      final id = int.tryParse(r['spot_id']?.toString() ?? '');
+      final name = (r['spot_name'] ?? '').toString();
       if (id != null && name.isNotEmpty) spotNames[id] = name;
     }
     return spotNames;
@@ -5336,9 +5362,9 @@ class _SlidingContent extends StatelessWidget {
         if (sid != null && sid > 0) {
           for (final r in rows) {
             final rid =
-                r['port_id'] is int
-                    ? r['port_id'] as int
-                    : int.tryParse(r['port_id']?.toString() ?? '');
+                r['spot_id'] is int
+                    ? r['spot_id'] as int
+                    : int.tryParse(r['spot_id']?.toString() ?? '');
             if (rid == sid) {
               hit = r;
               break;
@@ -5347,7 +5373,7 @@ class _SlidingContent extends StatelessWidget {
         }
       } catch (_) {}
       hit ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-        (r) => ((r?['port_name'] ?? '').toString() == name),
+        (r) => ((r?['spot_name'] ?? '').toString() == name),
         orElse: () => null,
       );
       if (hit != null) {

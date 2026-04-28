@@ -125,7 +125,17 @@ try {
     if ($userRow) {
         $postsBlocked = !empty($userRow['posts_blocked']) && ((int)$userRow['posts_blocked'] === 1);
         $untilRaw = isset($userRow['posts_blocked_until']) ? trim((string)$userRow['posts_blocked_until']) : '';
-        $postsTempBlocked = ($untilRaw !== '' && strtolower($untilRaw) !== 'null' && $untilRaw !== '0');
+        $postsTempBlocked = false;
+        $untilLower = strtolower($untilRaw);
+        if ($untilRaw !== '' && $untilLower !== 'null' && $untilRaw !== '0' && $untilRaw !== '0000-00-00 00:00:00') {
+            try {
+                $until = new DateTime($untilRaw, new DateTimeZone('Asia/Tokyo'));
+                $nowJst = new DateTime('now', new DateTimeZone('Asia/Tokyo'));
+                $postsTempBlocked = ($until > $nowJst);
+            } catch (Exception $e) {
+                $postsTempBlocked = false;
+            }
+        }
         if ($postsBlocked) {
             http_response_code(403);
             echo json_encode([

@@ -22,7 +22,7 @@ $pref_id = isset($_POST['todoufuken_id']) ? intval($_POST['todoufuken_id']) : 0;
 $private = isset($_POST['private']) ? intval($_POST['private']) : 0; // 0:公開,1:非公開
 $private = ($private === 1) ? 1 : 0; // 正規化
 $flag = isset($_POST['flag']) ? intval($_POST['flag']) : -1; // -1:申請中, 1:承認, -2:非承認, -3:取り下げ 等
-$port_id_post = isset($_POST['port_id']) ? intval($_POST['port_id']) : 0;
+$spot_id_post = isset($_POST['spot_id']) ? intval($_POST['spot_id']) : (isset($_POST['port_id']) ? intval($_POST['port_id']) : 0);
 $mail_action = isset($_POST['mail_action']) ? trim((string)$_POST['mail_action']) : '';
 $mail_reason = isset($_POST['mail_reason']) ? trim((string)$_POST['mail_reason']) : '';
 $actor_user_id = isset($_POST['actor_user_id']) ? intval($_POST['actor_user_id']) : 0;
@@ -106,7 +106,7 @@ function spot_mail_template($action) {
 }
 
 // バリデーション
-if ($pref_id <= 0 && $port_id_post <= 0) {
+if ($pref_id <= 0 && $spot_id_post <= 0) {
     http_response_code(400);
     echo json_encode(['result' => 'ng', 'reason' => '都道府県が不明です']);
     exit;
@@ -139,9 +139,9 @@ try {
     // トランザクション開始
     $pdo->beginTransaction();
 
-    if ($port_id_post > 0) {
-        $sel = $pdo->prepare("SELECT port_id, user_id FROM teibou WHERE port_id = :port_id LIMIT 1 FOR UPDATE");
-        $sel->execute([':port_id' => $port_id_post]);
+    if ($spot_id_post > 0) {
+        $sel = $pdo->prepare("SELECT spot_id, user_id FROM spots WHERE spot_id = :spot_id LIMIT 1 FOR UPDATE");
+        $sel->execute([':spot_id' => $spot_id_post]);
         $current = $sel->fetch(PDO::FETCH_ASSOC);
         if (!$current) {
             $pdo->rollBack();
@@ -153,8 +153,8 @@ try {
         $save_user_id = ($owner_user_id > 0) ? $owner_user_id : $user_id;
 
         // UPDATE（承認/非承認/編集）
-        $up = $pdo->prepare("UPDATE teibou SET 
-            port_name=:port_name,
+        $up = $pdo->prepare("UPDATE spots SET 
+            spot_name=:spot_name,
             furigana=:furigana,
             j_yomi=:j_yomi,
             kubun=:kubun,
@@ -165,9 +165,9 @@ try {
             flag=:flag,
             private=:private,
             user_id=:user_id
-          WHERE port_id=:port_id");
+          WHERE spot_id=:spot_id");
         $up->execute([
-            ':port_name' => $name,
+            ':spot_name' => $name,
             ':furigana'  => $yomi,
             ':j_yomi'    => $yomi,
             ':kubun'     => $kubun,
@@ -178,7 +178,7 @@ try {
             ':flag'      => $flag,
             ':private'   => $private,
             ':user_id'   => $save_user_id,
-            ':port_id'   => $port_id_post,
+            ':spot_id'   => $spot_id_post,
         ]);
 
         if ($mail_action !== '') {
@@ -222,34 +222,34 @@ try {
 
         $pdo->commit();
         http_response_code(200);
-        echo json_encode(['result' => 'success', 'port_id' => $port_id_post]);
+        echo json_encode(['result' => 'success', 'spot_id' => $spot_id_post, 'port_id' => $spot_id_post]);
     } else {
         // INSERT（flag は入力があれば優先。通常は -1）
         $min = $pref_id * 100000;
         $max = $min + 99999;
-        $q = $pdo->prepare("SELECT port_id FROM teibou WHERE port_id BETWEEN :min AND :max ORDER BY port_id DESC LIMIT 1 FOR UPDATE");
+        $q = $pdo->prepare("SELECT spot_id FROM spots WHERE spot_id BETWEEN :min AND :max ORDER BY spot_id DESC LIMIT 1 FOR UPDATE");
         $q->execute([':min' => $min, ':max' => $max]);
         $row = $q->fetch(PDO::FETCH_ASSOC);
-        if ($row && isset($row['port_id'])) {
-            $new_port_id = intval($row['port_id']) + 1;
+        if ($row && isset($row['spot_id'])) {
+            $new_spot_id = intval($row['spot_id']) + 1;
         } else {
-            $new_port_id = $min + 1;
+            $new_spot_id = $min + 1;
         }
-        if ($new_port_id > $max) {
+        if ($new_spot_id > $max) {
             $pdo->rollBack();
             http_response_code(400);
             echo json_encode(['result' => 'ng', 'reason' => '当該都道府県のID上限に達しました']);
             exit;
         }
-        $sql = "INSERT INTO teibou (
-            port_id, port_name, furigana, j_yomi, kubun, address, latitude, longitude, note, flag, private, user_id
+        $sql = "INSERT INTO spots (
+            spot_id, spot_name, furigana, j_yomi, kubun, address, latitude, longitude, note, flag, private, user_id
           ) VALUES (
-            :port_id, :port_name, :furigana, :j_yomi, :kubun, :address, :lat, :lng, :note, :flag, :private, :user_id
+            :spot_id, :spot_name, :furigana, :j_yomi, :kubun, :address, :lat, :lng, :note, :flag, :private, :user_id
           )";
         $ins = $pdo->prepare($sql);
         $ins->execute([
-            ':port_id'   => $new_port_id,
-            ':port_name' => $name,
+            ':spot_id'   => $new_spot_id,
+            ':spot_name' => $name,
             ':furigana'  => $yomi,
             ':j_yomi'    => $yomi,
             ':kubun'     => $kubun,
@@ -263,7 +263,7 @@ try {
         ]);
         $pdo->commit();
         http_response_code(200);
-        echo json_encode(['result' => 'success', 'port_id' => $new_port_id]);
+        echo json_encode(['result' => 'success', 'spot_id' => $new_spot_id, 'port_id' => $new_spot_id]);
     }
 } catch (PDOException $e) {
     if (isset($pdo) && $pdo->inTransaction()) {

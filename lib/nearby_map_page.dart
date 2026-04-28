@@ -81,7 +81,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       final extras = <Map<String, dynamic>>[];
       try {
         final db = await SioDatabase().database;
-        final rows = await db.query('teibou');
+        final rows = await db.query('spots');
         // 既存ID集合
         final existingIds = <int>{};
         for (final e in _cands) {
@@ -90,8 +90,8 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
         }
         final tmp = <Map<String, dynamic>>[];
         for (final r in rows) {
-          final id = int.tryParse(r['port_id']?.toString() ?? '');
-          final name = (r['port_name'] ?? '').toString();
+          final id = int.tryParse(r['spot_id']?.toString() ?? '');
+          final name = (r['spot_name'] ?? '').toString();
           final lat = (r['latitude'] as num).toDouble();
           final lng = (r['longitude'] as num).toDouble();
           final d = _dist(cLat, cLng, lat, lng);
@@ -116,11 +116,10 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
         }
         tmp.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
         // 必要数だけ追加（合計最大件数を目標）
-        final need =
-            (kNearbyMapMaxMarkerCount - _cands.length).clamp(
-              0,
-              kNearbyMapMaxMarkerCount,
-            );
+        final need = (kNearbyMapMaxMarkerCount - _cands.length).clamp(
+          0,
+          kNearbyMapMaxMarkerCount,
+        );
         extras.addAll(tmp.take(need));
       } catch (_) {}
 
@@ -133,14 +132,14 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     if (widget.centerLat != null && widget.centerLng != null) {
       try {
         final db = await SioDatabase().database;
-        final rows = await db.query('teibou');
+        final rows = await db.query('spots');
         final clat = widget.centerLat!;
         final clng = widget.centerLng!;
         final radiusM = (widget.radiusKm ?? kNearbyMapSearchRadiusKm) * 1000.0;
         final cand = <Map<String, dynamic>>[];
         for (final r in rows) {
-          final id = int.tryParse(r['port_id']?.toString() ?? '');
-          final name = (r['port_name'] ?? '').toString();
+          final id = int.tryParse(r['spot_id']?.toString() ?? '');
+          final name = (r['spot_name'] ?? '').toString();
           final lat = (r['latitude'] as num).toDouble();
           final lng = (r['longitude'] as num).toDouble();
           final d = _dist(clat, clng, lat, lng);

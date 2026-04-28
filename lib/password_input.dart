@@ -10,10 +10,7 @@ import 'main.dart';
 
 class PasswordInput extends StatefulWidget {
   final String email;
-  const  PasswordInput({
-    Key? key,
-    required this.email,
-  }) : super(key: key);
+  const PasswordInput({Key? key, required this.email}) : super(key: key);
 
   @override
   _PasswordInputState createState() => _PasswordInputState();
@@ -21,13 +18,17 @@ class PasswordInput extends StatefulWidget {
 
 class _PasswordInputState extends State<PasswordInput> {
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   // 表示するエラーメッセージ
   String? _errorMessage;
 
   // サーバーにユーザー登録を依頼する処理
-  Future<Map<String, dynamic>> RegistPassword(String email, String password) async {
+  Future<Map<String, dynamic>> RegistPassword(
+    String email,
+    String password,
+  ) async {
     // ADDED: UUID を user_info から取得
     final info = await loadUserInfo() ?? await getOrInitUserInfo();
     final response = await http.post(
@@ -44,13 +45,14 @@ class _PasswordInputState extends State<PasswordInput> {
     if (response.statusCode == 200) {
       // サーバー側で JSON エンコードされた配列を返す前提
       return json.decode(response.body);
-    } else if(response.statusCode == 500) {
+    } else if (response.statusCode == 500) {
       throw Exception(json.decode(response.body)['reason']);
     } else {
-      throw Exception('Failed to register user. Status code: ${response.statusCode}');
+      throw Exception(
+        'Failed to register user. Status code: ${response.statusCode}',
+      );
     }
   }
-
 
   // 「登録」ボタン押下時の処理
   Future<void> _resetpassword() async {
@@ -72,7 +74,7 @@ class _PasswordInputState extends State<PasswordInput> {
     // パスワード確認が未入力の場合
     if (confirmPassword.isEmpty) {
       setState(() {
-         // "パスワード確認を入力してください。"
+        // "パスワード確認を入力してください。"
         _errorMessage = ErrorMessage.instance.pleaseInputConfirmPassword;
       });
       return;
@@ -85,7 +87,7 @@ class _PasswordInputState extends State<PasswordInput> {
       });
       return;
     }
-    
+
     // パスワードが推奨パターンに沿っているか
     if (!Common.instance.isValidPassword(password)) {
       setState(() {
@@ -103,17 +105,17 @@ class _PasswordInputState extends State<PasswordInput> {
       // registed: すでに同一メールアドレスユーザあり
       // error: 入力情報不正　(無効なメールアドレス形式、パスワード不正)
 
-      if (responseData['result'] == "OK")
-      {
+      if (responseData['result'] == "OK") {
         Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => CertificationResult(action: "edit_password")),
+          context,
+          MaterialPageRoute(
+            builder: (context) => CertificationResult(action: "edit_password"),
+          ),
         );
-    } else {
+      } else {
         setState(() {
           _errorMessage = responseData['reason'];
         });
-
       }
     } catch (e) {
       setState(() {
@@ -134,63 +136,63 @@ class _PasswordInputState extends State<PasswordInput> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(  
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-             const Text(
+            const Text(
               "新しく設定するパスワードを入力して下さい。",
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
-             const SizedBox(height: 32.0),
-                         // パスワード入力
-              TextField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: "パスワード",
-                  border: OutlineInputBorder(),
-                ),
-                obscureText: true,
+            const SizedBox(height: 32.0),
+            // パスワード入力
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "パスワード",
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16.0),
-              // パスワード確認入力
-              TextField(
-                controller: _confirmPasswordController,
-                decoration: const InputDecoration(
-                  labelText: "パスワード確認",
-                  border: OutlineInputBorder(),
-                ),
-                obscureText: true,
+              obscureText: true,
+            ),
+            const SizedBox(height: 16.0),
+            // パスワード確認入力
+            TextField(
+              controller: _confirmPasswordController,
+              decoration: const InputDecoration(
+                labelText: "パスワード確認",
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 32.0),
-                const Text(
-                  "※ パスワードは8文字以上で、大文字・小文字・数字・特殊文字を各1文字以上含む必要があります",
-                  style: TextStyle(fontSize: 12.0, color: Colors.grey),
-                ),
-              const SizedBox(height: 64.0),
+              obscureText: true,
+            ),
+            const SizedBox(height: 32.0),
+            const Text(
+              "※ パスワードは8文字以上で、大文字・小文字・数字・特殊文字を各1文字以上含む必要があります",
+              style: TextStyle(fontSize: 12.0, color: Colors.grey),
+            ),
+            const SizedBox(height: 64.0),
 
-               // 登録ボタン（横幅半分）
-              SizedBox(
-                width: MediaQuery.of(context).size.width * 0.6,
-                child: ElevatedButton(
-                  onPressed: _resetpassword,
-                  style: ElevatedButton.styleFrom(
-                   backgroundColor: AppConfig.instance.buttonBackgroundColor,
+            // 登録ボタン（横幅半分）
+            SizedBox(
+              width: MediaQuery.of(context).size.width * 0.6,
+              child: ElevatedButton(
+                onPressed: _resetpassword,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppConfig.instance.buttonBackgroundColor,
                   foregroundColor: AppConfig.instance.buttonForegroundColor,
-                   minimumSize: const Size.fromHeight(48),
-                  ),
-                  child: const Text("設　定"),
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: const Text("設　定"),
+              ),
+            ),
+            // エラーメッセージ表示
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 24.0),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red, fontSize: 16.0),
                 ),
               ),
-                            // エラーメッセージ表示
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 24.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 16.0),
-                  ),
-                ),
           ],
         ),
       ),

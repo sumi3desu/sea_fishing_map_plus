@@ -63,95 +63,105 @@ class _BackgroundCropPageState extends State<BackgroundCropPage> {
     );
   }
 
-  double _clamp(double v, double min, double max) => v < min ? min : (v > max ? max : v);
+  double _clamp(double v, double min, double max) =>
+      v < min ? min : (v > max ? max : v);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('背景のトリミング')),
-      body: _image == null
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                const phi = 1.61803398875;
-                final h = w / phi; // 黄金比
+      body:
+          _image == null
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(
+                builder: (context, constraints) {
+                  final w = constraints.maxWidth;
+                  const phi = 1.61803398875;
+                  final h = w / phi; // 黄金比
 
-                // 初期オフセット（中央寄せ）: 画像読み込み後の最初のビルド時のみ設定
-                final imgW = _image!.width.toDouble();
-                final imgH = _image!.height.toDouble();
-                final s = math.max(w / imgW, h / imgH);
-                final minY = h - imgH * s;
-                if (!_yOffsetInitialized) {
-                  _yOffset = (h - imgH * s) / 2.0;
-                  _yOffset = _clamp(_yOffset, minY, 0.0);
-                  _yOffsetInitialized = true;
-                }
+                  // 初期オフセット（中央寄せ）: 画像読み込み後の最初のビルド時のみ設定
+                  final imgW = _image!.width.toDouble();
+                  final imgH = _image!.height.toDouble();
+                  final s = math.max(w / imgW, h / imgH);
+                  final minY = h - imgH * s;
+                  if (!_yOffsetInitialized) {
+                    _yOffset = (h - imgH * s) / 2.0;
+                    _yOffset = _clamp(_yOffset, minY, 0.0);
+                    _yOffsetInitialized = true;
+                  }
 
-                return Stack(
-                  children: [
-                    // クロップ表示領域
-                    ClipRect(
-                      child: SizedBox(
-                        width: w,
-                        height: h,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onPanUpdate: (d) {
-                            setState(() {
-                              // 指の移動に追随（下へドラッグで正のdy→画像も下へ）
-                              final next = _yOffset + d.delta.dy;
-                              _yOffset = _clamp(next, minY, 0.0);
-                            });
-                          },
-                          child: CustomPaint(
-                            painter: _BgImagePainter(
-                              image: _image!,
-                              yOffset: _yOffset,
+                  return Stack(
+                    children: [
+                      // クロップ表示領域
+                      ClipRect(
+                        child: SizedBox(
+                          width: w,
+                          height: h,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onPanUpdate: (d) {
+                              setState(() {
+                                // 指の移動に追随（下へドラッグで正のdy→画像も下へ）
+                                final next = _yOffset + d.delta.dy;
+                                _yOffset = _clamp(next, minY, 0.0);
+                              });
+                            },
+                            child: CustomPaint(
+                              painter: _BgImagePainter(
+                                image: _image!,
+                                yOffset: _yOffset,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    // 周囲オーバーレイ（半透明）+ 枠
-                    IgnorePointer(
-                      child: CustomPaint(
-                        size: Size(w, h),
-                        painter: _RectOverlayPainter(),
+                      // 周囲オーバーレイ（半透明）+ 枠
+                      IgnorePointer(
+                        child: CustomPaint(
+                          size: Size(w, h),
+                          painter: _RectOverlayPainter(),
+                        ),
                       ),
-                    ),
-                    // 操作ボタン
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 16,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () async {
-                              final path = await _exportCroppedPng(context, w, h);
-                              if (!mounted) return;
-                              Navigator.pop(context, path);
-                            },
-                            child: const Text('この範囲で決定'),
-                          ),
-                          const SizedBox(width: 12),
-                          OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('キャンセル'),
-                          ),
-                        ],
+                      // 操作ボタン
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 16,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () async {
+                                final path = await _exportCroppedPng(
+                                  context,
+                                  w,
+                                  h,
+                                );
+                                if (!mounted) return;
+                                Navigator.pop(context, path);
+                              },
+                              child: const Text('この範囲で決定'),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('キャンセル'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                    ],
+                  );
+                },
+              ),
     );
   }
 
-  Future<String?> _exportCroppedPng(BuildContext context, double w, double h) async {
+  Future<String?> _exportCroppedPng(
+    BuildContext context,
+    double w,
+    double h,
+  ) async {
     try {
       final dpr = MediaQuery.of(context).devicePixelRatio;
       final outW = (w * dpr).round();
@@ -163,7 +173,10 @@ class _BackgroundCropPageState extends State<BackgroundCropPage> {
       final canvas = Canvas(recorder);
       final dst = Rect.fromLTWH(0, 0, outW.toDouble(), outH.toDouble());
 
-      final paint = Paint()..isAntiAlias = true..filterQuality = FilterQuality.high;
+      final paint =
+          Paint()
+            ..isAntiAlias = true
+            ..filterQuality = FilterQuality.high;
       canvas.drawImageRect(_image!, src, dst, paint);
 
       final picture = recorder.endRecording();
@@ -179,7 +192,10 @@ class _BackgroundCropPageState extends State<BackgroundCropPage> {
       );
 
       final dir = await getTemporaryDirectory();
-      final path = p.join(dir.path, 'bg_cropped_${DateTime.now().millisecondsSinceEpoch}.webp');
+      final path = p.join(
+        dir.path,
+        'bg_cropped_${DateTime.now().millisecondsSinceEpoch}.webp',
+      );
       final file = File(path);
       await file.writeAsBytes(webp);
       return path;
@@ -208,13 +224,17 @@ class _BgImagePainter extends CustomPainter {
     canvas.save();
     canvas.translate(xOffset, yOffset);
     canvas.scale(s, s);
-    final paint = Paint()..isAntiAlias = true..filterQuality = FilterQuality.high;
+    final paint =
+        Paint()
+          ..isAntiAlias = true
+          ..filterQuality = FilterQuality.high;
     canvas.drawImage(image, Offset.zero, paint);
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _BgImagePainter oldDelegate) => oldDelegate.image != image || oldDelegate.yOffset != yOffset;
+  bool shouldRepaint(covariant _BgImagePainter oldDelegate) =>
+      oldDelegate.image != image || oldDelegate.yOffset != yOffset;
 }
 
 class _RectOverlayPainter extends CustomPainter {
@@ -225,10 +245,11 @@ class _RectOverlayPainter extends CustomPainter {
     final rect = Offset.zero & size;
     // 外側を塗る代わりに、上下左右に帯を描く必要はなく、ここは外周ラインのみ
     // ただし見やすさのために薄い縁取りを描画
-    final stroke = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+    final stroke =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
     // 半透明のオーバーレイを敷く（矩形内も薄く暗くする）
     canvas.drawRect(rect, overlay);
     // 縁取り

@@ -42,7 +42,8 @@ class ICloudDrive {
       });
       if (map is Map) {
         final exists = (map['exists'] == true);
-        final modifiedMs = (map['modifiedMs'] is int) ? map['modifiedMs'] as int : null;
+        final modifiedMs =
+            (map['modifiedMs'] is int) ? map['modifiedMs'] as int : null;
         return ICloudFileInfo(exists: exists, modifiedMs: modifiedMs);
       }
     } catch (_) {}

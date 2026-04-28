@@ -43,6 +43,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
   bool _disliking = false; // 低評価送信中
   bool _canEdit = false;
   bool _isMine = false;
+  bool _isAdmin = false;
   String _cacheTs = '';
   bool _updated = false; // 編集で更新されたか（戻り値用）
   bool _imageCleared = false; // 編集で画像を外したか
@@ -452,10 +453,10 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       final sid = widget.item.spotId;
       if (sid == null || sid <= 0) return;
       final db = await SioDatabase().database;
-      final rows = await db.query('teibou');
+      final rows = await db.query('spots');
       Map<String, dynamic>? src;
       for (final r in rows) {
-        if ((r['port_id']?.toString() ?? '') == sid.toString()) {
+        if ((r['spot_id']?.toString() ?? '') == sid.toString()) {
           src = r;
           break;
         }
@@ -463,13 +464,13 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       if (src == null) return;
       final double sLat = (src['latitude'] as num).toDouble();
       final double sLng = (src['longitude'] as num).toDouble();
-      final String spotName = (src['port_name'] ?? '').toString();
+      final String spotName = (src['spot_name'] ?? '').toString();
       final int? prefId =
           src['todoufuken_id'] is int
               ? src['todoufuken_id'] as int
               : int.tryParse(src['todoufuken_id']?.toString() ?? '') ??
                   int.tryParse(src['pref_id_from_port']?.toString() ?? '');
-      if (_isMine) {
+      if (_isMine || ambiguousLevel == 0) {
         await Common.instance.saveSelectedTeibou(
           spotName,
           Common.instance.tidePoint,
@@ -492,7 +493,13 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => NearbyMapPage(points: points)),
+        MaterialPageRoute(
+          builder:
+              (_) => NearbyMapPage(
+                points: points,
+                highlightId: _isAdmin ? sid : null,
+              ),
+        ),
       );
     } catch (_) {}
   }
@@ -512,6 +519,7 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       if (mounted) {
         setState(() {
           _isMine = me;
+          _isAdmin = isAdmin;
           _canEdit = me || isAdmin;
         });
       }
@@ -931,12 +939,13 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                       ),
                     ),
                     if (widget.item.showNearbyButton &&
-                        (widget.item.spotId ?? 0) > 0 &&
-                        ambiguousLevel != 0)
+                        (widget.item.spotId ?? 0) > 0)
                       TextButton.icon(
                         onPressed: _openNearbyMap,
                         icon: const Icon(Icons.map),
-                        label: Text(_canEdit ? '釣れた場所' : '釣れたエリア'),
+                        label: Text(
+                          (_isMine || ambiguousLevel == 0) ? '釣れた場所' : '釣れたエリア',
+                        ),
                         style: TextButton.styleFrom(
                           foregroundColor:
                               AppConfig.instance.appBarForegroundColor,

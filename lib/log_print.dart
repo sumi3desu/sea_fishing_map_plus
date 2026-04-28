@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 /// Global logging function for server-style logs.
 ///
 /// Prints in the format:
@@ -10,7 +11,8 @@ void logPrint(String message) {
 
   final now = DateTime.now();
   String two(int n) => n.toString().padLeft(2, '0');
-  final ts = '${now.year.toString().padLeft(4, '0')}/'
+  final ts =
+      '${now.year.toString().padLeft(4, '0')}/'
       '${two(now.month)}/'
       '${two(now.day)} '
       '${two(now.hour)}:'
@@ -22,4 +24,3 @@ void logPrint(String message) {
   print('ServerLog $ts $message');
   //}
 }
-

@@ -12,7 +12,7 @@ $session_pre_key = create_session_key($ini_info['web']['url']);
 // JSONレスポンスで返すためのヘッダー設定
 header('Content-Type: application/json; charset=UTF-8');
 
-debug_log("get_teibou.php");
+debug_log("get_spots.php");
 
 
 try {
@@ -32,9 +32,11 @@ try {
     // ==============================
     $sql = "
       SELECT 
-        t.*, 
+        t.*,
+        t.spot_id AS port_id,
+        t.spot_name AS port_name,
         u.nick_name AS registrant_name
-      FROM teibou AS t
+      FROM spots AS t
       LEFT JOIN user AS u ON u.user_id = t.user_id AND u.delete_flg = 0
     ";
 

@@ -172,9 +172,9 @@ class _InputPostState extends ConsumerState<InputPost> {
           if (sid != null && sid > 0) {
             for (final r in rows) {
               final rid =
-                  r['port_id'] is int
-                      ? r['port_id'] as int
-                      : int.tryParse(r['port_id']?.toString() ?? '');
+                  r['spot_id'] is int
+                      ? r['spot_id'] as int
+                      : int.tryParse(r['spot_id']?.toString() ?? '');
               if (rid == sid) {
                 row = r;
                 break;
@@ -184,7 +184,7 @@ class _InputPostState extends ConsumerState<InputPost> {
         } catch (_) {}
         // 名前一致フォールバック
         row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-          (r) => ((r?['port_name'] ?? '').toString() == baseName),
+          (r) => ((r?['spot_name'] ?? '').toString() == baseName),
           orElse: () => null,
         );
         final int? flag =
@@ -220,9 +220,9 @@ class _InputPostState extends ConsumerState<InputPost> {
           if (sid != null && sid > 0) {
             for (final r in rows) {
               final rid =
-                  r['port_id'] is int
-                      ? r['port_id'] as int
-                      : int.tryParse(r['port_id']?.toString() ?? '');
+                  r['spot_id'] is int
+                      ? r['spot_id'] as int
+                      : int.tryParse(r['spot_id']?.toString() ?? '');
               if (rid == sid) {
                 row = r;
                 break;
@@ -231,7 +231,7 @@ class _InputPostState extends ConsumerState<InputPost> {
           }
         } catch (_) {}
         row ??= rows.cast<Map<String, dynamic>?>().firstWhere(
-          (r) => ((r?['port_name'] ?? '').toString() == baseName),
+          (r) => ((r?['spot_name'] ?? '').toString() == baseName),
           orElse: () => null,
         );
         if (row != null) {
@@ -530,7 +530,18 @@ class _InputPostState extends ConsumerState<InputPost> {
     }
     final until = info.postsBlockedUntil?.trim() ?? '';
     final lower = until.toLowerCase();
-    if (until.isEmpty || lower == 'null' || lower == '0') return null;
+    if (until.isEmpty ||
+        lower == 'null' ||
+        lower == '0' ||
+        until == '0000-00-00 00:00:00') {
+      return null;
+    }
+    try {
+      final dt = DateTime.parse(until.replaceFirst(' ', 'T')).toLocal();
+      if (!dt.isAfter(DateTime.now())) return null;
+    } catch (_) {
+      return null;
+    }
     return '投稿の送信は一時停止中です。不適切な利用が確認されました。';
   }
 
@@ -639,7 +650,7 @@ class _InputPostState extends ConsumerState<InputPost> {
   Future<List<int>> _buildCandidateSpotIds(int spotId) async {
     try {
       final db = await SioDatabase().database;
-      final rows = await db.query('teibou');
+      final rows = await db.query('spots');
       return buildCatchAreaCandidateSpotIds(
         rows: rows.cast<Map<String, dynamic>>(),
         spotId: spotId,

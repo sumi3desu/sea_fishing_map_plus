@@ -103,6 +103,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/policies/
+    - assets/onboarding/
     - assets/splash_logo.png
     - assets/moon/moon_00.png
     - assets/moon/moon_01.png

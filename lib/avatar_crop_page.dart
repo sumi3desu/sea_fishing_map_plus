@@ -51,76 +51,79 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('画像のトリミング')),
-      body: _image == null
-          ? const Center(child: CircularProgressIndicator())
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final w = constraints.maxWidth;
-                final h = constraints.maxHeight;
-                final diameter = math.min(w, h) * 0.7; // 円の直径
-                final center = Offset(w / 2, h / 2);
-                final radius = diameter / 2;
+      body:
+          _image == null
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(
+                builder: (context, constraints) {
+                  final w = constraints.maxWidth;
+                  final h = constraints.maxHeight;
+                  final diameter = math.min(w, h) * 0.7; // 円の直径
+                  final center = Offset(w / 2, h / 2);
+                  final radius = diameter / 2;
 
-                final dpr = MediaQuery.of(context).devicePixelRatio;
-                return Container(
-                  key: _overlayKey,
-                  child: Stack(
-                  children: [
-                    Center(
-                      child: InteractiveViewer(
-                        key: _ivKey,
-                        transformationController: _controller,
-                        minScale: 0.5,
-                        maxScale: 8.0,
-                        // パン・ピンチズームは InteractiveViewer に任せる
-                        panEnabled: true,
-                        boundaryMargin: const EdgeInsets.all(1000),
-                        clipBehavior: Clip.none,
-                        child: RepaintBoundary(
-                          key: _imageKey,
-                          child: SizedBox(
-                            width: _image!.width / dpr,
-                            height: _image!.height / dpr,
-                            child: RawImage(image: _image, scale: dpr),
+                  final dpr = MediaQuery.of(context).devicePixelRatio;
+                  return Container(
+                    key: _overlayKey,
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: InteractiveViewer(
+                            key: _ivKey,
+                            transformationController: _controller,
+                            minScale: 0.5,
+                            maxScale: 8.0,
+                            // パン・ピンチズームは InteractiveViewer に任せる
+                            panEnabled: true,
+                            boundaryMargin: const EdgeInsets.all(1000),
+                            clipBehavior: Clip.none,
+                            child: RepaintBoundary(
+                              key: _imageKey,
+                              child: SizedBox(
+                                width: _image!.width / dpr,
+                                height: _image!.height / dpr,
+                                child: RawImage(image: _image, scale: dpr),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    // 円形オーバーレイ
-                    IgnorePointer(
-                      child: CustomPaint(
-                        size: Size(w, h),
-                        painter: _CircleOverlayPainter(diameter: diameter),
-                      ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 16,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton(
-                            onPressed: () async {
-                              final path = await _exportCroppedPng(diameter);
-                              if (!mounted) return;
-                              Navigator.pop(context, path);
-                            },
-                            child: const Text('この範囲で決定'),
+                        // 円形オーバーレイ
+                        IgnorePointer(
+                          child: CustomPaint(
+                            size: Size(w, h),
+                            painter: _CircleOverlayPainter(diameter: diameter),
                           ),
-                          const SizedBox(width: 12),
-                          OutlinedButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('キャンセル'),
+                        ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 16,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: () async {
+                                  final path = await _exportCroppedPng(
+                                    diameter,
+                                  );
+                                  if (!mounted) return;
+                                  Navigator.pop(context, path);
+                                },
+                                child: const Text('この範囲で決定'),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('キャンセル'),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
     );
   }
 
@@ -134,7 +137,12 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
       final cx = size.width / 2;
       final cy = size.height / 2;
       final r = diameterLogical / 2;
-      final cropRectOverlay = Rect.fromLTWH(cx - r, cy - r, diameterLogical, diameterLogical);
+      final cropRectOverlay = Rect.fromLTWH(
+        cx - r,
+        cy - r,
+        diameterLogical,
+        diameterLogical,
+      );
 
       // Overlay -> 画像子(RenderBox)の厳密行列を取得し、直接子座標へ写像
       final imgCtx = _imageKey.currentContext;
@@ -145,17 +153,19 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
         final v = m.transform3(vm.Vector3(p.dx, p.dy, 0));
         return Offset(v.x, v.y);
       }
+
       final p1 = mapPt(ov2img, cropRectOverlay.topLeft);
       final p2 = mapPt(ov2img, cropRectOverlay.topRight);
       final p3 = mapPt(ov2img, cropRectOverlay.bottomLeft);
       final p4 = mapPt(ov2img, cropRectOverlay.bottomRight);
-      final cropInChild = (() {
-        final left = [p1.dx, p2.dx, p3.dx, p4.dx].reduce(math.min);
-        final top = [p1.dy, p2.dy, p3.dy, p4.dy].reduce(math.min);
-        final right = [p1.dx, p2.dx, p3.dx, p4.dx].reduce(math.max);
-        final bottom = [p1.dy, p2.dy, p3.dy, p4.dy].reduce(math.max);
-        return Rect.fromLTRB(left, top, right, bottom);
-      })();
+      final cropInChild =
+          (() {
+            final left = [p1.dx, p2.dx, p3.dx, p4.dx].reduce(math.min);
+            final top = [p1.dy, p2.dy, p3.dy, p4.dy].reduce(math.min);
+            final right = [p1.dx, p2.dx, p3.dx, p4.dx].reduce(math.max);
+            final bottom = [p1.dy, p2.dy, p3.dy, p4.dy].reduce(math.max);
+            return Rect.fromLTRB(left, top, right, bottom);
+          })();
 
       // child座標は論理座標（RawImage は scale=dpr で表示）なので、ピクセルに変換
       final dpr = MediaQuery.of(overlayCtx).devicePixelRatio;
@@ -177,12 +187,21 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
       canvas.drawRect(dst, bgPaint);
 
       // 円でクリップ
-      final clipPath = Path()..addOval(Rect.fromCircle(center: Offset(outSize / 2, outSize / 2), radius: outSize / 2));
+      final clipPath =
+          Path()..addOval(
+            Rect.fromCircle(
+              center: Offset(outSize / 2, outSize / 2),
+              radius: outSize / 2,
+            ),
+          );
       canvas.save();
       canvas.clipPath(clipPath);
 
       // 画像を描画
-      final paint = Paint()..isAntiAlias = true..filterQuality = FilterQuality.high;
+      final paint =
+          Paint()
+            ..isAntiAlias = true
+            ..filterQuality = FilterQuality.high;
       canvas.drawImageRect(_image!, srcPx, dst, paint);
       canvas.restore();
 
@@ -199,7 +218,10 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
       );
 
       final dir = await getTemporaryDirectory();
-      final path = p.join(dir.path, 'avatar_cropped_${DateTime.now().millisecondsSinceEpoch}.webp');
+      final path = p.join(
+        dir.path,
+        'avatar_cropped_${DateTime.now().millisecondsSinceEpoch}.webp',
+      );
       final file = File(path);
       await file.writeAsBytes(webp);
       return path;
@@ -225,13 +247,15 @@ class _CircleOverlayPainter extends CustomPainter {
     canvas.drawCircle(center, r, clearPaint);
     canvas.restore();
     // 円の枠
-    final stroke = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+    final stroke =
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
     canvas.drawCircle(center, r, stroke);
   }
 
   @override
-  bool shouldRepaint(covariant _CircleOverlayPainter oldDelegate) => oldDelegate.diameter != diameter;
+  bool shouldRepaint(covariant _CircleOverlayPainter oldDelegate) =>
+      oldDelegate.diameter != diameter;
 }

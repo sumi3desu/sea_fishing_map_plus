@@ -24,7 +24,7 @@ List<Map<String, dynamic>> buildCatchAreaPoints({
 }) {
   Map<String, dynamic>? src;
   for (final r in rows) {
-    if ((r['port_id']?.toString() ?? '') == spotId.toString()) {
+    if ((r['spot_id']?.toString() ?? '') == spotId.toString()) {
       src = r;
       break;
     }
@@ -41,8 +41,8 @@ List<Map<String, dynamic>> buildCatchAreaPoints({
         final lng = (r['longitude'] as num).toDouble();
         final d = _distanceMeters(sLat, sLng, lat, lng);
         return <String, dynamic>{
-          'id': int.tryParse(r['port_id']?.toString() ?? ''),
-          'name': (r['port_name'] ?? '').toString(),
+          'id': int.tryParse(r['spot_id']?.toString() ?? ''),
+          'name': (r['spot_name'] ?? '').toString(),
           'address': (r['address'] ?? '').toString(),
           'lat': lat,
           'lng': lng,

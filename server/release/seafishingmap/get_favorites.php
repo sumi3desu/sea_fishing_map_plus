@@ -12,7 +12,7 @@ $session_pre_key = create_session_key($ini_info['web']['url']);
 // JSONレスポンスで返すためのヘッダー設定
 header('Content-Type: application/json; charset=UTF-8');
 
-debug_log("get_teibou.php");
+debug_log("get_favorites.php");
 
 
 try {

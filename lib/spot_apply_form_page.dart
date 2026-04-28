@@ -29,7 +29,7 @@ class SpotApplyFormPage extends StatefulWidget {
   final String? initialAddress; // 都道府県を除いた住所
   final String? initialPrefName; // 都道府県名
   final int? initialPrivate; // 0/1
-  final int? initialPortId; // 既存のport_id（編集時）
+  final int? initialPortId; // 既存のspot_id（編集時）
   final int? applicantUserId; // 申請者 user_id（admin 編集時も保持）
   final bool canModerate; // 承認/非承認を表示可能か（admin からの遷移時のみ true）
   final String? buttonMode; // confirmOnly / withdrawOnly

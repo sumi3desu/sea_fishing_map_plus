@@ -40,7 +40,7 @@ class SpotApplyConfirmPage extends StatefulWidget {
   final String? titleOverride; // 確認/承認/非承認
   final String? submitLabel; // 申請/承認/非承認/申請取り下げ
   final int? overrideFlag; // null: 通常申請、1:承認、-2:非承認、-3:申請取り下げ
-  final int? portId; // 既存のport_id（編集時）
+  final int? portId; // 既存のspot_id（編集時）
   final int? applicantUserId; // 編集対象の申請者 user_id
   final String? mailAction; // confirm / approve / deny
 
@@ -150,7 +150,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
               'user_id': (widget.applicantUserId ?? info.userId).toString(),
               'private': widget.privateFlag.toString(),
               if (widget.portId != null && widget.portId! > 0)
-                'port_id': widget.portId.toString(),
+                'spot_id': widget.portId.toString(),
               if (widget.overrideFlag != null)
                 'flag': widget.overrideFlag.toString(),
               if (_needsMail && sendMail) 'mail_action': widget.mailAction!,
@@ -177,8 +177,8 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
           if (result == 'success') {
             ok = true;
             msg = (!sendMail && _canSkipMail) ? '編集内容を反映しました' : _successMessage;
-            // 新規port_idを受領したら保存
-            final pid = (data is Map) ? data['port_id'] : null;
+            // 新規spot_idを受領したら保存
+            final pid = (data is Map) ? data['spot_id'] : null;
             if (pid is int)
               newPortId = pid;
             else if (pid is String)
@@ -205,11 +205,11 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
         try {
           final db = await SioDatabase().database;
           final row = <String, Object?>{
-            'port_id':
+            'spot_id':
                 (widget.portId != null && widget.portId! > 0)
                     ? widget.portId!
                     : (newPortId ?? 0),
-            'port_name': widget.name,
+            'spot_name': widget.name,
             'furigana': widget.yomi,
             'j_yomi': widget.yomi,
             'kubun': widget.kind,
@@ -223,7 +223,7 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
             'create_at': DateTime.now().toIso8601String(),
           };
           await db.insert(
-            'teibou',
+            'spots',
             row,
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
