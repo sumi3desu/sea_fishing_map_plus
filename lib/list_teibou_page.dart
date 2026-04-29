@@ -32,7 +32,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   final List<String> _regions = const [
     'お気に入り',
     '近くの釣り場',
-    'マイ釣り場',
+    '釣り日記',
     '北海道',
     '東北',
     '関東',
@@ -76,6 +76,24 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
 
   Set<int> get _myDiarySpotIds => <int>{..._myCatchSpotIds, ..._myOwnedSpotIds};
 
+  List<String> get _visibleRegions {
+    if (Common.instance.fishingDiaryMode) {
+      return const ['釣り日記'];
+    }
+    return _regions.where((r) => r != '釣り日記').toList(growable: false);
+  }
+
+  String get _selectedRegionName {
+    if (Common.instance.fishingDiaryMode) {
+      return '釣り日記';
+    }
+    final selected =
+        (_selectedRegionIndex >= 0 && _selectedRegionIndex < _regions.length)
+            ? _regions[_selectedRegionIndex]
+            : _regions.first;
+    return selected == '釣り日記' ? _regions.first : selected;
+  }
+
   void _showNearbyInfoDialog() {
     _showInfoDialog(
       title: '近くの釣り場とは',
@@ -83,10 +101,18 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     );
   }
 
+  void _showFavoritesInfoDialog() {
+    _showInfoDialog(
+      title: 'お気に入りとは',
+      message:
+          '各種の釣り場一覧を左スワイプして出るオレンジのお気に入りアイコンのタップで「お気に入り」に登録されたり解除されたりします。\nまた「釣り場MAP」で選択状態(赤ピン)の釣り場をタップすると「釣り場詳細」ダイアログが表示されますが、そこでも「お気に入り」ボタンがあります。\nお気に入りに登録している近辺で釣果の投稿があれば通知されます。\n※通知は「設定」画面の通知設定でOFFするこtができます。',
+    );
+  }
+
   void _showMySpotsInfoDialog() {
     _showInfoDialog(
-      title: 'マイ釣り場とは',
-      message: '表示ボタンをタップすると自分が投稿した釣り場をリストアップします',
+      title: '釣り日記とは',
+      message: '自分が釣り場申請した釣り場と釣果投稿した釣り場をリストアップします。',
     );
   }
 
@@ -181,7 +207,16 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     if (!mounted) return;
     if (_lastFishingDiaryMode != Common.instance.fishingDiaryMode) {
       _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
-      setState(() {});
+      setState(() {
+        if (Common.instance.fishingDiaryMode) {
+          final idx = _regions.indexOf('釣り日記');
+          if (idx >= 0) _selectedRegionIndex = idx;
+        } else if (_selectedRegionIndex >= 0 &&
+            _selectedRegionIndex < _regions.length &&
+            _regions[_selectedRegionIndex] == '釣り日記') {
+          _selectedRegionIndex = 0;
+        }
+      });
     }
     if (_lastTeibouReloadTick != Common.instance.teibouReloadTick) {
       _lastTeibouReloadTick = Common.instance.teibouReloadTick;
@@ -479,7 +514,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         row['flag'] is int
             ? row['flag'] as int
             : int.tryParse(row['flag']?.toString() ?? '');
-    if (flag == -3) return true;
+    if (flag == -2 || flag == -3) return true;
     if (flag != -1) return false;
     final ownerId =
         row['user_id'] is int
@@ -790,7 +825,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     }
 
     // 地方でフィルタ
-    final selectedRegion = _regions[_selectedRegionIndex];
+    final selectedRegion = _selectedRegionName;
     // 「近くの釣り場」タブが表示され、一覧が空なら一度だけ自動検索を実行
     if (selectedRegion == '近くの釣り場' &&
         !_nearbyLoading &&
@@ -815,7 +850,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           }).toList();
     } else if (selectedRegion == '近くの釣り場') {
       filtered = List<Map<String, dynamic>>.from(_nearby); // 検索順（距離昇順）のまま
-    } else if (selectedRegion == 'マイ釣り場') {
+    } else if (selectedRegion == '釣り日記') {
       filtered =
           Common.instance.fishingDiaryMode
               ? _rows.where((r) {
@@ -853,7 +888,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     // 既に都道府県ID順、読み順で並んでいる想定（SQLのORDER BY）。
     // 表示のために都道府県ごとにグループ化。
     final List<_PrefGroup> groups = [];
-    if (selectedRegion == '近くの釣り場' || selectedRegion == 'マイ釣り場') {
+    if (selectedRegion == '近くの釣り場' || selectedRegion == '釣り日記') {
       // グループ化せず、検索結果をそのまま一括で表示
       groups.add(_PrefGroup(name: '検索結果', id: null, rows: filtered));
     } else {
@@ -997,24 +1032,6 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 ],
               ),
             ),
-          ] else if (selectedRegion == 'マイ釣り場') ...[
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
-              child: Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _mySpotsLoading ? null : _onShowMySpots,
-                    icon: const Icon(Icons.visibility),
-                    label: const Text('表示'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade200,
-                      foregroundColor: Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
           const Divider(height: 1),
           Expanded(
@@ -1026,10 +1043,10 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                             ? (_nearbyLoading
                                 ? '検索中...'
                                 : (_nearbyError ?? '「表示」を押して現在地から近い釣り場を表示'))
-                            : selectedRegion == 'マイ釣り場'
+                            : selectedRegion == '釣り日記'
                             ? (_mySpotsLoading
                                 ? '表示中...'
-                                : (_mySpotsError ?? '「表示」を押して自分の釣果がある釣り場を表示'))
+                                : (_mySpotsError ?? '「表示」を押して釣り日記の釣り場を表示'))
                             : 'この地方のデータがありません',
                       ),
                     )
@@ -1042,7 +1059,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       itemBuilder: (context, index) {
                         final g = groups[index];
                         if (selectedRegion == '近くの釣り場' ||
-                            selectedRegion == 'マイ釣り場') {
+                            selectedRegion == '釣り日記') {
                           // ヘッダー無しでそのまま並べる（近い順）
                           return Column(
                             children:
@@ -1310,19 +1327,23 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
   }
 
   Widget _buildRegionTabs() {
+    final visibleRegions = _visibleRegions;
+    final selectedRegion = _selectedRegionName;
     return SizedBox(
       height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
-          children: List.generate(_regions.length, (i) {
-            final selected = i == _selectedRegionIndex;
-            final region = _regions[i];
+          children: List.generate(visibleRegions.length, (i) {
+            final region = visibleRegions[i];
+            final selected = region == selectedRegion;
             final VoidCallback? infoTap =
-                region == '近くの釣り場'
+                region == 'お気に入り'
+                    ? _showFavoritesInfoDialog
+                    : region == '近くの釣り場'
                     ? _showNearbyInfoDialog
-                    : region == 'マイ釣り場'
+                    : region == '釣り日記'
                     ? _showMySpotsInfoDialog
                     : null;
             return Padding(
@@ -1331,12 +1352,27 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ChoiceChip(
-                    label: Text(region),
+                    label:
+                        region == 'お気に入り'
+                            ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.bookmark,
+                                  size: 16,
+                                  color: Colors.orange,
+                                ),
+                                SizedBox(width: 4),
+                                Text('お気に入り'),
+                              ],
+                            )
+                            : Text(region),
                     selected: selected,
                     onSelected: (v) {
                       if (!v) return;
                       setState(() {
-                        _selectedRegionIndex = i;
+                        final idx = _regions.indexOf(region);
+                        if (idx >= 0) _selectedRegionIndex = idx;
                       });
                     },
                   ),
@@ -1347,7 +1383,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       child: IconButton(
                         onPressed: infoTap,
                         icon: const Icon(Icons.info_outline, size: 16),
-                        tooltip: region == '近くの釣り場' ? '近くの釣り場とは' : 'マイ釣り場とは',
+                        tooltip:
+                            region == 'お気に入り'
+                                ? 'お気に入りとは'
+                                : region == '近くの釣り場'
+                                ? '近くの釣り場とは'
+                                : '釣り日記とは',
                         padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -1377,7 +1418,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
             : int.tryParse(row['spot_id']?.toString() ?? '');
     String title = portName;
     // 近くの釣り場タブでは順位番号（①〜⑩）を付与
-    if (_regions[_selectedRegionIndex] == '近くの釣り場' && portId != null) {
+    if (_selectedRegionName == '近くの釣り場' && portId != null) {
       final n = _nearbyNumberById[portId];
       if (n != null) {
         title = '${_circledNum(n)} $title';
@@ -1411,11 +1452,12 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     final isSelected = portId != null && _selectedTeibouId == portId;
     String? nearest;
     int? distanceMeters;
-    final bool isNearbyTab = (_regions[_selectedRegionIndex] == '近くの釣り場');
-    final bool isMySpotTab = (_regions[_selectedRegionIndex] == 'マイ釣り場');
+    final bool isNearbyTab = (_selectedRegionName == '近くの釣り場');
+    final bool isMySpotTab = (_selectedRegionName == '釣り日記');
     final _MySpotSummary? mySummary =
         (portId != null) ? _mySpotSummaryById[portId] : null;
-    final bool hasMyCatch = portId != null && _myCatchSpotIds.contains(portId);
+    final bool isMyOwnedSpot =
+        portId != null && _myOwnedSpotIds.contains(portId);
     if (isNearbyTab) {
       if (portId != null) distanceMeters = _nearbyMetersById[portId];
     } else if (hasPosition && !_pointsLoading && _pointCoords.isNotEmpty) {
@@ -1614,116 +1656,147 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           Common.instance.requestNavigateToTidePage();
         },
         child: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color:
-                    hasMyCatch
-                        ? const Color(0xFFFFB74D)
-                        : const Color(0xFFBDBDBD),
-                width: 8,
-              ),
-            ),
+          key:
+              (portId != null)
+                  ? _rowKeys.putIfAbsent(portId, () => GlobalKey())
+                  : null,
+          padding: const EdgeInsets.only(
+            left: 0,
+            right: 12,
+            top: 10,
+            bottom: 10,
           ),
-          child: Container(
-            key:
-                (portId != null)
-                    ? _rowKeys.putIfAbsent(portId, () => GlobalKey())
-                    : null,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration:
-                isSelected
-                    ? BoxDecoration(
-                      color: Colors.transparent,
-                      border: Border.all(color: Colors.black, width: 2.0),
-                    )
-                    : BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Colors.grey.shade300),
+          decoration:
+              isSelected
+                  ? BoxDecoration(
+                    color: Colors.transparent,
+                    border: Border.all(color: Colors.black, width: 2.0),
+                  )
+                  : BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade300),
+                    ),
+                  ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child:
+                    isMyOwnedSpot
+                        ? const Icon(
+                          Icons.add_location_alt,
+                          color: Color(0xFFFFB74D),
+                          size: 20,
+                        )
+                        : const SizedBox.shrink(),
+              ),
+              SizedBox(
+                width: 80,
+                child: _buildKubunIconOrPref(k, prefName, isPending: isPending),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.red : Colors.black,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (yomi.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          yomi,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isMySpotTab)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      rightTopLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 80,
-                  child: _buildKubunIconOrPref(
-                    k,
-                    prefName,
-                    isPending: isPending,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.red : Colors.black,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    Text(
+                      _formatCatchDate(mySummary?.lastCatchAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
                       ),
-                      if (yomi.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2.0),
-                          child: Text(
-                            yomi,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade700,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (isMySpotTab)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
+                    ),
+                    Text(
+                      '${mySummary?.catchCount ?? 0}投稿',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                )
+              else if (!hasPosition && !isNearbyTab)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
                       Text(
-                        rightTopLabel,
+                        kubunLabel,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade800,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    Text(
+                      '位置なし',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                )
+              else if (isNearbyTab)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
                       Text(
-                        _formatCatchDate(mySummary?.lastCatchAt),
+                        kubunLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (hasPosition)
+                      Text(
+                        '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,
                         ),
-                      ),
-                      Text(
-                        '${mySummary?.catchCount ?? 0}投稿',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                  )
-                else if (!hasPosition && !isNearbyTab)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (kubunLabel != null && kubunLabel.isNotEmpty)
-                        Text(
-                          kubunLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade800,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      )
+                    else
                       Text(
                         '位置なし',
                         style: TextStyle(
@@ -1731,72 +1804,40 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                           color: Colors.grey.shade600,
                         ),
                       ),
-                    ],
-                  )
-                else if (isNearbyTab)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (kubunLabel != null && kubunLabel.isNotEmpty)
-                        Text(
-                          kubunLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade800,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      if (hasPosition)
-                        Text(
-                          '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                          ),
-                        )
-                      else
-                        Text(
-                          '位置なし',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
+                    Text(
+                      distanceMeters != null
+                          ? '直線距離: ${distanceMeters}m'
+                          : '直線距離: -',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                )
+              else if (hasPosition)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (kubunLabel != null && kubunLabel.isNotEmpty)
                       Text(
-                        distanceMeters != null
-                            ? '直線距離: ${distanceMeters}m'
-                            : '直線距離: -',
+                        kubunLabel,
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade700,
+                          color: Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  )
-                else if (hasPosition)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (kubunLabel != null && kubunLabel.isNotEmpty)
-                        Text(
-                          kubunLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade800,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      Text(
-                        '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                        ),
+                    Text(
+                      '${Common.instance.roundTo5Digits(lat!)} , ${Common.instance.roundTo5Digits(lng!)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
                       ),
-                    ],
-                  ),
-              ],
-            ),
+                    ),
+                  ],
+                ),
+            ],
           ),
         ),
       ),

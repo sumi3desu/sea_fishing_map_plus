@@ -82,13 +82,16 @@ class _InputPostState extends ConsumerState<InputPost> {
       TextEditingController(); // 1000桁
   bool _emailVerified = false;
 
-  String get _screenTitle => _postType == 'catch' ? '釣果を投稿' : '環境を投稿';
+  String get _screenTitle {
+    if (widget.editMode) return '投稿を編集';
+    return _postType == 'catch' ? '釣果を投稿' : '環境を投稿';
+  }
 
   @override
   void initState() {
     super.initState();
     // ドラフトがあれば種別を上書き
-    final draftType = Common.instance.draftType;
+    final draftType = widget.editMode ? null : Common.instance.draftType;
     _postType =
         (draftType != null)
             ? draftType
@@ -328,6 +331,7 @@ class _InputPostState extends ConsumerState<InputPost> {
   }
 
   void _restoreDraftIfAny() {
+    if (widget.editMode) return;
     final c = Common.instance;
     if (c.draftType == null) return;
     if (c.draftType == 'catch') {
@@ -650,7 +654,11 @@ class _InputPostState extends ConsumerState<InputPost> {
   Future<List<int>> _buildCandidateSpotIds(int spotId) async {
     try {
       final db = await SioDatabase().database;
-      final rows = await db.query('spots');
+      final rows = await db.query(
+        'spots',
+        where: 'flag NOT IN (?, ?)',
+        whereArgs: [-2, -3],
+      );
       return buildCatchAreaCandidateSpotIds(
         rows: rows.cast<Map<String, dynamic>>(),
         spotId: spotId,
@@ -832,7 +840,7 @@ class _InputPostState extends ConsumerState<InputPost> {
                                 : TextButton.icon(
                                   onPressed:
                                       _isPostEnabled ? _submitPost : null,
-                                  icon: const Icon(Icons.send),
+                                  icon: const Icon(Icons.edit_note),
                                   label: const Text('投稿'),
                                   style: TextButton.styleFrom(
                                     foregroundColor:
@@ -881,7 +889,9 @@ class _InputPostState extends ConsumerState<InputPost> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _postType == 'catch'
+                    widget.editMode
+                        ? '釣果の投稿を編集してください。'
+                        : _postType == 'catch'
                         ? '釣果の投稿を入力してください。'
                         : '釣り場の規制/駐車場/トイレなどについての投稿を入力してください。',
                   ),

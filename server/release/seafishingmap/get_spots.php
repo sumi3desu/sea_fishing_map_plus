@@ -38,6 +38,7 @@ try {
         u.nick_name AS registrant_name
       FROM spots AS t
       LEFT JOIN user AS u ON u.user_id = t.user_id AND u.delete_flg = 0
+      WHERE COALESCE(t.flag, 0) NOT IN (-2, -3)
     ";
 
     $stmt = $pdo->prepare($sql);

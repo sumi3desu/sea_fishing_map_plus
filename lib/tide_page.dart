@@ -37,7 +37,11 @@ Future<String?> _buildCatchAreaSpotIdsCsv(int? spotId) async {
   if (spotId == null || spotId <= 0 || ambiguousLevel == 0) return null;
   try {
     final db = await SioDatabase().database;
-    final rows = await db.query('spots');
+    final rows = await db.query(
+      'spots',
+      where: 'flag NOT IN (?, ?)',
+      whereArgs: [-2, -3],
+    );
     final ids = buildCatchAreaCandidateSpotIds(
       rows: rows.cast<Map<String, dynamic>>(),
       spotId: spotId,
@@ -1524,7 +1528,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         row['flag'] is int
             ? row['flag'] as int
             : int.tryParse(row['flag']?.toString() ?? '');
-    if (flag == -3) return true;
+    if (flag == -2 || flag == -3) return true;
     if (flag != -1) return false;
     final int? ownerId =
         row['user_id'] is int
@@ -1846,6 +1850,48 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     double useLat = lat;
     double useLng = lng;
     String useName = name;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sid = prefs.getInt('selected_teibou_id');
+      if (sid != null && sid > 0) {
+        final rows = await _visibleTeibouRows();
+        Map<String, dynamic>? hit;
+        for (final r in rows) {
+          final rid =
+              r['spot_id'] is int
+                  ? r['spot_id'] as int
+                  : int.tryParse(r['spot_id']?.toString() ?? '');
+          if (rid == sid) {
+            hit = r;
+            break;
+          }
+        }
+        if (hit != null) {
+          final dlat = _toDouble(hit['latitude']);
+          final dlng = _toDouble(hit['longitude']);
+          if (dlat != null && dlng != null && !(dlat == 0.0 && dlng == 0.0)) {
+            useLat = dlat;
+            useLng = dlng;
+            useName = (hit['spot_name'] ?? useName).toString();
+            final prefId =
+                hit['todoufuken_id'] is int
+                    ? hit['todoufuken_id'] as int
+                    : int.tryParse(hit['todoufuken_id']?.toString() ?? '') ??
+                        int.tryParse(
+                          hit['pref_id_from_port']?.toString() ?? '',
+                        );
+            await Common.instance.saveSelectedTeibou(
+              useName,
+              Common.instance.selectedTeibouNearestPoint,
+              id: sid,
+              lat: useLat,
+              lng: useLng,
+              prefId: prefId,
+            );
+          }
+        }
+      }
+    } catch (_) {}
     // 追加フォールバック: 緯度経度が未保存だが名前やIDが保存されている場合、DBから取得して補完
     if ((useLat == 0.0 && useLng == 0.0) && useName.isNotEmpty) {
       try {
@@ -4025,7 +4071,10 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           _infoRow(
                             '釣り場名',
                             (() {
-                              final base = spotName;
+                              final base =
+                                  isAdmin && currentPortId != null
+                                      ? '$spotName [$currentPortId]'
+                                      : spotName;
                               return (flag == -1) ? '$base (申請中)' : base;
                             })(),
                             valueStyle: const TextStyle(

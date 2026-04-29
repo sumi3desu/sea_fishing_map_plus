@@ -500,6 +500,7 @@ class SioDatabase extends ChangeNotifier {
       FROM spots AS t
       LEFT JOIN todoufuken AS p
         ON CAST(substr(CAST(t.spot_id AS TEXT), 1, 2) AS INTEGER) = p.todoufuken_id
+      WHERE COALESCE(t.flag, 0) NOT IN (-2, -3)
       ORDER BY pref_id_from_port, t.j_yomi
     ''';
     final rows = await db.rawQuery(sql);

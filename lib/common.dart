@@ -844,8 +844,8 @@ class Common extends ChangeNotifier {
       final db = await sioDb.database;
       final rows = await db.query(
         'spots',
-        where: 'spot_id = ?',
-        whereArgs: [portId],
+        where: 'spot_id = ? AND flag NOT IN (?, ?)',
+        whereArgs: [portId, -2, -3],
         limit: 1,
       );
       if (rows.isEmpty) return false;
@@ -938,6 +938,7 @@ class Common extends ChangeNotifier {
       double best = double.infinity;
       Map<String, dynamic>? bestRow;
       for (final r in rows) {
+        if (_isRejectedSpotRow(r)) continue;
         final lat = _toDouble(r['latitude']);
         final lng = _toDouble(r['longitude']);
         if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) continue;
@@ -1025,6 +1026,7 @@ class Common extends ChangeNotifier {
       Map<String, dynamic>? pick;
 
       bool valid(Map<String, dynamic> r) {
+        if (_isRejectedSpotRow(r)) return false;
         final lat = _toDouble(r['latitude']) ?? 0.0;
         final lng = _toDouble(r['longitude']) ?? 0.0;
         return !(lat == 0.0 && lng == 0.0);
@@ -1105,6 +1107,14 @@ class Common extends ChangeNotifier {
     } catch (_) {
       // いずれも失敗なら黙って従来表示
     }
+  }
+
+  bool _isRejectedSpotRow(Map<String, dynamic> row) {
+    final flag =
+        row['flag'] is int
+            ? row['flag'] as int
+            : int.tryParse(row['flag']?.toString() ?? '');
+    return flag == -2 || flag == -3;
   }
 
   /*  void setFavoriteFlag(String prefecture, String point_name){

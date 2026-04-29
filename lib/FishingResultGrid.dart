@@ -367,6 +367,26 @@ class _FishingResultGridState extends State<FishingResultGrid>
     );
   }
 
+  void _applyUpdatedPost(int postId, Map updated) {
+    final title = (updated['title'] ?? '').toString();
+    final detail = (updated['detail'] ?? '').toString();
+    final imagePath = (updated['image_path'] ?? '').toString();
+    final thumbPath = (updated['thumb_path'] ?? '').toString();
+    setState(() {
+      for (final target in [_listItems, _items]) {
+        final idx = target.indexWhere((e) => e.postId == postId);
+        if (idx < 0) continue;
+        final old = target[idx];
+        target[idx] = old.copyWith(
+          title: title.isNotEmpty ? title : old.title,
+          detail: detail.isNotEmpty ? detail : old.detail,
+          imagePath: imagePath.isNotEmpty ? imagePath : old.imagePath,
+          thumbPath: thumbPath.isNotEmpty ? thumbPath : old.thumbPath,
+        );
+      }
+    });
+  }
+
   List<_PostGridItem> _dedupePostGridItems(
     List<_PostGridItem> incoming, {
     List<_PostGridItem> existing = const [],
@@ -843,19 +863,32 @@ class _FishingResultGridState extends State<FishingResultGrid>
               Container(
                 decoration: BoxDecoration(
                   color: isNotified ? const Color(0xFFFFF7CC) : null,
-                  border: Border(
-                    left: BorderSide(
-                      color:
-                          isMine
-                              ? const Color(0xFFFFB74D)
-                              : const Color(0xFFBDBDBD),
-                      width: 8,
-                    ),
-                  ),
                 ),
                 child: ListTile(
-                  contentPadding: const EdgeInsets.only(left: 12, right: 16),
-                  leading:
+                  contentPadding: const EdgeInsets.only(left: 0, right: 16),
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        child:
+                            isMine
+                                ? Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFB74D),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(
+                                      Icons.edit_note,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                  ),
+                                )
+                                : const SizedBox.shrink(),
+                      ),
                       (thumb != null)
                           ? ClipRRect(
                             borderRadius: BorderRadius.circular(6),
@@ -871,6 +904,8 @@ class _FishingResultGridState extends State<FishingResultGrid>
                             size: 40,
                             color: Colors.black38,
                           ),
+                    ],
+                  ),
                   title: Row(
                     children: [
                       Expanded(
@@ -991,6 +1026,9 @@ class _FishingResultGridState extends State<FishingResultGrid>
                         });
                         _saveImageTs(pid, ts);
                       }
+                      if (u && pid != null) {
+                        _applyUpdatedPost(pid, updated);
+                      }
                     }
                   },
                 ),
@@ -1060,6 +1098,28 @@ class _PostGridItem {
       thumbPath: s(j['thumb_path']),
       nickName: s(j['nick_name']) ?? s(j['nickname']) ?? s(j['nickName']),
       createAt: s(j['create_at']),
+      baseUrl: baseUrl,
+    );
+  }
+
+  _PostGridItem copyWith({
+    String? title,
+    String? detail,
+    String? imagePath,
+    String? thumbPath,
+  }) {
+    return _PostGridItem(
+      postId: postId,
+      userId: userId,
+      spotId: spotId,
+      postKind: postKind,
+      exist: exist,
+      title: title ?? this.title,
+      detail: detail ?? this.detail,
+      imagePath: imagePath ?? this.imagePath,
+      thumbPath: thumbPath ?? this.thumbPath,
+      nickName: nickName,
+      createAt: createAt,
       baseUrl: baseUrl,
     );
   }
@@ -1256,6 +1316,9 @@ extension _MosaicBuilders on _FishingResultGridState {
               });
               _saveImageTs(pid, ts);
             }
+            if (u && pid != null) {
+              _applyUpdatedPost(pid, updated);
+            }
           }
         },
         child: ClipRRect(
@@ -1278,7 +1341,7 @@ extension _MosaicBuilders on _FishingResultGridState {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
-                      Icons.person,
+                      Icons.edit_note,
                       color: Colors.white,
                       size: 12,
                     ),

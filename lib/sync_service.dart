@@ -366,6 +366,7 @@ class SioSyncService {
             final createAt = r['create_at']?.toString();
 
             if (spotId == null) continue;
+            if (flag == -2 || flag == -3) continue;
             final double latIns = latitude ?? 0.0;
             final double lngIns = longitude ?? 0.0;
 

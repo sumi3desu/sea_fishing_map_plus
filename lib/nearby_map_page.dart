@@ -6,6 +6,7 @@ import 'dart:async';
 import 'sio_database.dart';
 import 'common.dart';
 import 'constants.dart';
+import 'log_print.dart';
 import 'dart:math' as math;
 
 class NearbyMapPage extends StatefulWidget {
@@ -67,6 +68,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       }
       // points は曖昧候補セット
       _cands = widget.points!;
+      _logNearbyPoints(label: 'nearby_map_cands_received', points: _cands);
       // 候補の重心
       double slat = 0.0, slng = 0.0;
       for (final p in _cands) {
@@ -81,7 +83,11 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       final extras = <Map<String, dynamic>>[];
       try {
         final db = await SioDatabase().database;
-        final rows = await db.query('spots');
+        final rows = await db.query(
+          'spots',
+          where: 'flag NOT IN (?, ?)',
+          whereArgs: [-2, -3],
+        );
         // 既存ID集合
         final existingIds = <int>{};
         for (final e in _cands) {
@@ -125,6 +131,16 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
 
       _pts = [..._cands, ...extras];
       _computeCircle();
+      _logNearbyPoints(
+        label: 'nearby_map_extras_added',
+        points: extras,
+        includeCircleStatus: true,
+      );
+      _logNearbyPoints(
+        label: 'nearby_map_all_display_points',
+        points: _pts,
+        includeCircleStatus: true,
+      );
       if (mounted) setState(() {});
       return;
     }
@@ -132,7 +148,11 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     if (widget.centerLat != null && widget.centerLng != null) {
       try {
         final db = await SioDatabase().database;
-        final rows = await db.query('spots');
+        final rows = await db.query(
+          'spots',
+          where: 'flag NOT IN (?, ?)',
+          whereArgs: [-2, -3],
+        );
         final clat = widget.centerLat!;
         final clng = widget.centerLng!;
         final radiusM = (widget.radiusKm ?? kNearbyMapSearchRadiusKm) * 1000.0;
@@ -214,6 +234,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
     final list = _orderedPts();
     for (int i = 0; i < list.length; i++) {
       final p = list[i];
+      final isSelected = ((p['id'] ?? -1) == _selectedId);
       markers.add(
         fm.Marker(
           point: LatLng(
@@ -222,6 +243,7 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
           ),
           width: 160,
           height: 60,
+          alignment: Alignment.bottomCenter,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -233,8 +255,12 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isSelected ? const Color(0xFFFFF3F3) : Colors.white,
                     borderRadius: BorderRadius.circular(4),
+                    border:
+                        isSelected
+                            ? Border.all(color: Colors.redAccent, width: 1)
+                            : null,
                     boxShadow: const [
                       BoxShadow(
                         color: Colors.black26,
@@ -245,20 +271,27 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
                   ),
                   child: Text(
                     (p['name'] ?? '').toString(),
-                    style: const TextStyle(fontSize: 11, color: Colors.black),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isSelected ? Colors.red.shade700 : Colors.black,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
+              Container(
+                width: 1,
+                height: 4,
+                color: isSelected ? Colors.redAccent : Colors.black38,
+              ),
               GestureDetector(
                 onTap: () => _selectPoint(p),
                 child: Icon(
                   Icons.location_on,
-                  color:
-                      ((p['id'] ?? -1) == _selectedId)
-                          ? Colors.red
-                          : Colors.blue,
+                  color: isSelected ? Colors.red : Colors.blue,
                   size: 28,
                 ),
               ),
@@ -480,6 +513,43 @@ class _NearbyMapPageState extends State<NearbyMapPage> {
       if (d > maxM) maxM = d;
     }
     _circleRadiusM = maxM * 1.05;
+    logPrint(
+      'nearby_map_circle center_lat=${_circleCenter!.latitude.toStringAsFixed(6)} center_lng=${_circleCenter!.longitude.toStringAsFixed(6)} radius_m=${_circleRadiusM.toStringAsFixed(1)} cand_count=${_cands.length}',
+    );
+  }
+
+  void _logNearbyPoints({
+    required String label,
+    required List<Map<String, dynamic>> points,
+    bool includeCircleStatus = false,
+  }) {
+    logPrint('ambiguousLevel=1 $label count=${points.length}');
+    for (var i = 0; i < points.length; i++) {
+      final p = points[i];
+      final id = p['id'];
+      final name = (p['name'] ?? '').toString();
+      final lat = (p['lat'] as num?)?.toDouble();
+      final lng = (p['lng'] as num?)?.toDouble();
+      final d = (p['d'] as num?)?.toDouble();
+      String circle = '';
+      if (includeCircleStatus &&
+          _circleCenter != null &&
+          _circleRadiusM > 0 &&
+          lat != null &&
+          lng != null) {
+        final dist = _dist(
+          _circleCenter!.latitude,
+          _circleCenter!.longitude,
+          lat,
+          lng,
+        );
+        circle =
+            ' circle_distance_m=${dist.toStringAsFixed(1)} in_circle=${dist <= _circleRadiusM}';
+      }
+      logPrint(
+        'ambiguousLevel=1 $label index=$i spot_id=$id spot_name=$name lat=${lat?.toStringAsFixed(6)} lng=${lng?.toStringAsFixed(6)} d_m=${d?.toStringAsFixed(1)}$circle',
+      );
+    }
   }
 
   void _selectPoint(Map<String, dynamic> p) async {

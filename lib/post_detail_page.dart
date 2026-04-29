@@ -453,7 +453,11 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
       final sid = widget.item.spotId;
       if (sid == null || sid <= 0) return;
       final db = await SioDatabase().database;
-      final rows = await db.query('spots');
+      final rows = await db.query(
+        'spots',
+        where: 'flag NOT IN (?, ?)',
+        whereArgs: [-2, -3],
+      );
       Map<String, dynamic>? src;
       for (final r in rows) {
         if ((r['spot_id']?.toString() ?? '') == sid.toString()) {
@@ -527,6 +531,8 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
   }
 
   void _openEdit() {
+    final currentImageUrl =
+        _imageCleared ? null : (_overrideImageUrl ?? widget.item.imageUrl);
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -534,12 +540,10 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                 (_) => InputPost(
                   initialType: 'catch',
                   editMode: true,
-                  initialSummary: widget.item.title,
-                  initialDetail: widget.item.detail,
+                  initialSummary: _currentTitle ?? widget.item.title,
+                  initialDetail: _currentDetail ?? widget.item.detail,
                   initialImageUrl:
-                      (widget.item.imageUrl != null)
-                          ? _withTs(widget.item.imageUrl!)
-                          : null,
+                      currentImageUrl != null ? _withTs(currentImageUrl) : null,
                   editingPostId: widget.item.postId,
                   initialSpotId: widget.item.spotId,
                 ),
@@ -873,6 +877,8 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
           'clearedImage': _imageCleared,
           'postId': widget.item.postId,
           'deleted': false,
+          'title': _currentTitle,
+          'detail': _currentDetail,
         };
         if (_newImagePath != null) map['image_path'] = _newImagePath;
         if (_newThumbPath != null) map['thumb_path'] = _newThumbPath;
@@ -916,6 +922,8 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                           'clearedImage': _imageCleared,
                           'postId': widget.item.postId,
                           'deleted': false,
+                          'title': _currentTitle,
+                          'detail': _currentDetail,
                         };
                         if (_newImagePath != null)
                           map['image_path'] = _newImagePath;

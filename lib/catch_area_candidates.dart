@@ -36,25 +36,39 @@ List<Map<String, dynamic>> buildCatchAreaPoints({
   final double sLat = (src['latitude'] as num).toDouble();
   final double sLng = (src['longitude'] as num).toDouble();
   final list =
-      rows.map((r) {
-        final lat = (r['latitude'] as num).toDouble();
-        final lng = (r['longitude'] as num).toDouble();
-        final d = _distanceMeters(sLat, sLng, lat, lng);
-        return <String, dynamic>{
-          'id': int.tryParse(r['spot_id']?.toString() ?? ''),
-          'name': (r['spot_name'] ?? '').toString(),
-          'address': (r['address'] ?? '').toString(),
-          'lat': lat,
-          'lng': lng,
-          'd': d,
-        };
-      }).toList();
+      rows
+          .where((r) {
+            final flag =
+                r['flag'] is int
+                    ? r['flag'] as int
+                    : int.tryParse(r['flag']?.toString() ?? '');
+            return flag != -2 && flag != -3;
+          })
+          .map((r) {
+            final lat = (r['latitude'] as num).toDouble();
+            final lng = (r['longitude'] as num).toDouble();
+            final d = _distanceMeters(sLat, sLng, lat, lng);
+            return <String, dynamic>{
+              'id': int.tryParse(r['spot_id']?.toString() ?? ''),
+              'name': (r['spot_name'] ?? '').toString(),
+              'address': (r['address'] ?? '').toString(),
+              'lat': lat,
+              'lng': lng,
+              'd': d,
+            };
+          })
+          .toList();
   list.sort((a, b) => (a['d'] as double).compareTo(b['d'] as double));
 
   final nearby20 = list.take(kCatchAreaCandidateSourceCount).toList();
   if (nearby20.length <= kCatchAreaVisibleSpotCount) {
     logger?.call(
       'ambiguousLevel=1 spotId=$spotId shape=unknown nearby20=${nearby20.length} action=no_cut',
+    );
+    _logCatchAreaPoints(
+      logger,
+      label: 'catch_area_final_no_cut',
+      points: nearby20,
     );
     return nearby20;
   }
@@ -85,7 +99,13 @@ List<Map<String, dynamic>> buildCatchAreaPoints({
     logger?.call(
       'ambiguousLevel=1 action=nearest15_keep removedCount=${removed.length} removedIds=$removed',
     );
-    return nearby20.take(kCatchAreaVisibleSpotCount).toList();
+    final result = nearby20.take(kCatchAreaVisibleSpotCount).toList();
+    _logCatchAreaPoints(
+      logger,
+      label: 'catch_area_final_nearest',
+      points: result,
+    );
+    return result;
   }
   final working = List<Map<String, dynamic>>.from(nearby20);
   int primaryCutCount = 0;
@@ -142,21 +162,24 @@ List<Map<String, dynamic>> buildCatchAreaPoints({
   logger?.call(
     'ambiguousLevel=1 action=$primaryAction count=$primaryCutCount fallbackAction=$fallbackAction fallbackCount=$fallbackCutCount removedIds=$removedIds',
   );
-  return nearby20.where((e) {
-    final id = e['id'] as int?;
-    if (id != null) {
-      return working.any((w) => (w['id'] as int?) == id);
-    }
-    return working.any((w) {
-      final d = _distanceMeters(
-        (e['lat'] as num).toDouble(),
-        (e['lng'] as num).toDouble(),
-        (w['lat'] as num).toDouble(),
-        (w['lng'] as num).toDouble(),
-      );
-      return d < 1.0;
-    });
-  }).toList();
+  final result =
+      nearby20.where((e) {
+        final id = e['id'] as int?;
+        if (id != null) {
+          return working.any((w) => (w['id'] as int?) == id);
+        }
+        return working.any((w) {
+          final d = _distanceMeters(
+            (e['lat'] as num).toDouble(),
+            (e['lng'] as num).toDouble(),
+            (w['lat'] as num).toDouble(),
+            (w['lng'] as num).toDouble(),
+          );
+          return d < 1.0;
+        });
+      }).toList();
+  _logCatchAreaPoints(logger, label: 'catch_area_final_cut', points: result);
+  return result;
 }
 
 List<int> buildCatchAreaCandidateSpotIds({
@@ -206,4 +229,24 @@ double _axisValue(
   final fromRight = pattern == 1;
   final useRight = opposite ? !fromRight : fromRight;
   return useRight ? -lng : lng;
+}
+
+void _logCatchAreaPoints(
+  CatchAreaLogger? logger, {
+  required String label,
+  required List<Map<String, dynamic>> points,
+}) {
+  if (logger == null) return;
+  logger('ambiguousLevel=1 $label count=${points.length}');
+  for (var i = 0; i < points.length; i++) {
+    final p = points[i];
+    final id = p['id'];
+    final name = (p['name'] ?? '').toString();
+    final lat = (p['lat'] as num?)?.toDouble();
+    final lng = (p['lng'] as num?)?.toDouble();
+    final d = (p['d'] as num?)?.toDouble();
+    logger(
+      'ambiguousLevel=1 $label index=$i spot_id=$id spot_name=$name lat=${lat?.toStringAsFixed(6)} lng=${lng?.toStringAsFixed(6)} d_m=${d?.toStringAsFixed(1)}',
+    );
+  }
 }
