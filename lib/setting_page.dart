@@ -1007,7 +1007,7 @@ class _SettingPageState extends State<SettingPage> {
               Padding(
                 padding: const EdgeInsets.only(left: _statusIndent, top: 6),
                 child: Text(
-                  '用語集や法令データを最新に更新します。\nWi-Fi 環境での実行を推奨します（モバイル回線ではデータ通信料が発生する場合があります）。',
+                  updateSpotsData,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),

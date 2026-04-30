@@ -21,6 +21,7 @@ class SpotApplyConfirmPage extends StatefulWidget {
     required this.address,
     required this.prefName,
     required this.privateFlag,
+    this.kindLabel,
     this.titleOverride,
     this.submitLabel,
     this.overrideFlag,
@@ -29,7 +30,8 @@ class SpotApplyConfirmPage extends StatefulWidget {
     this.mailAction,
   });
 
-  final String kind; // gyoko/teibou/surf/kako/iso
+  final String kind; // kubun.id
+  final String? kindLabel;
   final String name;
   final String yomi;
   final double lat;
@@ -88,6 +90,8 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
   }
 
   String _kindLabel(String k) {
+    final label = widget.kindLabel?.trim() ?? '';
+    if (label.isNotEmpty) return label;
     switch (k) {
       case 'gyoko':
         return '漁港';
@@ -99,6 +103,8 @@ class _SpotApplyConfirmPageState extends State<SpotApplyConfirmPage> {
         return '河口';
       case 'iso':
         return '磯';
+      case 'park':
+        return '海釣り公園';
       default:
         return k;
     }

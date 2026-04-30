@@ -1362,6 +1362,9 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   final Set<gm.Marker> _gmMarkers = <gm.Marker>{};
   final Set<gm.Polyline> _gmPolylines = <gm.Polyline>{};
   final Set<gm.Circle> _gmCircles = <gm.Circle>{};
+  LatLng? _catchAreaCircleCenter;
+  double _catchAreaCircleRadiusM = 0.0;
+  int? _catchAreaOverlaySpotId;
   LatLng? _center;
   double? _lastLat;
   double? _lastLng;
@@ -1388,6 +1391,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
   Set<int> _myOwnedSpotIds = <int>{};
   int? _latestMyCatchSpotId;
   int? _latestMyOwnedSpotId;
+  bool _isAdmin = false;
   bool _showApplyModeGuide = false;
   bool _hideApplyModeGuideCheckbox = false;
   double? _applyGuideLeft;
@@ -1742,6 +1746,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     required int? prefId,
     required double radiusKm,
   }) async {
+    _clearCatchAreaOverlayLocal();
     if (!isSelected) {
       await _selectSpot(
         name: name,
@@ -1808,6 +1813,17 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     });
     _loadFavorites();
     _loadMyCatchSpotIds();
+    _loadAdminRole();
+  }
+
+  Future<void> _loadAdminRole() async {
+    try {
+      final info = await loadUserInfo() ?? await getOrInitUserInfo();
+      final isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
+      if (mounted) {
+        setState(() => _isAdmin = isAdmin);
+      }
+    } catch (_) {}
   }
 
   void _onCommonChanged() {
@@ -1972,11 +1988,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         // マップの中心も即時移動（シートの占有に合わせて上寄せ）
         if (mounted && _center != null) {
           final viewport = diaryMode ? await _buildDiaryViewport() : null;
-          final displayCenter = _center!;
+          final hasCatchAreaCircle =
+              _catchAreaCircleCenter != null && _catchAreaCircleRadiusM > 0;
+          final displayCenter =
+              hasCatchAreaCircle ? _catchAreaCircleCenter! : _center!;
           final displayRadiusKm =
-              viewport?.radiusKm ?? kNearbyMapSearchRadiusKm;
+              hasCatchAreaCircle
+                  ? (_catchAreaCircleRadiusM / 1000.0) * 1.15
+                  : (viewport?.radiusKm ?? kNearbyMapSearchRadiusKm);
           final z =
-              (diaryMode && !diaryModeChanged)
+              hasCatchAreaCircle
+                  ? _zoomForCatchAreaCircle(
+                    displayCenter,
+                    _catchAreaCircleRadiusM,
+                  )
+                  : (diaryMode && !diaryModeChanged)
                   ? _currentZoom
                   : diaryMode
                   ? _zoomForRadius(displayRadiusKm)
@@ -2030,11 +2056,21 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
           );
           if (mounted && _center != null) {
             final viewport = diaryMode ? await _buildDiaryViewport() : null;
-            final displayCenter = _center!;
+            final hasCatchAreaCircle =
+                _catchAreaCircleCenter != null && _catchAreaCircleRadiusM > 0;
+            final displayCenter =
+                hasCatchAreaCircle ? _catchAreaCircleCenter! : _center!;
             final displayRadiusKm =
-                viewport?.radiusKm ?? kNearbyMapSearchRadiusKm;
+                hasCatchAreaCircle
+                    ? (_catchAreaCircleRadiusM / 1000.0) * 1.15
+                    : (viewport?.radiusKm ?? kNearbyMapSearchRadiusKm);
             final z =
-                (diaryMode && !diaryModeChanged)
+                hasCatchAreaCircle
+                    ? _zoomForCatchAreaCircle(
+                      displayCenter,
+                      _catchAreaCircleRadiusM,
+                    )
+                    : (diaryMode && !diaryModeChanged)
                     ? _currentZoom
                     : diaryMode
                     ? _zoomForRadius(displayRadiusKm)
@@ -2168,6 +2204,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     _gmPolylines.clear();
     _gmCircles.clear();
     final rows = await _visibleTeibouRows();
+    _updateCatchAreaOverlay(rows);
     var center = LatLng(lat, lng);
     double maxDkm = 0.0; // 外接円半径計算用
     // 中心マーカー（お気に入りなら拡大＆太字）
@@ -2433,8 +2470,13 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         !centerRejected &&
         (!diaryMode ||
             (centerPortId != null && _myDiarySpotIds.contains(centerPortId)));
+    final bool hideCenterSelection =
+        _catchAreaOverlaySpotId != null &&
+        centerPortId != null &&
+        _catchAreaOverlaySpotId == centerPortId &&
+        !_isAdmin;
     // AppleMap 中心注釈
-    if (showCenterMarker) {
+    if (showCenterMarker && !hideCenterSelection) {
       _appleAnnotations.add(
         am.Annotation(
           annotationId: am.AnnotationId('c'),
@@ -2468,10 +2510,12 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
               ? r['spot_id'] as int
               : int.tryParse(r['spot_id']?.toString() ?? '');
       if (dlat == null || dlng == null) continue;
-      final bool isSameAsCenter =
+      final bool isSameAsCenterRaw =
           (centerPortId != null && portId == centerPortId) ||
           ((dlat - center.latitude).abs() < 1e-8 &&
               (dlng - center.longitude).abs() < 1e-8);
+      final bool isSameAsCenter =
+          hideCenterSelection ? false : isSameAsCenterRaw;
       if (diaryMode &&
           !(portId != null &&
               _myDiarySpotIds.contains(portId) &&
@@ -2636,7 +2680,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     }
 
     // 中心マーカーを最後に追加（最前面に表示）
-    if (!centerRejected)
+    if (!centerRejected && !hideCenterSelection)
       _markers.add(
         fm.Marker(
           width: 200,
@@ -2706,7 +2750,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
       );
 
     // GoogleMap 中心マーカー（zIndexを高めに）
-    if (showCenterMarker)
+    if (showCenterMarker && !hideCenterSelection)
       _gmMarkers.add(
         gm.Marker(
           markerId: const gm.MarkerId('c'),
@@ -2872,6 +2916,20 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
                           userAgentPackageName: 'jp.bouzer.seafishingmap',
                           tileProvider: fm.NetworkTileProvider(),
                         ),
+                        if (_catchAreaCircleCenter != null &&
+                            _catchAreaCircleRadiusM > 0)
+                          fm.CircleLayer(
+                            circles: [
+                              fm.CircleMarker(
+                                point: _catchAreaCircleCenter!,
+                                radius: _catchAreaCircleRadiusM,
+                                useRadiusInMeter: true,
+                                color: Colors.redAccent.withOpacity(0.12),
+                                borderColor: Colors.redAccent.withOpacity(0.35),
+                                borderStrokeWidth: 2,
+                              ),
+                            ],
+                          ),
                         fm.MarkerLayer(markers: _buildAllMarkers()),
                         const fm.RichAttributionWidget(
                           attributions: [
@@ -3757,6 +3815,57 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     super.dispose();
   }
 
+  void _clearCatchAreaOverlayLocal() {
+    Common.instance.clearCatchAreaOverlay(notify: false);
+    _catchAreaOverlaySpotId = null;
+    _catchAreaCircleCenter = null;
+    _catchAreaCircleRadiusM = 0.0;
+    _gmCircles.removeWhere((c) => c.circleId.value == 'catch_area');
+  }
+
+  void _updateCatchAreaOverlay(List<Map<String, dynamic>> rows) {
+    final spotId = Common.instance.catchAreaOverlaySpotId;
+    _catchAreaOverlaySpotId = spotId;
+    _catchAreaCircleCenter = null;
+    _catchAreaCircleRadiusM = 0.0;
+    _gmCircles.removeWhere((c) => c.circleId.value == 'catch_area');
+    if (spotId == null || spotId <= 0) return;
+
+    final points = buildCatchAreaPoints(rows: rows, spotId: spotId);
+    if (points.isEmpty) return;
+    double slat = 0.0;
+    double slng = 0.0;
+    for (final p in points) {
+      slat += (p['lat'] as num).toDouble();
+      slng += (p['lng'] as num).toDouble();
+    }
+    final center = LatLng(slat / points.length, slng / points.length);
+    double maxM = 0.0;
+    for (final p in points) {
+      final dKm = _distanceKm(
+        center.latitude,
+        center.longitude,
+        (p['lat'] as num).toDouble(),
+        (p['lng'] as num).toDouble(),
+      );
+      final dM = dKm * 1000.0;
+      if (dM > maxM) maxM = dM;
+    }
+    _catchAreaCircleCenter = center;
+    _catchAreaCircleRadiusM = maxM * 1.05;
+    if (_catchAreaCircleRadiusM <= 0) return;
+    _gmCircles.add(
+      gm.Circle(
+        circleId: const gm.CircleId('catch_area'),
+        center: gm.LatLng(center.latitude, center.longitude),
+        radius: _catchAreaCircleRadiusM,
+        fillColor: Colors.redAccent.withOpacity(0.12),
+        strokeColor: Colors.redAccent.withOpacity(0.35),
+        strokeWidth: 2,
+      ),
+    );
+  }
+
   double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
     const double R = 6371.0; // km
     const double d2r = math.pi / 180.0;
@@ -3787,6 +3896,23 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
     return 3.5;
   }
 
+  double _zoomForCatchAreaCircle(LatLng center, double radiusM) {
+    if (radiusM <= 0) return _zoomForRadius(30.0) + 1.0;
+    final baseZoom = _zoomForRadius((radiusM / 1000.0) * 1.15);
+    final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 360.0;
+    final targetDiameterPx = math.max(160.0, screenWidth * 0.9);
+    const earthCircumferenceM = 40075016.686;
+    final cosLat = math.cos(center.latitude * math.pi / 180.0).abs();
+    final latScale = math.max(0.15, cosLat);
+    final maxZoom =
+        math.log(
+          (targetDiameterPx * latScale * earthCircumferenceM) /
+              (2.0 * radiusM * 256.0),
+        ) /
+        math.ln2;
+    return math.min(baseZoom, maxZoom).clamp(3.0, 18.0);
+  }
+
   String? _kubunLabelLocal(String kubun) {
     final v = kubun.trim();
     final lv = v.toLowerCase();
@@ -3813,7 +3939,7 @@ class _FishingInfoPaneState extends State<_FishingInfoPane> {
         return '堤防';
       default:
         if (v == '特3') return '最重要港';
-        return null;
+        return v.isNotEmpty ? v : null;
     }
   }
 
@@ -4661,12 +4787,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   bool _loading = false;
   bool _hasMore = true;
   int _page = 1;
+  int _loadSerial = 0;
   String _mode = 'catch'; // 'catch' or 'env'
   String _lastCommonMode = 'catch';
   bool _lastFishingDiaryMode = Common.instance.fishingDiaryMode;
   int _lastAmbiguousLevel = ambiguousLevel;
+  int? _lastSelectedSpotId;
   int? _myUserId;
-  int? _selectedSpotId;
   bool _isAdmin = false;
   final Map<int, String> _spotNameById = {};
 
@@ -4686,10 +4813,19 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     _listController.addListener(_onScroll);
   }
 
+  Future<int?> _currentSelectedSpotId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final spotId = prefs.getInt('selected_teibou_id');
+      return (spotId != null && spotId > 0) ? spotId : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _loadMyUserId() async {
     try {
       final info = await loadUserInfo() ?? await getOrInitUserInfo();
-      final prefs = await SharedPreferences.getInstance();
       final isAdmin = ((info.role ?? '').toLowerCase() == 'admin');
       var spotNames = <int, String>{};
       if (isAdmin) {
@@ -4700,7 +4836,6 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
       if (!mounted) return;
       setState(() {
         _myUserId = info.userId;
-        _selectedSpotId = prefs.getInt('selected_teibou_id');
         _isAdmin = isAdmin;
         _spotNameById
           ..clear()
@@ -4752,25 +4887,33 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   }
 
   void _onCommonModeChanged() {
+    _reloadIfNeededForCommonChange();
+  }
+
+  Future<void> _reloadIfNeededForCommonChange() async {
     final cm = Common.instance.postListMode;
     final diaryEnabled = Common.instance.fishingDiaryMode;
+    final selectedSpotId = await _currentSelectedSpotId();
+    if (!mounted) return;
     final ambiguousChanged = _lastAmbiguousLevel != ambiguousLevel;
     final modeChanged = cm != _lastCommonMode;
     final diaryChanged = diaryEnabled != _lastFishingDiaryMode;
-    if (!modeChanged && !diaryChanged && !ambiguousChanged) return;
+    final spotChanged = selectedSpotId != _lastSelectedSpotId;
+    if (!modeChanged && !diaryChanged && !ambiguousChanged && !spotChanged) {
+      return;
+    }
     _lastCommonMode = cm;
     _lastFishingDiaryMode = diaryEnabled;
     _lastAmbiguousLevel = ambiguousLevel;
-    if (mounted) {
-      setState(() {
-        _mode = cm;
-        _items.clear();
-        _page = 1;
-        _hasMore = true;
-        _loading = false;
-      });
-      _loadFirst();
-    }
+    _lastSelectedSpotId = selectedSpotId;
+    setState(() {
+      _mode = cm;
+      _items.clear();
+      _page = 1;
+      _hasMore = true;
+      _loading = false;
+    });
+    _loadFirst();
   }
 
   void _onScroll() {
@@ -4781,10 +4924,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     }
   }
 
-  Future<List<_PostItem>> _fetch({required int page, required int kind}) async {
+  Future<List<_PostItem>> _fetch({
+    required int page,
+    required int kind,
+    required int? spotId,
+    required bool diaryMode,
+  }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final spotId = prefs.getInt('selected_teibou_id');
       final catchAreaSpotIdsCsv =
           (kind == 1) ? await _buildCatchAreaSpotIdsCsv(spotId) : null;
       final ts = DateTime.now().millisecondsSinceEpoch;
@@ -4802,7 +4948,7 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
       if (catchAreaSpotIdsCsv != null && catchAreaSpotIdsCsv.isNotEmpty) {
         body['catch_area_spot_ids'] = catchAreaSpotIdsCsv;
       }
-      if (Common.instance.fishingDiaryMode) {
+      if (diaryMode) {
         final uid =
             _myUserId ??
             (await loadUserInfo() ?? await getOrInitUserInfo()).userId;
@@ -4836,16 +4982,40 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   }
 
   Future<void> _loadFirst() async {
-    if (!mounted || _loading) return;
+    if (!mounted) return;
+    final serial = ++_loadSerial;
+    final selectedSpotId = await _currentSelectedSpotId();
+    final diaryMode = Common.instance.fishingDiaryMode;
+    final mode = _mode;
     setState(() {
       _loading = true;
       _page = 1;
       _hasMore = true;
     });
-    final kind = (_mode == 'catch') ? 1 : 0;
-    var rows = await _fetch(page: 1, kind: kind);
-    rows = await _applyAmbiguityFilter(rows);
-    if (!mounted) return;
+    _lastSelectedSpotId = selectedSpotId;
+    final kind = (mode == 'catch') ? 1 : 0;
+    var rows = await _fetch(
+      page: 1,
+      kind: kind,
+      spotId: selectedSpotId,
+      diaryMode: diaryMode,
+    );
+    rows = await _applyAmbiguityFilter(rows, selectedSpotId: selectedSpotId);
+    final currentSpotId = await _currentSelectedSpotId();
+    if (!mounted ||
+        serial != _loadSerial ||
+        currentSpotId != selectedSpotId ||
+        Common.instance.fishingDiaryMode != diaryMode ||
+        _mode != mode) {
+      if (mounted && serial == _loadSerial) {
+        setState(() {
+          _loading = false;
+          _hasMore = false;
+        });
+        _loadFirst();
+      }
+      return;
+    }
     setState(() {
       _items
         ..clear()
@@ -4859,11 +5029,35 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     if (!mounted) return;
+    final serial = ++_loadSerial;
+    final selectedSpotId = await _currentSelectedSpotId();
+    final diaryMode = Common.instance.fishingDiaryMode;
+    final mode = _mode;
     setState(() => _loading = true);
-    final kind = (_mode == 'catch') ? 1 : 0;
-    var rows = await _fetch(page: _page, kind: kind);
-    rows = await _applyAmbiguityFilter(rows);
-    if (!mounted) return;
+    final kind = (mode == 'catch') ? 1 : 0;
+    var rows = await _fetch(
+      page: _page,
+      kind: kind,
+      spotId: selectedSpotId,
+      diaryMode: diaryMode,
+    );
+    rows = await _applyAmbiguityFilter(rows, selectedSpotId: selectedSpotId);
+    final currentSpotId = await _currentSelectedSpotId();
+    if (!mounted ||
+        serial != _loadSerial ||
+        currentSpotId != selectedSpotId ||
+        Common.instance.fishingDiaryMode != diaryMode ||
+        _mode != mode) {
+      if (mounted && serial == _loadSerial) {
+        setState(() => _loading = false);
+        if (currentSpotId != selectedSpotId ||
+            Common.instance.fishingDiaryMode != diaryMode ||
+            _mode != mode) {
+          _loadFirst();
+        }
+      }
+      return;
+    }
     setState(() {
       _items.addAll(_dedupePostItems(rows, existing: _items));
       _hasMore = rows.length >= kPostPageSize;
@@ -4872,16 +5066,13 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
     });
   }
 
-  Future<List<_PostItem>> _applyAmbiguityFilter(List<_PostItem> rows) async {
+  Future<List<_PostItem>> _applyAmbiguityFilter(
+    List<_PostItem> rows, {
+    required int? selectedSpotId,
+  }) async {
     if (ambiguousLevel != 0) return rows;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final selId = prefs.getInt('selected_teibou_id');
-      if (selId == null || selId <= 0) return rows;
-      return rows.where((e) => e.spotId == selId).toList();
-    } catch (_) {
-      return rows;
-    }
+    if (selectedSpotId == null || selectedSpotId <= 0) return rows;
+    return rows.where((e) => e.spotId == selectedSpotId).toList();
   }
 
   @override
@@ -4924,119 +5115,134 @@ class _BottomSheetCatchListState extends State<_BottomSheetCatchList> {
               final it = _items[index];
               final thumb = it.thumbUrl ?? it.imageUrl;
               final adminMeta = _adminPostMeta(it);
-              final isMineAtCurrentSpot =
-                  _myUserId != null &&
-                  _selectedSpotId != null &&
-                  it.userId == _myUserId &&
-                  it.spotId == _selectedSpotId;
+              final isMine = _myUserId != null && it.userId == _myUserId;
               return Column(
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color:
-                              isMineAtCurrentSpot
-                                  ? const Color(0xFFFFB74D)
-                                  : const Color(0xFFBDBDBD),
-                          width: 8,
+                  ListTile(
+                    contentPadding: const EdgeInsets.only(left: 0, right: 16),
+                    leading: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          child:
+                              isMine
+                                  ? Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFB74D),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.edit_note,
+                                        color: Colors.white,
+                                        size: 12,
+                                      ),
+                                    ),
+                                  )
+                                  : const SizedBox.shrink(),
                         ),
-                      ),
+                        (thumb != null)
+                            ? ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Image.network(
+                                thumb,
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                            : const Icon(
+                              Icons.image,
+                              size: 40,
+                              color: Colors.black38,
+                            ),
+                      ],
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.only(
-                        left: 12,
-                        right: 16,
-                      ),
-                      leading:
-                          (thumb != null)
-                              ? ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Image.network(
-                                  thumb,
-                                  width: 48,
-                                  height: 48,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                              : const Icon(
-                                Icons.image,
-                                size: 40,
-                                color: Colors.black38,
-                              ),
-                      title: Row(
-                        children: [
-                          Expanded(
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            it.title?.isNotEmpty == true
+                                ? it.title!
+                                : (it.nickName ?? '投稿'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (adminMeta.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
                             child: Text(
-                              it.title?.isNotEmpty == true
-                                  ? it.title!
-                                  : (it.nickName ?? '投稿'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (adminMeta.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                adminMeta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: Row(
-                        children: [
-                          Expanded(
-                            child:
-                                it.detail?.isNotEmpty == true
-                                    ? Text(
-                                      it.detail!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    )
-                                    : const SizedBox.shrink(),
-                          ),
-                          if ((it.createAt ?? '').isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              it.createAt!,
+                              adminMeta,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.black54,
+                              ),
                             ),
-                          ],
-                        ],
-                      ),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder:
-                                (_) => PostDetailPage(
-                                  item: PostDetailItem(
-                                    userId: it.userId,
-                                    postId: it.postId,
-                                    postKind: it.postKind,
-                                    exist: it.exist,
-                                    title: it.title,
-                                    detail: it.detail,
-                                    imageUrl: it.imageUrl ?? it.thumbUrl,
-                                    nickName: it.nickName,
-                                    createAt: it.createAt,
-                                    spotId: it.spotId,
-                                  ),
-                                ),
                           ),
-                        );
-                      },
+                        ],
+                      ],
                     ),
+                    subtitle: Row(
+                      children: [
+                        Expanded(
+                          child:
+                              it.detail?.isNotEmpty == true
+                                  ? Text(
+                                    it.detail!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  )
+                                  : const SizedBox.shrink(),
+                        ),
+                        if ((it.createAt ?? '').isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            it.createAt!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                          ),
+                        ],
+                      ],
+                    ),
+                    onTap: () {
+                      final contextSpotId = _lastSelectedSpotId;
+                      final contextSpotName =
+                          Common.instance.selectedTeibouName.trim();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder:
+                              (_) => PostDetailPage(
+                                item: PostDetailItem(
+                                  userId: it.userId,
+                                  postId: it.postId,
+                                  postKind: it.postKind,
+                                  exist: it.exist,
+                                  title: it.title,
+                                  detail: it.detail,
+                                  imageUrl: it.imageUrl ?? it.thumbUrl,
+                                  nickName: it.nickName,
+                                  createAt: it.createAt,
+                                  spotId: it.spotId,
+                                  contextSpotId:
+                                      contextSpotId != null && contextSpotId > 0
+                                          ? contextSpotId
+                                          : null,
+                                  contextSpotName:
+                                      contextSpotName.isNotEmpty
+                                          ? contextSpotName
+                                          : null,
+                                ),
+                              ),
+                        ),
+                      );
+                    },
                   ),
                   const Divider(height: 1),
                 ],

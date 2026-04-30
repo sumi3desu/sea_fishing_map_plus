@@ -86,7 +86,7 @@ try {
     else if ($action == "delete_mail")
     {
         // ADDED: メールアドレスとリフレッシュトークンを無効化（空文字にリセット）
-        $stmt = $pdo->prepare("UPDATE `user` SET email = '', nick_name = '', refresh_token = '' WHERE uuid = ?;");
+        $stmt = $pdo->prepare("UPDATE `user` SET email = '', refresh_token = '' WHERE uuid = ?;");
         $stmt->execute([$uuid]);
         $mail = '';
         $refresh_token = null;

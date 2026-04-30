@@ -535,6 +535,7 @@ class Common extends ChangeNotifier {
   int startApplyModeTick = 0;
   int navigateToFishingTick = 0;
   int catchNotificationTick = 0;
+  int? catchAreaOverlaySpotId;
   final Set<int> _knownCatchPostIds = <int>{};
   int? latestCatchNotificationPostId;
   String latestCatchNotificationTitle = '';
@@ -603,7 +604,7 @@ class Common extends ChangeNotifier {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '釣り日記とは',
+                          '釣り日記とは', // 釣り日記モードをONにする時の初回確認ダイアログ
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -617,10 +618,7 @@ class Common extends ChangeNotifier {
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 12),
-                    const Text('自分が投稿した釣果や、登録した釣り場だけ表示します。'),
-                  ],
+                  children: [const SizedBox(height: 12), Text(fishingDaily)],
                 ),
                 actions: [
                   Row(
@@ -659,6 +657,46 @@ class Common extends ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  Future<void> showFishingDiaryInfoDialog(BuildContext context) async {
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder:
+          (_) => AlertDialog(
+            titlePadding: EdgeInsets.zero,
+            title: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(28),
+                topRight: Radius.circular(28),
+              ),
+              child: Container(
+                color: const Color(0xFF001F3F),
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: const Text(
+                  '釣り日記とは',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            content: Padding(
+              padding: EdgeInsets.only(top: 12),
+              child: Text(fishingDaily),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+    );
   }
 
   void requestPostFeedReload() {
@@ -833,9 +871,23 @@ class Common extends ChangeNotifier {
   }
 
   // 釣り場詳細タブへ遷移要求（BottomNavigation のインデックス切替用）
-  void requestNavigateToTidePage() {
+  void requestNavigateToTidePage({bool clearCatchAreaOverlay = true}) {
+    if (clearCatchAreaOverlay) {
+      catchAreaOverlaySpotId = null;
+    }
     navigateToTideTick++;
     notifyListeners();
+  }
+
+  void requestCatchAreaOverlayOnTidePage(int spotId) {
+    catchAreaOverlaySpotId = spotId;
+    requestNavigateToTidePage(clearCatchAreaOverlay: false);
+  }
+
+  void clearCatchAreaOverlay({bool notify = true}) {
+    if (catchAreaOverlaySpotId == null) return;
+    catchAreaOverlaySpotId = null;
+    if (notify) notifyListeners();
   }
 
   // 投稿などから特定の釣り場IDを選択状態にし、最寄り潮汐ポイントも設定

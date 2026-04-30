@@ -572,51 +572,76 @@ class _FishingResultGridState extends State<FishingResultGrid>
                   ),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: FilterChip(
-                      showCheckmark: false,
-                      selected: Common.instance.fishingDiaryMode,
-                      onSelected: (v) async {
-                        if (v) {
-                          final verified = await _ensureEmailVerified();
-                          if (!verified) return;
-                          if (!mounted) return;
-                          final ok = await Common.instance
-                              .confirmEnableFishingDiary(context);
-                          if (!ok) return;
-                        }
-                        await Common.instance.setFishingDiaryMode(v);
-                      },
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: const VisualDensity(
-                        horizontal: -2.5,
-                        vertical: -2,
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                      avatarBoxConstraints: const BoxConstraints.tightFor(
-                        width: 18,
-                        height: 18,
-                      ),
-                      avatar: Icon(
-                        Icons.menu_book,
-                        size: 14,
-                        color:
-                            Common.instance.fishingDiaryMode
-                                ? Colors.white
-                                : Colors.black87,
-                      ),
-                      label: Text(
-                        '釣り日記',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color:
-                              Common.instance.fishingDiaryMode
-                                  ? Colors.white
-                                  : Colors.black87,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilterChip(
+                          showCheckmark: false,
+                          selected: Common.instance.fishingDiaryMode,
+                          onSelected: (v) async {
+                            if (v) {
+                              final verified = await _ensureEmailVerified();
+                              if (!verified) return;
+                              if (!mounted) return;
+                              final ok = await Common.instance
+                                  .confirmEnableFishingDiary(context);
+                              if (!ok) return;
+                            }
+                            await Common.instance.setFishingDiaryMode(v);
+                          },
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(
+                            horizontal: -2.5,
+                            vertical: -2,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                          ),
+                          avatarBoxConstraints: const BoxConstraints.tightFor(
+                            width: 18,
+                            height: 18,
+                          ),
+                          avatar: Icon(
+                            Icons.menu_book,
+                            size: 14,
+                            color:
+                                Common.instance.fishingDiaryMode
+                                    ? Colors.white
+                                    : Colors.black87,
+                          ),
+                          label: Text(
+                            '釣り日記',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color:
+                                  Common.instance.fishingDiaryMode
+                                      ? Colors.white
+                                      : Colors.black87,
+                            ),
+                          ),
+                          backgroundColor: Colors.white,
+                          selectedColor: const Color(0xFFFFB74D),
                         ),
-                      ),
-                      backgroundColor: Colors.white,
-                      selectedColor: const Color(0xFFFFB74D),
+                        SizedBox(
+                          width: 28,
+                          height: 36,
+                          child: IconButton(
+                            onPressed:
+                                () => Common.instance
+                                    .showFishingDiaryInfoDialog(context),
+                            icon: Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: AppConfig.instance.appBarForegroundColor,
+                            ),
+                            tooltip: '釣り日記とは',
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

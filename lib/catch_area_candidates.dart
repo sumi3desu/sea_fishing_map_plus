@@ -13,7 +13,7 @@ typedef CatchAreaLogger = void Function(String message);
 /// - `kCatchAreaVisibleSpotCount` 件以内ならそのまま使う。
 /// - 16 件以上ある場合は外接矩形の縦横比と `spotId % 3` から削る方向を決め、
 ///   `kCatchAreaVisibleSpotCount` 件になるまで片側から除外する。
-/// - 戻り値は `NearbyMapPage` や通知候補生成でそのまま使える `id/name/address/lat/lng/d` を持つマップ配列。
+/// - 戻り値は釣り場MAPの円描画や通知候補生成でそのまま使える `id/name/address/lat/lng/d` を持つマップ配列。
 ///
 /// この関数を通知用 `candidate_spot_ids` と投稿詳細の「釣れたエリア」表示で共通利用することで、
 /// 両者の候補釣り場を完全に同じロジックで算出する。

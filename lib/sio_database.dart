@@ -50,8 +50,6 @@ class SioDatabase extends ChangeNotifier {
   }
 
   Future<void> _ensureTables(Database db) async {
-    await _migrateLegacyTeibouIfNeeded(db);
-
     // お気に入りテーブル（既存）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS favorite_tbl (
@@ -113,11 +111,16 @@ class SioDatabase extends ChangeNotifier {
     // 区分マスタ（spots.kubun の名称・説明）
     await db.execute('''
       CREATE TABLE IF NOT EXISTS kubun (
-        id INTEGER NOT NULL PRIMARY KEY,
+        id TEXT NOT NULL PRIMARY KEY,
         kubun_name TEXT NOT NULL,
-        note TEXT
+        note TEXT,
+        user_select INTEGER NOT NULL DEFAULT 1,
+        delete_flag INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await _migrateKubunIdTextIfNeeded(db);
+    await _ensureKubunUserSelectColumn(db);
+    await _ensureKubunDeleteFlagColumn(db);
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS version (
@@ -128,13 +131,17 @@ class SioDatabase extends ChangeNotifier {
       )
     ''');
 
-    // 堤防お気に入りテーブル
+    // 釣り場お気に入りテーブル
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS favorite_teibou (
+      CREATE TABLE IF NOT EXISTS favorite_spots (
         spot_id INTEGER NOT NULL PRIMARY KEY,
         created_at INTEGER
       )
     ''');
+
+    await _migrateLegacyTeibouToSpotsIfNeeded(db);
+    await _migrateFavoriteTeibouToFavoriteSpotsIfNeeded(db);
+    await _normalizeLegacyVersionNames(db);
 
     // 公開表示用のユーザニックネームキャッシュ
     // user_public_cache は廃止
@@ -151,7 +158,7 @@ class SioDatabase extends ChangeNotifier {
   // ============================
   Future<Set<int>> getFavoriteTeibouIds() async {
     final db = await database;
-    final rows = await db.query('favorite_teibou');
+    final rows = await db.query('favorite_spots');
     final ids = <int>{};
     for (final r in rows) {
       final v = r['spot_id'];
@@ -163,7 +170,7 @@ class SioDatabase extends ChangeNotifier {
 
   Future<void> addFavoriteTeibou(int portId) async {
     final db = await database;
-    await db.insert('favorite_teibou', {
+    await db.insert('favorite_spots', {
       'spot_id': portId,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -172,7 +179,7 @@ class SioDatabase extends ChangeNotifier {
   Future<void> removeFavoriteTeibou(int portId) async {
     final db = await database;
     await db.delete(
-      'favorite_teibou',
+      'favorite_spots',
       where: 'spot_id = ?',
       whereArgs: [portId],
     );
@@ -181,16 +188,15 @@ class SioDatabase extends ChangeNotifier {
   // バージョン2: 主キー制約の追加（既存テーブルを移行）
   Future<void> _migrateToV2(Database db) async {
     await db.transaction((txn) async {
-      // teibou: PRIMARY KEY(port_id)
-      final teibouExists = await _tableExists(txn, 'teibou');
-      final hasTeibouPk =
-          teibouExists && await _hasPrimaryKeyOn(txn, 'teibou', ['port_id']);
-      if (!teibouExists) {
-        // 旧テーブルがない場合は新規作成のみ
+      // spots: PRIMARY KEY(spot_id)
+      final spotsExists = await _tableExists(txn, 'spots');
+      final hasSpotsPk =
+          spotsExists && await _hasPrimaryKeyOn(txn, 'spots', ['spot_id']);
+      if (!spotsExists) {
         await txn.execute('''
-          CREATE TABLE IF NOT EXISTS teibou (
-            port_id INTEGER NOT NULL PRIMARY KEY,
-            port_name TEXT NOT NULL,
+          CREATE TABLE IF NOT EXISTS spots (
+            spot_id INTEGER NOT NULL PRIMARY KEY,
+            spot_name TEXT NOT NULL,
             furigana TEXT NOT NULL,
             j_yomi TEXT DEFAULT NULL,
             kubun TEXT NOT NULL,
@@ -200,11 +206,11 @@ class SioDatabase extends ChangeNotifier {
             note TEXT NOT NULL
           )
         ''');
-      } else if (!hasTeibouPk) {
+      } else if (!hasSpotsPk) {
         await txn.execute('''
-          CREATE TABLE IF NOT EXISTS teibou_new (
-            port_id INTEGER NOT NULL PRIMARY KEY,
-            port_name TEXT NOT NULL,
+          CREATE TABLE IF NOT EXISTS spots_new (
+            spot_id INTEGER NOT NULL PRIMARY KEY,
+            spot_name TEXT NOT NULL,
             furigana TEXT NOT NULL,
             j_yomi TEXT DEFAULT NULL,
             kubun TEXT NOT NULL,
@@ -215,13 +221,13 @@ class SioDatabase extends ChangeNotifier {
           )
         ''');
         await txn.execute('''
-          INSERT OR IGNORE INTO teibou_new (
-            port_id, port_name, furigana, j_yomi, kubun, address, latitude, longitude, note
+          INSERT OR IGNORE INTO spots_new (
+            spot_id, spot_name, furigana, j_yomi, kubun, address, latitude, longitude, note
           )
-          SELECT port_id, port_name, furigana, j_yomi, kubun, address, latitude, longitude, note FROM teibou
+          SELECT spot_id, spot_name, furigana, j_yomi, kubun, address, latitude, longitude, note FROM spots
         ''');
-        await txn.execute('DROP TABLE IF EXISTS teibou');
-        await txn.execute('ALTER TABLE teibou_new RENAME TO teibou');
+        await txn.execute('DROP TABLE IF EXISTS spots');
+        await txn.execute('ALTER TABLE spots_new RENAME TO spots');
       }
 
       // todoufuken: PRIMARY KEY(todoufuken_id)
@@ -333,23 +339,29 @@ class SioDatabase extends ChangeNotifier {
       if (!exists) {
         await txn.execute('''
           CREATE TABLE IF NOT EXISTS kubun (
-            id INTEGER NOT NULL PRIMARY KEY,
+            id TEXT NOT NULL PRIMARY KEY,
             kubun_name TEXT NOT NULL,
-            note TEXT
+            note TEXT,
+            user_select INTEGER NOT NULL DEFAULT 1,
+            delete_flag INTEGER NOT NULL DEFAULT 0
           )
         ''');
       }
+      await _migrateKubunIdTextIfNeeded(txn);
+      await _ensureKubunUserSelectColumn(txn);
+      await _ensureKubunDeleteFlagColumn(txn);
     });
   }
 
   Future<void> _migrateToV5(Database db) async {
     await db.transaction((txn) async {
-      await _migrateLegacyTeibouIfNeeded(txn);
-      await _migrateFavoriteTeibouSpotIdIfNeeded(txn);
+      await _migrateLegacyTeibouToSpotsIfNeeded(txn);
+      await _migrateFavoriteTeibouToFavoriteSpotsIfNeeded(txn);
+      await _normalizeLegacyVersionNames(txn);
     });
   }
 
-  Future<void> _migrateLegacyTeibouIfNeeded(DatabaseExecutor db) async {
+  Future<void> _migrateLegacyTeibouToSpotsIfNeeded(DatabaseExecutor db) async {
     final hasTeibou = await _tableExists(db, 'teibou');
     if (!hasTeibou) return;
 
@@ -384,24 +396,100 @@ class SioDatabase extends ChangeNotifier {
     await db.execute('DROP TABLE IF EXISTS teibou');
   }
 
-  Future<void> _migrateFavoriteTeibouSpotIdIfNeeded(DatabaseExecutor db) async {
-    final exists = await _tableExists(db, 'favorite_teibou');
-    if (!exists) return;
-    if (await _columnExists(db, 'favorite_teibou', 'spot_id')) return;
-
+  Future<void> _migrateFavoriteTeibouToFavoriteSpotsIfNeeded(
+    DatabaseExecutor db,
+  ) async {
     await db.execute('''
-      CREATE TABLE IF NOT EXISTS favorite_teibou_new (
+      CREATE TABLE IF NOT EXISTS favorite_spots (
         spot_id INTEGER NOT NULL PRIMARY KEY,
         created_at INTEGER
       )
     ''');
+    final exists = await _tableExists(db, 'favorite_teibou');
+    if (!exists) return;
+    final idColumn =
+        await _columnExists(db, 'favorite_teibou', 'spot_id')
+            ? 'spot_id'
+            : 'port_id';
     await db.execute('''
-      INSERT OR IGNORE INTO favorite_teibou_new (spot_id, created_at)
-      SELECT port_id, created_at FROM favorite_teibou
+      INSERT OR IGNORE INTO favorite_spots (spot_id, created_at)
+      SELECT $idColumn, created_at FROM favorite_teibou
     ''');
     await db.execute('DROP TABLE IF EXISTS favorite_teibou');
+  }
+
+  Future<void> _normalizeLegacyVersionNames(DatabaseExecutor db) async {
+    final exists = await _tableExists(db, 'version');
+    if (!exists) return;
+    await db.execute('''
+      INSERT OR REPLACE INTO version (user_id, name, version)
+      SELECT legacy.user_id, 'spots', legacy.version
+      FROM version AS legacy
+      WHERE legacy.name = 'teibou'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM version AS v2
+          WHERE v2.user_id = legacy.user_id
+            AND v2.name = 'spots'
+        )
+    ''');
+    await db.delete('version', where: 'name = ?', whereArgs: ['teibou']);
+  }
+
+  Future<void> _migrateKubunIdTextIfNeeded(DatabaseExecutor db) async {
+    final exists = await _tableExists(db, 'kubun');
+    if (!exists) return;
+    final rows = await db.rawQuery('PRAGMA table_info(kubun)');
+    if (rows.isEmpty) return;
+    final idInfo = rows.firstWhere(
+      (row) => (row['name'] as String).toLowerCase() == 'id',
+      orElse: () => <String, Object?>{},
+    );
+    final type = (idInfo['type'] ?? '').toString().toUpperCase();
+    if (!type.contains('INT')) return;
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS kubun_new (
+        id TEXT NOT NULL PRIMARY KEY,
+        kubun_name TEXT NOT NULL,
+        note TEXT,
+        user_select INTEGER NOT NULL DEFAULT 1,
+        delete_flag INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    final hasUserSelect = rows.any(
+      (row) => (row['name'] as String).toLowerCase() == 'user_select',
+    );
+    final hasDeleteFlag = rows.any(
+      (row) => (row['name'] as String).toLowerCase() == 'delete_flag',
+    );
+    final userSelectExpr = hasUserSelect ? 'user_select' : '1';
+    final deleteFlagExpr = hasDeleteFlag ? 'delete_flag' : '0';
+    await db.execute('''
+      INSERT OR IGNORE INTO kubun_new (
+        id, kubun_name, note, user_select, delete_flag
+      )
+      SELECT CAST(id AS TEXT), kubun_name, note, $userSelectExpr, $deleteFlagExpr FROM kubun
+    ''');
+    await db.execute('DROP TABLE IF EXISTS kubun');
+    await db.execute('ALTER TABLE kubun_new RENAME TO kubun');
+  }
+
+  Future<void> _ensureKubunUserSelectColumn(DatabaseExecutor db) async {
+    final exists = await _tableExists(db, 'kubun');
+    if (!exists) return;
+    if (await _columnExists(db, 'kubun', 'user_select')) return;
     await db.execute(
-      'ALTER TABLE favorite_teibou_new RENAME TO favorite_teibou',
+      'ALTER TABLE kubun ADD COLUMN user_select INTEGER NOT NULL DEFAULT 1',
+    );
+  }
+
+  Future<void> _ensureKubunDeleteFlagColumn(DatabaseExecutor db) async {
+    final exists = await _tableExists(db, 'kubun');
+    if (!exists) return;
+    if (await _columnExists(db, 'kubun', 'delete_flag')) return;
+    await db.execute(
+      'ALTER TABLE kubun ADD COLUMN delete_flag INTEGER NOT NULL DEFAULT 0',
     );
   }
 

@@ -10,7 +10,6 @@ import 'constants.dart';
 import 'profile_edit_page.dart';
 import 'user_profile_page.dart';
 import 'sio_database.dart';
-import 'nearby_map_page.dart';
 import 'input_post_page.dart';
 import 'new_account_page.dart';
 import 'appconfig.dart';
@@ -52,6 +51,8 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
   String? _newThumbPath; // 編集結果で受け取った相対 thumb_path
   String? _currentTitle;
   String? _currentDetail;
+  String? _actualSpotName;
+  String? _viewingSpotName;
 
   @override
   void initState() {
@@ -62,6 +63,77 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
     _fetchAvatarIfAny();
     _loadLikeCount();
     _prepareEditPermission();
+    _prepareSpotNameDisplay();
+  }
+
+  Future<void> _prepareSpotNameDisplay() async {
+    final viewingName = (widget.item.contextSpotName ?? '').trim();
+    String? actualName;
+    final sid = widget.item.spotId;
+    if (sid != null && sid > 0) {
+      try {
+        final db = await SioDatabase().database;
+        final rows = await db.query(
+          'spots',
+          columns: ['spot_name'],
+          where: 'spot_id = ?',
+          whereArgs: [sid],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          final name = (rows.first['spot_name'] ?? '').toString().trim();
+          if (name.isNotEmpty) actualName = name;
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    setState(() {
+      _actualSpotName = actualName;
+      _viewingSpotName = viewingName.isNotEmpty ? viewingName : null;
+    });
+  }
+
+  String? get _caughtSpotDisplayText {
+    if (widget.item.postKind != 1) return null;
+    if (_isMine || (_isAdmin && ambiguousLevel == 0)) {
+      return _actualSpotName;
+    }
+    final base = _viewingSpotName;
+    if (base == null || base.isEmpty) return null;
+    return '$base 近辺';
+  }
+
+  bool get _canJumpToActualCaughtSpot {
+    final spotId = widget.item.spotId;
+    final contextSpotId = widget.item.contextSpotId;
+    return _isMine &&
+        widget.item.postKind == 1 &&
+        spotId != null &&
+        spotId > 0 &&
+        contextSpotId != null &&
+        contextSpotId > 0 &&
+        spotId != contextSpotId;
+  }
+
+  Future<void> _jumpToActualCaughtSpot() async {
+    final sid = widget.item.spotId;
+    if (!_canJumpToActualCaughtSpot || sid == null || sid <= 0) return;
+    final ok = await Common.instance.selectTeibouById(sid);
+    if (!ok) return;
+    Common.instance.shouldJumpPage = true;
+    Common.instance.requestNavigateToTidePage();
+    if (!mounted) return;
+    final map = {
+      'updated': _updated,
+      'clearedImage': _imageCleared,
+      'postId': widget.item.postId,
+      'deleted': false,
+      'title': _currentTitle,
+      'detail': _currentDetail,
+    };
+    if (_newImagePath != null) map['image_path'] = _newImagePath;
+    if (_newThumbPath != null) map['thumb_path'] = _newThumbPath;
+    Navigator.pop(context, map);
   }
 
   Future<void> _sendLike() async {
@@ -489,22 +561,23 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
         Navigator.pop(context);
         return;
       }
-      final points = buildCatchAreaPoints(
+      buildCatchAreaPoints(
         rows: rows.cast<Map<String, dynamic>>(),
         spotId: sid,
         logger: logPrint,
       );
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder:
-              (_) => NearbyMapPage(
-                points: points,
-                highlightId: _isAdmin ? sid : null,
-              ),
-        ),
+      await Common.instance.saveSelectedTeibou(
+        spotName,
+        Common.instance.tidePoint,
+        id: sid,
+        lat: sLat,
+        lng: sLng,
+        prefId: prefId,
       );
+      Common.instance.shouldJumpPage = true;
+      Common.instance.requestCatchAreaOverlayOnTidePage(sid);
+      if (!mounted) return;
+      Navigator.pop(context);
     } catch (_) {}
   }
 
@@ -1001,9 +1074,8 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ニックネーム + 日時（最上段）
+                      // ニックネーム（最上段）
                       if ((_displayNick ?? '').isNotEmpty ||
-                          (dateLabel ?? '').isNotEmpty ||
                           ((_avatarUrl ?? '').isNotEmpty)) ...[
                         Row(
                           children: [
@@ -1116,25 +1188,103 @@ class _PostDetailPageState extends ConsumerState<PostDetailPage> {
                                 ),
                               ),
                             ],
-                            if (((_displayNick ?? '').isNotEmpty ||
-                                    (_avatarUrl ?? '').isNotEmpty) &&
-                                (dateLabel ?? '').isNotEmpty)
-                              const SizedBox(width: 12),
-                            if ((dateLabel ?? '').isNotEmpty) ...[
-                              const Icon(
-                                Icons.schedule,
-                                size: 16,
-                                color: Colors.black54,
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      if ((_caughtSpotDisplayText ?? '').isNotEmpty) ...[
+                        InkWell(
+                          onTap:
+                              _canJumpToActualCaughtSpot
+                                  ? _jumpToActualCaughtSpot
+                                  : null,
+                          borderRadius: BorderRadius.circular(4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                _canJumpToActualCaughtSpot
+                                    ? Icons.assistant_direction
+                                    : Icons.location_on,
+                                size: 18,
+                                color:
+                                    _canJumpToActualCaughtSpot
+                                        ? Colors.blue
+                                        : Colors.black54,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                dateLabel!,
-                                style: const TextStyle(
-                                  fontSize: 13,
+                              const Text(
+                                '釣れた場所: ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.black87,
                                 ),
                               ),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        _caughtSpotDisplayText!,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color:
+                                              _canJumpToActualCaughtSpot
+                                                  ? Colors.blue
+                                                  : Colors.black87,
+                                          decoration:
+                                              _canJumpToActualCaughtSpot
+                                                  ? TextDecoration.underline
+                                                  : TextDecoration.none,
+                                        ),
+                                      ),
+                                    ),
+                                    if (_canJumpToActualCaughtSpot) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.open_in_new,
+                                        size: 14,
+                                        color: Colors.blue,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+
+                      if ((dateLabel ?? '').isNotEmpty) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.schedule,
+                              size: 16,
+                              color: Colors.black54,
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              '投稿日時: ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                dateLabel!,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -1307,6 +1457,8 @@ class PostDetailItem {
   final String? createAt;
   final int? spotId;
   final bool showNearbyButton; // 釣果グリッドから来た場合に true
+  final int? contextSpotId; // MAPの投稿一覧から開いた場合の表示基準釣り場ID
+  final String? contextSpotName; // MAPの投稿一覧から開いた場合の表示基準釣り場名
   PostDetailItem({
     this.userId,
     this.postId,
@@ -1319,6 +1471,8 @@ class PostDetailItem {
     this.createAt,
     this.spotId,
     this.showNearbyButton = false,
+    this.contextSpotId,
+    this.contextSpotName,
   });
 }
 

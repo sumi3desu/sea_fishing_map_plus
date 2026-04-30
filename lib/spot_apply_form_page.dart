@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'spot_apply_confirm_page.dart';
 import 'main.dart';
+import 'sio_database.dart';
 
 class SpotApplyFormPage extends StatefulWidget {
   const SpotApplyFormPage({
@@ -38,10 +39,25 @@ class SpotApplyFormPage extends StatefulWidget {
   State<SpotApplyFormPage> createState() => _SpotApplyFormPageState();
 }
 
+class _KindOption {
+  const _KindOption(this.value, this.label, this.icon);
+
+  final String value;
+  final String label;
+  final IconData icon;
+}
+
 class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
-  static const List<String> _kinds = ['gyoko', 'teibou', 'surf', 'kako', 'iso'];
+  static const List<_KindOption> _defaultKindOptions = [
+    _KindOption('gyoko', '漁港', Icons.anchor),
+    _KindOption('teibou', '堤防', Icons.fence),
+    _KindOption('surf', 'サーフ', Icons.waves),
+    _KindOption('kako', '河口', Icons.water),
+    _KindOption('iso', '磯', Icons.terrain),
+  ];
   final _formKey = GlobalKey<FormState>();
   String _kind = '';
+  List<_KindOption> _kindOptions = const [];
   final TextEditingController _nameCtl = TextEditingController();
   final TextEditingController _yomiCtl = TextEditingController();
   String? _address;
@@ -91,9 +107,62 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
     );
   }
 
+  IconData _iconForKindLabel(String label) {
+    if (label.contains('漁港')) return Icons.anchor;
+    if (label.contains('堤防')) return Icons.fence;
+    if (label.contains('サーフ')) return Icons.waves;
+    if (label.contains('河口')) return Icons.water;
+    if (label.contains('磯')) return Icons.terrain;
+    if (label.contains('海釣り公園')) return Icons.park;
+    return Icons.place;
+  }
+
+  Future<void> _loadKindOptions() async {
+    try {
+      final db = await SioDatabase().database;
+      final rows = await db.query(
+        'kubun',
+        where: 'COALESCE(user_select, 1) = ? AND COALESCE(delete_flag, 0) = ?',
+        whereArgs: [1, 0],
+        orderBy: 'id ASC',
+      );
+      final options = <_KindOption>[];
+      final labels = <String>{};
+      final values = <String>{};
+      for (final row in rows) {
+        final label = (row['kubun_name'] ?? '').toString().trim();
+        if (label.isEmpty || labels.contains(label)) continue;
+        final value = (row['id'] ?? '').toString().trim();
+        if (value.isEmpty) continue;
+        if (values.contains(value)) continue;
+        options.add(_KindOption(value, label, _iconForKindLabel(label)));
+        labels.add(label);
+        values.add(value);
+      }
+      if (_kind.isNotEmpty && !values.contains(_kind)) {
+        options.add(_KindOption(_kind, _kind, _iconForKindLabel(_kind)));
+      }
+      if (!mounted) return;
+      setState(() {
+        _kindOptions = options.isNotEmpty ? options : _defaultKindOptions;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _kindOptions = [
+            ..._defaultKindOptions,
+            if (_kind.isNotEmpty)
+              _KindOption(_kind, _kind, _iconForKindLabel(_kind)),
+          ];
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadKindOptions();
     // 権限チェック
     (() async {
       try {
@@ -173,6 +242,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   Future<void> _goConfirm() async {
     if (!_formKey.currentState!.validate()) return;
     final addr = (_address ?? '').toString();
+    final kindLabel = _selectedKindLabel();
     if (!mounted) return;
     await Navigator.push(
       context,
@@ -187,6 +257,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
               address: addr,
               prefName: _prefName ?? '',
               privateFlag: 0,
+              kindLabel: kindLabel,
               portId: widget.initialPortId,
               applicantUserId: widget.applicantUserId,
             ),
@@ -201,6 +272,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   }) async {
     if (!_formKey.currentState!.validate()) return;
     final addr = (_address ?? '').toString();
+    final kindLabel = _selectedKindLabel();
     if (!mounted) return;
     await Navigator.push(
       context,
@@ -215,6 +287,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
               address: addr,
               prefName: _prefName ?? '',
               privateFlag: _private ? 1 : 0,
+              kindLabel: kindLabel,
               portId: widget.initialPortId,
               applicantUserId: widget.applicantUserId,
               titleOverride: title,
@@ -229,6 +302,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
   Future<void> _goWithdrawConfirm() async {
     if (!_formKey.currentState!.validate()) return;
     final addr = (_address ?? '').toString();
+    final kindLabel = _selectedKindLabel();
     if (!mounted) return;
     await Navigator.push(
       context,
@@ -243,6 +317,7 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
               address: addr,
               prefName: _prefName ?? '',
               privateFlag: 0,
+              kindLabel: kindLabel,
               portId: widget.initialPortId,
               applicantUserId: widget.applicantUserId,
               titleOverride: '申請取り下げ',
@@ -251,6 +326,13 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
             ),
       ),
     );
+  }
+
+  String? _selectedKindLabel() {
+    for (final option in _kindOptions) {
+      if (option.value == _kind) return option.label;
+    }
+    return null;
   }
 
   @override
@@ -278,7 +360,10 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
                   value:
-                      (_kind.isEmpty || !_kinds.contains(_kind)) ? null : _kind,
+                      (_kind.isEmpty ||
+                              !_kindOptions.any((e) => e.value == _kind))
+                          ? null
+                          : _kind,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                   ),
@@ -287,13 +372,10 @@ class _SpotApplyFormPageState extends State<SpotApplyFormPage> {
                     if (v == null || v.isEmpty) return '釣り場種別を選択してください';
                     return null;
                   },
-                  items: [
-                    _kindMenuItem('gyoko', Icons.anchor, '漁港'),
-                    _kindMenuItem('teibou', Icons.fence, '堤防'),
-                    _kindMenuItem('surf', Icons.waves, 'サーフ'),
-                    _kindMenuItem('kako', Icons.water, '河口'),
-                    _kindMenuItem('iso', Icons.terrain, '磯'),
-                  ],
+                  items:
+                      _kindOptions
+                          .map((e) => _kindMenuItem(e.value, e.icon, e.label))
+                          .toList(),
                   onChanged: (v) => setState(() => _kind = v ?? ''),
                 ),
                 const SizedBox(height: 16),

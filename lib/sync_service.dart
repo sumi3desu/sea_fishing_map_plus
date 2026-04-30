@@ -36,18 +36,17 @@ class SioSyncService {
         final remoteVer = _toInt(item['version']);
         if (name.isEmpty || remoteVer == null) continue;
 
-        final versionName = (name == 'teibou') ? 'spots' : name;
-        final localVer = localVersions[versionName] ?? localVersions[name];
+        final localVer = localVersions[name];
         final needsUpdate = (localVer == null) || (localVer != remoteVer);
         if (!needsUpdate) continue;
 
-        if (name == 'spots' || name == 'teibou') {
-          final ok = await _syncTeibou(userId: userId);
+        if (name == 'spots') {
+          final ok = await _syncSpots(userId: userId);
           if (ok) {
             await _upsertLocalVersion(
               db,
               userId: userId,
-              name: 'spots',
+              name: name,
               version: remoteVer,
             );
           }
@@ -108,15 +107,15 @@ class SioSyncService {
       // 初回準備を完了できるように全テーブルの直接同期を試みる
       if (remote.isEmpty) {
         final okKubun = await _syncKubun();
-        final okTeibou = await _syncTeibou(userId: userId);
+        final okSpots = await _syncSpots(userId: userId);
         final okTodou = await _syncTodoufuken(userId: userId);
         if (!okKubun)
           lastError = 'get_kubun.php';
-        else if (!okTeibou)
+        else if (!okSpots)
           lastError = 'get_spots.php';
         else if (!okTodou)
           lastError = 'get_todoufuken.php';
-        return okKubun && okTeibou && okTodou;
+        return okKubun && okSpots && okTodou;
       }
       final local = await _getLocalVersions(db, userId: userId);
 
@@ -141,7 +140,7 @@ class SioSyncService {
             // 同期失敗のエンドポイントを記録
             if (name == 'kubun')
               lastError = 'get_kubun.php';
-            else if (name == 'teibou')
+            else if (name == 'spots')
               lastError = 'get_spots.php';
             else if (name == 'todoufuken')
               lastError = 'get_todoufuken.php';
@@ -152,29 +151,29 @@ class SioSyncService {
       }
 
       final okKubun = await _maybeSync('kubun', _syncKubun);
-      final localSpotVersion = local['spots'] ?? local['teibou'];
-      final remoteSpotVersion = remote['spots'] ?? remote['teibou'];
+      final localSpotVersion = local['spots'];
+      final remoteSpotVersion = remote['spots'];
       final needSpotSync =
           force ||
           localSpotVersion == null ||
           remoteSpotVersion == null ||
           localSpotVersion != remoteSpotVersion;
-      final okTeibou = needSpotSync ? await _syncTeibou(userId: userId) : true;
-      if (okTeibou && remoteSpotVersion != null) {
+      final okSpots = needSpotSync ? await _syncSpots(userId: userId) : true;
+      if (okSpots && remoteSpotVersion != null) {
         await _upsertLocalVersion(
           db,
           userId: userId,
           name: 'spots',
           version: remoteSpotVersion,
         );
-      } else if (!okTeibou) {
+      } else if (!okSpots) {
         lastError = 'get_spots.php';
       }
       final okTodou = await _maybeSync(
         'todoufuken',
         () => _syncTodoufuken(userId: userId),
       );
-      return okKubun && okTeibou && okTodou;
+      return okKubun && okSpots && okTodou;
     } catch (_) {
       lastError = lastError ?? '初期化中に不明なエラー';
       return false;
@@ -296,7 +295,7 @@ class SioSyncService {
         });
   }
 
-  Future<bool> _syncTeibou({required int userId}) async {
+  Future<bool> _syncSpots({required int userId}) async {
     final uri = Uri.parse('${_base}get_spots.php');
     final body = 'userId=${Uri.encodeQueryComponent(userId.toString())}';
     final resp = await _post(uri, body: body);
@@ -318,8 +317,6 @@ class SioSyncService {
           rows = (decoded['data'] as List).cast<Map<String, dynamic>>();
         } else if (decoded['spots'] is List) {
           rows = (decoded['spots'] as List).cast<Map<String, dynamic>>();
-        } else if (decoded['teibou'] is List) {
-          rows = (decoded['teibou'] as List).cast<Map<String, dynamic>>();
         } else {
           lastError = 'get_spots.php 形式不正';
           return false;
@@ -344,7 +341,7 @@ class SioSyncService {
           final seenPref = <int>{};
           final todoufukenBatch = txn.batch();
 
-          final teibouBatch = txn.batch();
+          final spotsBatch = txn.batch();
           for (final r in rows) {
             final spotId = _toInt(r['spot_id']) ?? _toInt(r['port_id']);
             final spotName =
@@ -390,7 +387,7 @@ class SioSyncService {
             if (createAt != null && createAt.isNotEmpty)
               rowMap['create_at'] = createAt;
 
-            teibouBatch.insert(
+            spotsBatch.insert(
               'spots',
               rowMap,
               conflictAlgorithm: ConflictAlgorithm.replace,
@@ -411,7 +408,7 @@ class SioSyncService {
             }
           }
 
-          await teibouBatch.commit(noResult: true);
+          await spotsBatch.commit(noResult: true);
           await todoufukenBatch.commit(noResult: true);
           return true;
         })
@@ -456,14 +453,18 @@ class SioSyncService {
           await txn.delete('kubun');
           final batch = txn.batch();
           for (final r in rows) {
-            final id = _toInt(r['id']);
+            final id = r['id']?.toString().trim() ?? '';
             final name = r['kubun_name']?.toString() ?? '';
             final note = r['note']?.toString();
-            if (id == null || name.isEmpty) continue;
+            final userSelect = _toInt(r['user_select']) ?? 1;
+            final deleteFlag = _toInt(r['delete_flag']) ?? 0;
+            if (id.isEmpty || name.isEmpty) continue;
             batch.insert('kubun', {
               'id': id,
               'kubun_name': name,
               'note': note,
+              'user_select': userSelect,
+              'delete_flag': deleteFlag,
             }, conflictAlgorithm: ConflictAlgorithm.replace);
           }
           await batch.commit(noResult: true);

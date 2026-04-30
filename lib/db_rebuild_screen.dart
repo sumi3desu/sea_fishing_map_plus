@@ -4,12 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 //import 'package:shared_preferences/shared_preferences.dart';
-//import 'package:sqflite/sqflite.dart';
-import 'package:sqflite/sqflite.dart';
 
 import 'main.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers/premium_state_notifier.dart' as prem;
 import 'sio_database.dart';
 import 'sync_service.dart';
@@ -33,9 +30,6 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
   String? _error;
   // 釣り場データを構成するテーブル群
   static const List<String> _fishingTables = ['spots', 'kubun', 'todoufuken'];
-
-  // ローカルの件数（情報がない判定に使用）
-  final Map<String, int> _rowCounts = {};
 
   @override
   void initState() {
@@ -126,15 +120,6 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
       final local = <String, int>{
         for (final r in localRows) (r['name'] as String): (r['version'] as int),
       };
-      // ローカル件数取得
-      for (final t in _fishingTables) {
-        final cnt =
-            Sqflite.firstIntValue(
-              await db.rawQuery('SELECT COUNT(*) FROM $t'),
-            ) ??
-            0;
-        _rowCounts[t] = cnt;
-      }
       // リモートバージョン取得
       final remoteMap = await SioSyncService().fetchRemoteVersionMap(
         userId: info.userId,
@@ -178,6 +163,15 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
 
   // 表示用ラベル（不要になったが将来拡張に備えて残置）
   String labelFor(String name) => name;
+
+  bool _hasFishingVersionDiff() {
+    for (final name in _fishingTables) {
+      final remoteVersion = _remote[name];
+      if (remoteVersion == null) continue;
+      if (_local[name] != remoteVersion) return true;
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -331,19 +325,8 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
     if (remoteVals.every((v) => v == -1)) {
       return (text: '通信エラー中', color: Colors.red);
     }
-    // ローカルに情報がない（どれかのテーブルが空）
-    final missingAny = _fishingTables.any((t) => (_rowCounts[t] ?? 0) == 0);
-    if (missingAny) {
-      return (text: '最新データが未準備', color: Colors.orange);
-    }
-    // バージョン差異
-    final locals = _fishingTables.map((t) => _local[t] ?? -1).toList();
-    final anyUpdate = List.generate(_fishingTables.length, (i) => i).any(
-      (i) =>
-          locals[i] != -1 && remoteVals[i] != -1 && locals[i] < remoteVals[i],
-    );
-    if (anyUpdate) {
-      return (text: '更新あり', color: Colors.orange);
+    if (_hasFishingVersionDiff()) {
+      return (text: '差異あり', color: Colors.orange);
     }
     return (text: '最新です', color: Colors.green);
   }
@@ -412,31 +395,12 @@ class _DbRebuildScreenState extends ConsumerState<DbRebuildScreen> {
                     label = '再試行';
                     onTap = _refreshVersions;
                   } else {
-                    final missingAny = _fishingTables.any(
-                      (t) => (_rowCounts[t] ?? 0) == 0,
-                    );
-                    if (missingAny) {
-                      label = '今すぐ準備';
-                      onTap = () => _loadFishing(force: true);
+                    if (_hasFishingVersionDiff()) {
+                      label = '更新する';
+                      onTap = () => _loadFishing(force: false);
                     } else {
-                      final locals =
-                          _fishingTables.map((t) => _local[t] ?? -1).toList();
-                      final anyUpdate = List.generate(
-                        _fishingTables.length,
-                        (i) => i,
-                      ).any(
-                        (i) =>
-                            locals[i] != -1 &&
-                            remoteVals[i] != -1 &&
-                            locals[i] < remoteVals[i],
-                      );
-                      if (anyUpdate) {
-                        label = '更新する';
-                        onTap = () => _loadFishing(force: false);
-                      } else {
-                        label = '再取得';
-                        onTap = () => _loadFishing(force: true);
-                      }
+                      label = '再取得';
+                      onTap = () => _loadFishing(force: true);
                     }
                   }
                 }

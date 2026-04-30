@@ -8,9 +8,6 @@ const double kScrollableContentBottomPadding = 96.0; // 一覧系スクロール
 
 const double kNearbyMapSearchRadiusKm = 30.0; // 近辺の釣り場表示で使う検索半径
 
-// 「投稿詳細」の「釣れたエリア」で半径 30km 以内の釣り場で地図全体に表示する最大件数
-const int kNearbyMapMaxMarkerCount = 100;
-
 const int kCatchAreaCandidateSourceCount = 15; // 「投稿詳細」の「釣れたエリア」で候補算出の起点にする近傍件数
 
 const int kCatchAreaVisibleSpotCount = 10; // 「投稿詳細」の「釣れたエリア」で円内候補として残す件数
@@ -62,4 +59,9 @@ const int baseMap = 0; // open street map
 // Message
 //
 final String warningSelectSpot = '釣り場MAPに移動します。\n＋を押して投稿、釣り場の登録を選んでください。';
-//final String warningCertificationMail = 'メール認証をお願いします。';
+
+final String fishingDaily = '自分が投稿した釣果や、登録した釣り場だけ表示します。\n投稿一覧にはその釣り場の自分の投稿のみ限定表示します。';
+
+final String updateSpotsData = '釣り場データを最新に更新します。\nWi-Fi 環境での実行を推奨します（モバイル回線ではデータ通信料が発生する場合があります）。';
+
+

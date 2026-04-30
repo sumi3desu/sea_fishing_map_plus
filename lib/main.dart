@@ -1350,7 +1350,7 @@ class _MainPageState extends ConsumerState<MainPage> {
     } catch (_) {}
   }
 
-  // 初回準備が完了しているか（堤防テーブルが揃っているか）
+  // 初回準備が完了しているか（釣り場テーブルが揃っているか）
   Future<bool> _isInitialDataMissing() async {
     try {
       // SioDatabase 側の実テーブルから判定（legacy DB ではなく）
@@ -1617,7 +1617,7 @@ class _MainPageState extends ConsumerState<MainPage> {
       final legacyDb = await openLocalDb();
       await initialTable(legacyDb, info.userId); // 既存ローカルテーブル群の作成（別DB）
 
-      // 初回データ（堤防・都道府県・区分）を明示的に同期（SioDatabase 側）
+      // 初回データ（釣り場・都道府県・区分）を明示的に同期（SioDatabase 側）
       final ok = await SioSyncService().syncFishingData(
         userId: info.userId,
         force: true,
@@ -1643,7 +1643,7 @@ class _MainPageState extends ConsumerState<MainPage> {
               0;
           success = (tb > 0 && tdfk > 0 && kb > 0);
           if (!success) {
-            final details = 'teibou=$tb todoufuken=$tdfk kubun=$kb';
+            final details = 'spots=$tb todoufuken=$tdfk kubun=$kb';
             if ((SioSyncService().lastError ?? '').isEmpty) {
               SioSyncService().lastError = 'データ不足（$details）';
             } else {
@@ -1889,75 +1889,102 @@ class _MainPageState extends ConsumerState<MainPage> {
                             actions: [
                               Padding(
                                 padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  showCheckmark: false,
-                                  selected: common.fishingDiaryMode,
-                                  onSelected: (v) async {
-                                    if (v) {
-                                      try {
-                                        final info =
-                                            await loadUserInfo() ??
-                                            await getOrInitUserInfo();
-                                        if (info.email.trim().isEmpty) {
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    FilterChip(
+                                      showCheckmark: false,
+                                      selected: common.fishingDiaryMode,
+                                      onSelected: (v) async {
+                                        if (v) {
+                                          try {
+                                            final info =
+                                                await loadUserInfo() ??
+                                                await getOrInitUserInfo();
+                                            if (info.email.trim().isEmpty) {
+                                              if (!mounted) return;
+                                              final res = await Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (_) =>
+                                                          const NewAccountPage(
+                                                            authPurposeLabel:
+                                                                '釣り日記',
+                                                          ),
+                                                ),
+                                              );
+                                              if (res != true) return;
+                                            }
+                                          } catch (_) {}
                                           if (!mounted) return;
-                                          final res = await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder:
-                                                  (_) => const NewAccountPage(
-                                                    authPurposeLabel: '釣り日記',
-                                                  ),
-                                            ),
-                                          );
-                                          if (res != true) return;
+                                          final ok = await Common.instance
+                                              .confirmEnableFishingDiary(
+                                                context,
+                                              );
+                                          if (!ok) return;
                                         }
-                                      } catch (_) {}
-                                      if (!mounted) return;
-                                      final ok = await Common.instance
-                                          .confirmEnableFishingDiary(context);
-                                      if (!ok) return;
-                                    }
-                                    await Common.instance.setFishingDiaryMode(
-                                      v,
-                                    );
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: const VisualDensity(
-                                    horizontal: -2.5,
-                                    vertical: -2,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 2,
-                                  ),
-                                  labelPadding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  avatarBoxConstraints:
-                                      const BoxConstraints.tightFor(
-                                        width: 18,
-                                        height: 18,
+                                        await Common.instance
+                                            .setFishingDiaryMode(v);
+                                      },
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: const VisualDensity(
+                                        horizontal: -2.5,
+                                        vertical: -2,
                                       ),
-                                  avatar: Icon(
-                                    Icons.menu_book,
-                                    size: 14,
-                                    color:
-                                        common.fishingDiaryMode
-                                            ? Colors.white
-                                            : Colors.black87,
-                                  ),
-                                  label: Text(
-                                    '釣り日記',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color:
-                                          common.fishingDiaryMode
-                                              ? Colors.white
-                                              : Colors.black87,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      labelPadding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      avatarBoxConstraints:
+                                          const BoxConstraints.tightFor(
+                                            width: 18,
+                                            height: 18,
+                                          ),
+                                      avatar: Icon(
+                                        Icons.menu_book,
+                                        size: 14,
+                                        color:
+                                            common.fishingDiaryMode
+                                                ? Colors.white
+                                                : Colors.black87,
+                                      ),
+                                      label: Text(
+                                        '釣り日記',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color:
+                                              common.fishingDiaryMode
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                        ),
+                                      ),
+                                      backgroundColor: Colors.white,
+                                      selectedColor: const Color(0xFFFFB74D),
                                     ),
-                                  ),
-                                  backgroundColor: Colors.white,
-                                  selectedColor: const Color(0xFFFFB74D),
+                                    SizedBox(
+                                      width: 28,
+                                      height: 36,
+                                      child: IconButton(
+                                        onPressed:
+                                            () => Common.instance
+                                                .showFishingDiaryInfoDialog(
+                                                  context,
+                                                ),
+                                        icon: const Icon(
+                                          Icons.info_outline,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                        tooltip: '釣り日記とは',
+                                        padding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

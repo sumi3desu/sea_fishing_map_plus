@@ -109,13 +109,6 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     );
   }
 
-  void _showMySpotsInfoDialog() {
-    _showInfoDialog(
-      title: '釣り日記とは',
-      message: '自分が釣り場申請した釣り場と釣果投稿した釣り場をリストアップします。',
-    );
-  }
-
   void _showInfoDialog({required String title, required String message}) {
     showDialog(
       context: context,
@@ -459,7 +452,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
         if (v == '2') return '拠点港';
         if (v == '3') return '主要港';
         if (v == '4') return '特殊港';
-        return null;
+        return v.isNotEmpty ? v : null;
     }
   }
 
@@ -491,6 +484,9 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
     } else if (k == 'iso') {
       icon = Icons.terrain; // 磯
       color = Colors.green.shade700;
+    } else if (k.contains('海釣り公園')) {
+      icon = Icons.park;
+      color = Colors.lightGreen.shade700;
     }
     if (isPending && icon != null) {
       color = Colors.grey; // 申請中はグレー表示
@@ -958,54 +954,76 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Center(
-              child: FilterChip(
-                showCheckmark: false,
-                selected: Common.instance.fishingDiaryMode,
-                onSelected: (v) async {
-                  if (v) {
-                    final verified = await _ensureEmailVerified(
-                      authPurposeLabel: '釣り日記',
-                    );
-                    if (!verified) return;
-                    if (!mounted) return;
-                    final ok = await Common.instance.confirmEnableFishingDiary(
-                      context,
-                    );
-                    if (!ok) return;
-                  }
-                  await Common.instance.setFishingDiaryMode(v);
-                },
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: const VisualDensity(
-                  horizontal: -2.5,
-                  vertical: -2,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                labelPadding: const EdgeInsets.symmetric(horizontal: 4),
-                avatarBoxConstraints: const BoxConstraints.tightFor(
-                  width: 18,
-                  height: 18,
-                ),
-                avatar: Icon(
-                  Icons.menu_book,
-                  size: 14,
-                  color:
-                      Common.instance.fishingDiaryMode
-                          ? Colors.white
-                          : Colors.black87,
-                ),
-                label: Text(
-                  '釣り日記',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color:
-                        Common.instance.fishingDiaryMode
-                            ? Colors.white
-                            : Colors.black87,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilterChip(
+                    showCheckmark: false,
+                    selected: Common.instance.fishingDiaryMode,
+                    onSelected: (v) async {
+                      if (v) {
+                        final verified = await _ensureEmailVerified(
+                          authPurposeLabel: '釣り日記',
+                        );
+                        if (!verified) return;
+                        if (!mounted) return;
+                        final ok = await Common.instance
+                            .confirmEnableFishingDiary(context);
+                        if (!ok) return;
+                      }
+                      await Common.instance.setFishingDiaryMode(v);
+                    },
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: const VisualDensity(
+                      horizontal: -2.5,
+                      vertical: -2,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    avatarBoxConstraints: const BoxConstraints.tightFor(
+                      width: 18,
+                      height: 18,
+                    ),
+                    avatar: Icon(
+                      Icons.menu_book,
+                      size: 14,
+                      color:
+                          Common.instance.fishingDiaryMode
+                              ? Colors.white
+                              : Colors.black87,
+                    ),
+                    label: Text(
+                      '釣り日記',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color:
+                            Common.instance.fishingDiaryMode
+                                ? Colors.white
+                                : Colors.black87,
+                      ),
+                    ),
+                    backgroundColor: Colors.white,
+                    selectedColor: const Color(0xFFFFB74D),
                   ),
-                ),
-                backgroundColor: Colors.white,
-                selectedColor: const Color(0xFFFFB74D),
+                  SizedBox(
+                    width: 28,
+                    height: 36,
+                    child: IconButton(
+                      onPressed:
+                          () => Common.instance.showFishingDiaryInfoDialog(
+                            context,
+                          ),
+                      icon: const Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                      tooltip: '釣り日記とは',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1343,8 +1361,6 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                     ? _showFavoritesInfoDialog
                     : region == '近くの釣り場'
                     ? _showNearbyInfoDialog
-                    : region == '釣り日記'
-                    ? _showMySpotsInfoDialog
                     : null;
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -1383,12 +1399,7 @@ class _ListTeibouPageState extends State<ListTeibouPage> {
                       child: IconButton(
                         onPressed: infoTap,
                         icon: const Icon(Icons.info_outline, size: 16),
-                        tooltip:
-                            region == 'お気に入り'
-                                ? 'お気に入りとは'
-                                : region == '近くの釣り場'
-                                ? '近くの釣り場とは'
-                                : '釣り日記とは',
+                        tooltip: region == 'お気に入り' ? 'お気に入りとは' : '近くの釣り場とは',
                         padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                       ),
